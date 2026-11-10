@@ -1,0 +1,41 @@
+rules_version = '2';
+service cloud.firestore {
+ match /databases/{database}/documents {
+  function verified() { return request.auth != null && request.auth.token.email_verified == true; }
+  function admin() { return verified() && request.auth.token.email == 'kstouras@gmail.com'; }
+  function instructor() { return admin() || (verified() && exists(/databases/$(database)/documents/instructors/$(request.auth.token.email))); }
+  function session(code) { return get(/databases/$(database)/documents/sessions/$(code)).data; }
+  function owner(code) { return admin() || (instructor() && session(code).owner == request.auth.uid); }
+  function own(uid) { return verified() && request.auth.uid == uid; }
+  function member(code,uid) { return exists(/databases/$(database)/documents/sessions/$(code)/participants/$(uid)); }
+  function start(r) { return r=='0'?0:r=='1'?180:r=='2'?420:660; }
+  function split(r) { return r=='0'?90:r=='1'?420:r=='2'?540:810; }
+  function end(r) { return r=='0'?180:r=='1'?420:r=='2'?660:960; }
+  function inWindow(code,a,b) { let s=session(code); return s.status=='running' && request.time >= s.startedAt+duration.value(a,'s') && request.time < s.startedAt+duration.value(b,'s'); }
+  function orderShape(r) { let d=request.resource.data; return d.keys().hasOnly(['variety','quantity','cap','savedAt']) && d.keys().hasAll(['variety','quantity','cap','savedAt']) && d.variety is int && (d.variety==4 || (r=='3' && d.variety==8)) && d.quantity is int && d.quantity>=0 && d.quantity<=200 && d.cap is int && d.cap>=0 && d.cap<=200 && d.savedAt==request.time; }
+  function bounded(c,k,lo,hi) { return c[k] is number && c[k]>=lo && c[k]<=hi; }
+  function configShape(c) { return c.keys().hasOnly(['demandMean','demandSd','forecastSd','rebound','price','initialCost','refillCost','styleCost','salvage','unitCarbon','leftoverCarbon']) && bounded(c,'demandMean',80,2000) && bounded(c,'demandSd',0,1000) && bounded(c,'forecastSd',0,0.8) && bounded(c,'rebound',0,1) && bounded(c,'price',1,500) && bounded(c,'initialCost',0,500) && bounded(c,'refillCost',0,500) && bounded(c,'styleCost',0,5000) && bounded(c,'salvage',0,500) && bounded(c,'unitCarbon',0,100) && bounded(c,'leftoverCarbon',0,100) && c.salvage<=c.initialCost && c.salvage<=c.refillCost && c.salvage<=c.price; }
+  match /settings/defaults { allow read: if instructor(); allow create,update: if admin() && configShape(request.resource.data); }
+  match /instructors/{email} {
+   allow get: if admin() || (verified() && request.auth.token.email==email);
+   allow list, delete: if admin();
+   allow create, update: if admin() && email.matches('^[^/ @]+@[^/ @]+[.][^/ @]+$') && request.resource.data.keys().hasOnly(['createdAt']) && request.resource.data.createdAt==request.time;
+  }
+  match /sessions/{code} {
+   allow get: if verified();
+   allow list: if admin() || (instructor() && resource.data.owner==request.auth.uid);
+   allow create: if instructor() && code.matches('^[A-Z2-9]{8}$') && request.resource.data.keys().hasOnly(['name','owner','config','seed','status','createdAt','startedAt','closedAt']) && request.resource.data.name is string && request.resource.data.name.size()>0 && request.resource.data.name.size()<=80 && request.resource.data.owner==request.auth.uid && configShape(request.resource.data.config) && request.resource.data.seed is int && request.resource.data.seed>=0 && request.resource.data.seed<=1000000 && request.resource.data.status=='lobby' && request.resource.data.createdAt==request.time && request.resource.data.startedAt==null && request.resource.data.closedAt==null;
+   allow update: if owner(code) && ((resource.data.status=='lobby' && request.resource.data.status=='running' && request.resource.data.startedAt==request.time && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','startedAt'])) || (resource.data.status in ['lobby','running'] && request.resource.data.status=='closed' && request.resource.data.closedAt==request.time && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','closedAt'])));
+   match /participants/{uid} {
+    allow get: if own(uid) || owner(code);
+    allow list: if owner(code);
+    allow create: if own(uid) && session(code).status=='lobby' && request.resource.data.keys().hasOnly(['name','email','joinedAt']) && request.resource.data.name is string && request.resource.data.name.size()>0 && request.resource.data.name.size()<=80 && request.resource.data.email==request.auth.token.email && request.resource.data.joinedAt==request.time;
+    match /orders/{r} {
+     allow read: if own(uid) || owner(code);
+     allow create: if own(uid) && member(code,uid) && r in ['0','1','2','3'] && orderShape(r) && ((inWindow(code,start(r),split(r)) && request.resource.data.cap==0) || (r!='1' && inWindow(code,split(r),end(r)) && request.resource.data.quantity==80 && request.resource.data.variety==4));
+     allow update: if own(uid) && member(code,uid) && r in ['0','1','2','3'] && orderShape(r) && ((inWindow(code,start(r),split(r)) && request.resource.data.cap==0) || (r!='1' && inWindow(code,split(r),end(r)) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['cap','savedAt'])));
+    }
+   }
+  }
+ }
+}

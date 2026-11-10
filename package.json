@@ -1,0 +1,15 @@
+{
+  "name": "fashion-futures",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "test:rules": "firebase emulators:exec --config firebase.test.json --only firestore --project demo-fashion-futures \"node --test tests/rules.cjs\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.0",
+    "firebase": "^12.5.0",
+    "firebase-tools": "15.32.1",
+    "jsdom": "^26.1.0"
+  }
+}

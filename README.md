@@ -1,16 +1,25 @@
 # Fashion Futures
 
-Fast fashion business model teaching simulation. Open `index.html` directly; no dependencies or build required.
+An 18-minute executive teaching simulation about the quick-response paradox.
 
-Six seasons with product variety, production quantities, sourcing speed, quality, and a mid-season replenishment decision. Reports profit, leftover units, production footprint, and an assumed customer use index. Fixed seeded scenarios support comparing strategies on restart.
+Live: https://www.stouras.com/fast-fashion-simulation/
 
-## Teaching objective
-Explore how quick response can improve demand matching while enabling greater variety and consumption. Its sustainability effect depends on the broader business model. Inspired by the requested teaching brief; the mechanics and numerical assumptions are provisional and require instructor validation.
+## Run
 
-The in-app model notes document every coefficient. Figures are illustrative, not calibrated research estimates. Teams can take turns on one device; no multiplayer, accounts, instructor dashboard, backend, or durable session storage is included. Private correspondence is not included.
+Use Node 22 or newer. Run `npm ci`, then `node tools/serve.mjs` and open http://localhost:8791/.
 
-## Hosting
-GitHub Settings → Pages → Deploy from branch → `main`, `/ (root)`.
+Real mode uses Firebase Google/email authentication and the isolated `fashion-futures` Firestore database in the existing `stouras-ucd-blog` project. No student gameplay is shown before verified sign-in and session-code membership. Public Firebase web identifiers are not administrator credentials.
 
-## Next steps
-Instructor configuration, team sessions, exportable results, calibrated scenarios, and broader lifecycle accounting.
+For a synthetic local preview, open http://localhost:8791/?demo. The Google button signs in as a fake admin; email/password can sign in as a fake student. This mode exists only on localhost/127.0.0.1 and uses browser storage, never production data. Demo phase-advance buttons are absent from production.
+
+## Test
+
+- `npm test`: model and DOM integration tests.
+- `npm run test:rules`: Firestore emulator access tests; Java 21+ required on PATH.
+- `node tools/check-backend.cjs`: read-only production configuration checks using existing Firebase CLI authorization; no credentials are printed.
+
+## Deploy
+
+GitHub Pages publishes main at the existing URL. Deploy database rules separately with `npx firebase deploy --only firestore --project stouras-ucd-blog`. The checked-in firebase.json targets **only the named fashion-futures database**. Never substitute the blog's default database configuration.
+
+See PROTOTYPE-NOTES.md for assumptions, defaults, teaching workflow, limitations and verification scope. No private emails or real student records are included in this repository.
