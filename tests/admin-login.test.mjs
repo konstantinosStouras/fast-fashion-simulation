@@ -1,0 +1,21 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {JSDOM} from 'jsdom';
+test('admin entrance supports Google/password/reset and denies student accounts',async t=>{
+ const dom=new JSDOM(readFileSync('admin/index.html','utf8'),{url:'http://localhost:8791/admin/?demo'}),w=dom.window;
+ for(const k of ['document','localStorage'])globalThis[k]=w[k];globalThis.addEventListener=w.addEventListener.bind(w);
+ let destination='';globalThis.location={hostname:'localhost',search:'?demo',set href(v){destination=v;}};
+ const $=s=>w.document.querySelector(s),click=s=>$(s).click(),submit=()=>$('#admin-login').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+ const wait=async fn=>{for(let i=0;i<100;i++){await new Promise(r=>setTimeout(r,10));if(fn())return;}throw Error('Expected admin login state did not appear');};
+ const api=await import('../backend-demo.js');t.after(async()=>{await api.logout();await new Promise(r=>setTimeout(r,20));w.close();});
+ await import('../admin/login.js?test');await wait(()=>$('#admin-message').textContent==='');
+ assert.equal($('#admin-email').value,'kstouras@gmail.com');assert.equal($('#admin-password').autocomplete,'current-password');
+ click('#admin-reset');await wait(()=>$('#admin-message').textContent.includes('password link'));assert.equal(destination,'');
+ click('#admin-google');await wait(()=>destination.includes('studio=1'));assert.equal($('#admin-enter').hidden,false);
+ destination='';click('#admin-switch');await wait(()=>!$('#admin-login').hidden&&!$('#admin-submit').disabled);
+ $('#admin-password').value='synthetic-only';submit();await wait(()=>destination.includes('studio=1'));assert.equal($('#admin-password').value,'');
+ destination='';click('#admin-switch');await wait(()=>!$('#admin-login').hidden&&!$('#admin-submit').disabled);
+ $('#admin-email').value='student@example.test';$('#admin-password').value='synthetic-only';submit();await wait(()=>$('#admin-message').textContent.includes('does not have instructor access'));assert.equal(destination,'');assert.equal($('#admin-enter').hidden,true);
+ api.currentUser().emailVerified=false;await api.logout();await api.register('unverified@example.test','synthetic-only',{firstName:'Test',lastName:'Student',universityId:'1'});await wait(()=>$('#admin-message').textContent.includes('Verify your email'));assert.equal(destination,'');assert.equal($('#admin-verify').hidden,false);
+});
