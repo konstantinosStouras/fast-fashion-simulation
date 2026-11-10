@@ -1,0 +1,1 @@
+Google sign-in logo sourced from https://developers.google.com/static/identity/images/g-logo.png under the sign-in branding guidance at https://developers.google.com/identity/branding-guidelines. Used unchanged to identify Google authentication.
