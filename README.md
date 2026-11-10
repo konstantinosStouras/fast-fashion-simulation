@@ -26,3 +26,5 @@ GitHub Pages publishes main at the existing URL. Deploy database rules separatel
 See PROTOTYPE-NOTES.md for assumptions, defaults, teaching workflow, limitations and verification scope. No private emails or real student records are included in this repository.
 
 Admin entrance: https://www.stouras.com/fast-fashion-simulation/admin/ — Google or email/password, with password reset. Verified administrators and authorized instructors are redirected to the studio; the URL does not grant access.
+
+Admin password sign-in accepts `admin@admin.com` as an input alias for `kstouras@gmail.com`. Firebase authenticates the original account, preserving its UID, profile, sessions and permissions. Password setup/reset for either address goes to the Gmail inbox. Google sign-in is unchanged; the alias cannot be used for registration or as an account email.

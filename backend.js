@@ -3,19 +3,21 @@ import {getAuth,GoogleAuthProvider,signInWithPopup,signInWithEmailAndPassword,cr
 import {getFirestore,doc,collection,getDoc,getDocs,setDoc,updateDoc,onSnapshot,serverTimestamp,query,where,runTransaction} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js';
 import {firebaseConfig,DATABASE,ADMIN_EMAIL} from './firebase-config.js';
 import {platformHandoff} from './profile.js';
+import {loginEmailAddress,assertAccountEmail} from './auth-identity.js';
 import {DEFAULT_CONFIG} from './model.js';
 const app=initializeApp(firebaseConfig,'fashion-futures'),auth=getAuth(app),db=getFirestore(app,DATABASE);
 export const currentUser=()=>auth.currentUser;
 export const observeAuth=fn=>onAuthStateChanged(auth,fn);
 export const loginGoogle=()=>signInWithPopup(auth,new GoogleAuthProvider());
-export const loginEmail=(email,password)=>signInWithEmailAndPassword(auth,email,password);
+export const loginEmail=(email,password)=>signInWithEmailAndPassword(auth,loginEmailAddress(email),password);
 const emailSettings={url:'https://www.stouras.com/fast-fashion-simulation/'};
 export async function register(email,password,profile){
+ assertAccountEmail(email);
  const {user}=await createUserWithEmailAndPassword(auth,email,password);
  const saved=await Promise.allSettled([saveProfile(profile),sendEmailVerification(user,emailSettings)]);
  return {profileSaved:saved[0].status==='fulfilled',verificationSent:saved[1].status==='fulfilled'};
 }
-export const changeEmail=email=>verifyBeforeUpdateEmail(auth.currentUser,email,emailSettings);
+export const changeEmail=email=>{assertAccountEmail(email);return verifyBeforeUpdateEmail(auth.currentUser,email,emailSettings);};
 export async function getProfile(){const d=await getDoc(doc(db,'profiles',currentUser().uid));return d.exists()?d.data():null;}
 export const saveProfile=profile=>setDoc(doc(db,'profiles',currentUser().uid),{firstName:profile.firstName.trim(),lastName:profile.lastName.trim(),universityId:profile.universityId.trim()},{merge:true});
 export async function importPlatformProfile(storage){const p=platformHandoff(storage,currentUser());if(p)await setDoc(doc(db,'profiles',currentUser().uid),{platformRegistration:p},{merge:true});}
@@ -23,7 +25,7 @@ export async function playHistory(){
  const uid=currentUser().uid,refs=await getDocs(collection(db,'profiles',uid,'sessions'));
  return Promise.all(refs.docs.map(async ref=>{const d=await getDoc(doc(db,'sessions',ref.id));return d.exists()?{code:ref.id,...d.data(),orders:await readOrders(ref.id,uid)}:null;})).then(rows=>rows.filter(Boolean));
 }
-export const resetPassword=email=>sendPasswordResetEmail(auth,email);
+export const resetPassword=email=>sendPasswordResetEmail(auth,loginEmailAddress(email));
 export const logout=()=>signOut(auth);
 export const verifyEmail=()=>sendEmailVerification(auth.currentUser,emailSettings);
 export async function refreshUser(){await auth.currentUser.reload();await auth.currentUser.getIdToken(true);return auth.currentUser;}
