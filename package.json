@@ -4,9 +4,9 @@
   "type": "module",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
-    "test:admin-alias": "firebase emulators:exec --config firebase.test.json --only auth --project demo-fashion-futures \"node --test tests/admin-alias-emulator.mjs\"",
     "test:rules": "firebase emulators:exec --config firebase.test.json --only firestore --project demo-fashion-futures \"node --test tests/rules.cjs\"",
-    "test:backend": "firebase emulators:exec --config firebase.test.json --only firestore,auth --project demo-fashion-futures \"node --test --test-concurrency=1 tests/rules.cjs tests/auth-emulator.mjs\""
+    "test:backend": "firebase emulators:exec --config firebase.test.json --only firestore,auth --project demo-fashion-futures \"node --test --test-concurrency=1 tests/rules.cjs tests/auth-emulator.mjs\"",
+    "test:admins": "firebase emulators:exec --config firebase.test.json --only firestore,auth --project demo-fashion-futures \"node --test --test-concurrency=1 tests/rules.cjs tests/admin-alias-emulator.mjs tests/auth-emulator.mjs\""
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.0",

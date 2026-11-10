@@ -4,7 +4,7 @@ import {getAuth,GoogleAuthProvider,signInWithPopup,signInWithEmailAndPassword,cr
 import {getFirestore,doc,collection,getDoc,getDocs,setDoc,updateDoc,onSnapshot,serverTimestamp,query,where,runTransaction} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js';
 import {firebaseConfig,DATABASE,ADMIN_EMAIL} from './firebase-config.js';
 import {platformHandoff} from './profile.js?v=competition-1';
-import {loginEmailAddress,assertAccountEmail} from './auth-identity.js';
+import {loginEmailAddress,assertAccountEmail,ADMIN_ACCOUNT_EMAIL} from './auth-identity.js';
 import {ROUNDS,DEFAULT_CONFIG} from './model.js';
 const app=initializeApp(firebaseConfig,'fashion-futures'),auth=getAuth(app),db=getFirestore(app,DATABASE);
 export const currentUser=()=>auth.currentUser;
@@ -18,7 +18,7 @@ export async function register(email,password,profile){
  const saved=await Promise.allSettled([saveProfile(profile),sendEmailVerification(user,emailSettings)]);
  return {profileSaved:saved[0].status==='fulfilled',verificationSent:saved[1].status==='fulfilled'};
 }
-export const changeEmail=email=>{assertAccountEmail(email);return verifyBeforeUpdateEmail(auth.currentUser,email,emailSettings);};
+export const changeEmail=email=>{if(currentUser()?.email===ADMIN_ACCOUNT_EMAIL)throw Error("This administrator account uses owner-managed recovery.");assertAccountEmail(email);return verifyBeforeUpdateEmail(auth.currentUser,email,emailSettings);};
 export async function getProfile(){const d=await getDoc(doc(db,'profiles',currentUser().uid));return d.exists()?d.data():null;}
 export const saveProfile=profile=>setDoc(doc(db,'profiles',currentUser().uid),{firstName:profile.firstName.trim(),lastName:profile.lastName.trim(),universityId:profile.universityId.trim()},{merge:true});
 export async function importPlatformProfile(storage){const p=platformHandoff(storage,currentUser());if(p)await setDoc(doc(db,'profiles',currentUser().uid),{platformRegistration:p},{merge:true});}
@@ -31,9 +31,9 @@ export const logout=()=>signOut(auth);
 export const verifyEmail=()=>sendEmailVerification(auth.currentUser,emailSettings);
 export async function refreshUser(){await auth.currentUser.reload();await auth.currentUser.getIdToken(true);return auth.currentUser;}
 export async function role(){const u=currentUser();if(!u?.emailVerified)return 'student';if(u.email===ADMIN_EMAIL)return 'admin';return (await getDoc(doc(db,'instructors',u.email))).exists()?'instructor':'student';}
-export async function grant(email){await setDoc(doc(db,'instructors',email.trim().toLowerCase()),{createdAt:serverTimestamp()});}
+export async function grant(email){await setDoc(doc(db,'instructors',loginEmailAddress(email)),{createdAt:serverTimestamp()});}
 export async function listInstructors(){return (await getDocs(collection(db,'instructors'))).docs.map(d=>d.id);}
-export async function revoke(email){const {deleteDoc}=await import('https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js');await deleteDoc(doc(db,'instructors',email));}
+export async function revoke(email){const {deleteDoc}=await import('https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js');await deleteDoc(doc(db,'instructors',loginEmailAddress(email)));}
 export async function getDefaults(){const d=await getDoc(doc(db,'settings','defaults'));return d.exists()?d.data():{...DEFAULT_CONFIG};}
 export const saveDefaults=config=>setDoc(doc(db,'settings','defaults'),config);
 export async function createSession(name,config,mode='individual'){

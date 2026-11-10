@@ -14,8 +14,8 @@ test('admin entrance supports Google/password/reset and denies student accounts'
  click('#admin-reset');await wait(()=>$('#admin-message').textContent.includes('password link'));assert.equal(destination,'');
  click('#admin-google');await wait(()=>destination.includes('studio=1'));assert.equal($('#admin-enter').hidden,false);const adminUid=api.currentUser().uid;
  destination='';click('#admin-switch');await wait(()=>!$('#admin-login').hidden&&!$('#admin-submit').disabled);
- $('#admin-password').value='synthetic-only';submit();await wait(()=>destination.includes('studio=1'));assert.equal($('#admin-password').value,'');assert.equal(api.currentUser().uid,adminUid);assert.equal(api.currentUser().email,'kstouras@gmail.com');assert.equal(await api.role(),'admin');
+ $('#admin-password').value='synthetic-only';submit();await wait(()=>destination.includes('studio=1'));assert.equal($('#admin-password').value,'');assert.notEqual(api.currentUser().uid,adminUid);assert.equal(api.currentUser().email,'kstouras+ffo-admin@gmail.com');assert.equal(await api.role(),'instructor');
  destination='';click('#admin-switch');await wait(()=>!$('#admin-login').hidden&&!$('#admin-submit').disabled);
- $('#admin-email').value='student@example.test';$('#admin-password').value='synthetic-only';submit();await wait(()=>$('#admin-message').textContent.includes('does not have instructor access'));assert.equal(destination,'');assert.equal($('#admin-enter').hidden,true);
+ $('#admin-email').value='student@example.test';$('#admin-password').value='synthetic-only';submit();await wait(()=>$('#admin-message').textContent.includes('does not have administrator access'));assert.equal(destination,'');assert.equal($('#admin-enter').hidden,true);
  api.currentUser().emailVerified=false;await api.logout();await api.register('unverified@example.test','synthetic-only',{firstName:'Test',lastName:'Student',universityId:'1'});await wait(()=>$('#admin-message').textContent.includes('Verify your email'));assert.equal(destination,'');assert.equal($('#admin-verify').hidden,false);
 });
