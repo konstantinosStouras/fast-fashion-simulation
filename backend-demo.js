@@ -1,6 +1,7 @@
 import {decisionOwner,validateTeams} from './competition.js';
 // Test harness, selected only on loopback hosts with ?demo. Never real authentication.
 import {platformHandoff} from './profile.js';
+import {loginEmailAddress,assertAccountEmail} from './auth-identity.js';
 import {DEFAULT_CONFIG} from './model.js';
 const KEY='ff:demo:v1';let user=null;const authListeners=new Set(),listeners=new Set();
 const load=()=>JSON.parse(localStorage.getItem(KEY)||'{"sessions":{},"people":{},"orders":{},"instructors":[]}');
@@ -12,12 +13,12 @@ export const currentUser=()=>user;
 export const observeAuth=fn=>{authListeners.add(fn);queueMicrotask(()=>fn(user));return ()=>authListeners.delete(fn);};
 async function login(email){user={uid:email==='kstouras@gmail.com'?'demo-admin':'demo-'+email,email,emailVerified:true,displayName:email==='kstouras@gmail.com'?'Demo instructor':'Demo participant'};authListeners.forEach(fn=>fn(user));}
 export const loginGoogle=()=>login('kstouras@gmail.com');
-export const loginEmail=(email,password)=>login(email);
-export async function register(email,password,profile){await login(email);user.emailVerified=false;await saveProfile(profile);authListeners.forEach(fn=>fn(user));return {profileSaved:true,verificationSent:true};}
+export const loginEmail=(email,password)=>login(loginEmailAddress(email));
+export async function register(email,password,profile){assertAccountEmail(email);await login(email);user.emailVerified=false;await saveProfile(profile);authListeners.forEach(fn=>fn(user));return {profileSaved:true,verificationSent:true};}
 export const getProfile=async()=>load().profiles?.[user.uid]||{firstName:'Demo',lastName:'Participant',universityId:'DEMO'};
 export const saveProfile=async profile=>{const d=load();d.profiles??={};d.profiles[user.uid]={...d.profiles[user.uid],...profile};write(d);};
 export async function importPlatformProfile(storage){const p=platformHandoff(storage,user);if(p)await saveProfile({platformRegistration:p});}
-export const changeEmail=async email=>{};
+export const changeEmail=async email=>{assertAccountEmail(email);};
 export const playHistory=async()=>Object.values(load().sessions).filter(s=>load().people[s.code]?.[user.uid]).map(s=>({...toSession(s),decisionUid:decisionOwner(s,user.uid),teamOrders:load().orders[s.code]||{},orders:load().orders[s.code]?.[decisionOwner(s,user.uid)]||{}}));
 export const logout=async()=>{user=null;authListeners.forEach(fn=>fn(null));};
 export const verifyEmail=async()=>{};

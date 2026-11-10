@@ -15,6 +15,7 @@ export function friendlyAuthError(error){
   'auth/network-request-failed':'Unable to connect. Check your connection and try again.',
   'auth/too-many-requests':'Too many attempts. Please wait a moment before trying again.',
   'auth/weak-password':'Choose a password with at least 8 characters.',
+  'auth/reserved-admin-alias':'admin@admin.com is reserved for administrator sign-in. Use your own email to create or update an account.',
   'auth/invalid-email':'Enter a valid email address.'
  };
  return messages[error?.code]||'Unable to complete sign-in. Please try again.';

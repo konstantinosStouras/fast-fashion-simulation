@@ -10,6 +10,7 @@ test('real backend registration stores profile and sends a working verification 
  for(const component of ['app','auth','firestore'])source=source.replace(`https://www.gstatic.com/firebasejs/12.5.0/firebase-${component}.js`,import.meta.resolve('firebase/'+component));
  source=source.replace("import {firebaseConfig,DATABASE,ADMIN_EMAIL} from './firebase-config.js';","const firebaseConfig={projectId:'demo-fashion-futures',apiKey:'demo-api-key',authDomain:'demo-fashion-futures.firebaseapp.com'},DATABASE='(default)',ADMIN_EMAIL='kstouras@gmail.com';");
  source=source.replace("'./competition.js'",JSON.stringify(new URL('../competition.js',import.meta.url).href)).replace("'./model.js'",JSON.stringify(new URL('../model.js',import.meta.url).href)).replace("'./profile.js?v=competition-1'",JSON.stringify(new URL('../profile.js',import.meta.url).href));
+ source=source.replace("'./auth-identity.js'",JSON.stringify(new URL('../auth-identity.js',import.meta.url).href));
  const api=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
  const app=getApp('fashion-futures');connectAuthEmulator(getAuth(app),'http://127.0.0.1:9198',{disableWarnings:true});connectFirestoreEmulator(getFirestore(app),'127.0.0.1',8180);t.after(()=>deleteApp(app));
  const email='emulator-'+Date.now()+'@example.test',p={firstName:'Test',lastName:'Student',universityId:'QA-ONLY'};

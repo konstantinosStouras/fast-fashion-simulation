@@ -38,3 +38,5 @@ Teams compete for ONE normally distributed demand pool. The demand mean and SD a
 Orders become readable to session members after initial ordering locks, so every client can calculate the same early sales, forecasts and outcomes. Live competitor orders stay hidden before that deadline; emails and participant lists remain teaching-staff-only. The leaderboard shows cumulative profit, sales, customers won/lost to rivals, leftovers and footprint after each scored period. Practice is unscored. CSV exports one row per team/period; each member’s profile shows their shared team result.
 
 Team preview uses one simulated rival with disclosed fixed decisions, the same shared-market engine and no database writes. The 18-minute structure is unchanged. This is a transparent teaching prototype, not an anti-cheating exam engine.
+
+Admin password sign-in accepts `admin@admin.com` as an input alias for `kstouras@gmail.com`. Firebase authenticates the original account, preserving its UID, profile, sessions and permissions. Password setup/reset for either address goes to the Gmail inbox. Google sign-in is unchanged; the alias cannot be used for registration or as an account email.
