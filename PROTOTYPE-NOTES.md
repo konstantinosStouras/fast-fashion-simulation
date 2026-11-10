@@ -30,6 +30,12 @@ All assumptions are illustrative, not calibrated estimates. This is a discussion
 
 Authentication is shared with the blog's Firebase project. Gameplay lives in the separate named Firestore database `fashion-futures`; blog collections and rules are not modified. Sign-in tokens are managed by Firebase; passwords are not stored by this application. Session membership and decisions resume after refresh; the shared clock does not reset. An accurate device clock is needed for the countdown display; server rules enforce actual deadlines.
 
+## Student preview for teaching staff
+
+Choose **Preview as student** beneath the new-session form to try its current settings without creating a class. The same option inside an existing session uses that session's locked settings and market seed. The private rehearsal begins with practice and uses the real student decision screens and scoring.
+
+The preview clock waits for **Next phase** or **Skip round**; **Restart preview** clears rehearsal decisions and reuses the same market. Save each decision before advancing. **Exit preview** returns to the originating session or the studio. Preview state lives in memory only, disappears on exit/reload/sign-out, and never writes participant records, changes a live clock, overwrites a student's saved session, or enters exported class results. Only verified teaching staff receive the controls.
+
 ## Deliberately outside the initial prototype
 
 Durability/replacement behaviour, alternative metric visibility treatments, competitive demand, multi-account teams, an email invitation service, and simulation-platform completion tracking. Separate model/configuration/backend modules make these future additions possible without changing the authentication or session-code system. This release does not claim to implement those additional experiments.
