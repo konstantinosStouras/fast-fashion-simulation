@@ -1,17 +1,31 @@
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js';
-import {getAuth,GoogleAuthProvider,signInWithPopup,signInWithEmailAndPassword,createUserWithEmailAndPassword,sendEmailVerification,sendPasswordResetEmail,signOut,onAuthStateChanged} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js';
+import {getAuth,GoogleAuthProvider,signInWithPopup,signInWithEmailAndPassword,createUserWithEmailAndPassword,sendEmailVerification,sendPasswordResetEmail,signOut,onAuthStateChanged,verifyBeforeUpdateEmail} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js';
 import {getFirestore,doc,collection,getDoc,getDocs,setDoc,updateDoc,onSnapshot,serverTimestamp,query,where,runTransaction} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js';
 import {firebaseConfig,DATABASE,ADMIN_EMAIL} from './firebase-config.js';
+import {platformHandoff} from './profile.js';
 import {DEFAULT_CONFIG} from './model.js';
 const app=initializeApp(firebaseConfig,'fashion-futures'),auth=getAuth(app),db=getFirestore(app,DATABASE);
 export const currentUser=()=>auth.currentUser;
 export const observeAuth=fn=>onAuthStateChanged(auth,fn);
 export const loginGoogle=()=>signInWithPopup(auth,new GoogleAuthProvider());
 export const loginEmail=(email,password)=>signInWithEmailAndPassword(auth,email,password);
-export async function register(email,password){const {user}=await createUserWithEmailAndPassword(auth,email,password);await sendEmailVerification(user);}
+const emailSettings={url:'https://www.stouras.com/fast-fashion-simulation/'};
+export async function register(email,password,profile){
+ const {user}=await createUserWithEmailAndPassword(auth,email,password);
+ const saved=await Promise.allSettled([saveProfile(profile),sendEmailVerification(user,emailSettings)]);
+ return {profileSaved:saved[0].status==='fulfilled',verificationSent:saved[1].status==='fulfilled'};
+}
+export const changeEmail=email=>verifyBeforeUpdateEmail(auth.currentUser,email,emailSettings);
+export async function getProfile(){const d=await getDoc(doc(db,'profiles',currentUser().uid));return d.exists()?d.data():null;}
+export const saveProfile=profile=>setDoc(doc(db,'profiles',currentUser().uid),{firstName:profile.firstName.trim(),lastName:profile.lastName.trim(),universityId:profile.universityId.trim()},{merge:true});
+export async function importPlatformProfile(storage){const p=platformHandoff(storage,currentUser());if(p)await setDoc(doc(db,'profiles',currentUser().uid),{platformRegistration:p},{merge:true});}
+export async function playHistory(){
+ const uid=currentUser().uid,refs=await getDocs(collection(db,'profiles',uid,'sessions'));
+ return Promise.all(refs.docs.map(async ref=>{const d=await getDoc(doc(db,'sessions',ref.id));return d.exists()?{code:ref.id,...d.data(),orders:await readOrders(ref.id,uid)}:null;})).then(rows=>rows.filter(Boolean));
+}
 export const resetPassword=email=>sendPasswordResetEmail(auth,email);
 export const logout=()=>signOut(auth);
-export const verifyEmail=()=>sendEmailVerification(auth.currentUser);
+export const verifyEmail=()=>sendEmailVerification(auth.currentUser,emailSettings);
 export async function refreshUser(){await auth.currentUser.reload();await auth.currentUser.getIdToken(true);return auth.currentUser;}
 export async function role(){const u=currentUser();if(!u?.emailVerified)return 'student';if(u.email===ADMIN_EMAIL)return 'admin';return (await getDoc(doc(db,'instructors',u.email))).exists()?'instructor':'student';}
 export async function grant(email){await setDoc(doc(db,'instructors',email.trim().toLowerCase()),{createdAt:serverTimestamp()});}
@@ -31,7 +45,7 @@ export async function listSessions(isAdmin){const c=collection(db,'sessions');re
 export const watchSession=(code,fn,error)=>onSnapshot(doc(db,'sessions',code),d=>fn(d.exists()?{code,...d.data({serverTimestamps:'estimate'})}:null),error);
 export const startSession=code=>updateDoc(doc(db,'sessions',code),{status:'running',startedAt:serverTimestamp()});
 export const closeSession=code=>updateDoc(doc(db,'sessions',code),{status:'closed',closedAt:serverTimestamp()});
-export async function joinSession(code,name){const s=await getDoc(doc(db,'sessions',code));if(!s.exists())throw new Error('Session code not found.');const ref=doc(db,'sessions',code,'participants',currentUser().uid);if(!(await getDoc(ref)).exists()){if(s.data().status!=='lobby')throw new Error('This session has already started or is closed. Ask your instructor for a new code.');await setDoc(ref,{name,email:currentUser().email,joinedAt:serverTimestamp()});}}
+export async function joinSession(code,name){const s=await getDoc(doc(db,'sessions',code));if(!s.exists())throw new Error('Session code not found.');const ref=doc(db,'sessions',code,'participants',currentUser().uid);if(!(await getDoc(ref)).exists()){if(s.data().status!=='lobby')throw new Error('This session has already started or is closed. Ask your instructor for a new code.');await setDoc(ref,{name,email:currentUser().email,joinedAt:serverTimestamp()});}await setDoc(doc(db,'profiles',currentUser().uid,'sessions',code),{joined:true});}
 export const watchOrders=(code,uid,fn,error)=>onSnapshot(collection(db,'sessions',code,'participants',uid,'orders'),{includeMetadataChanges:true},s=>{if(!s.metadata.hasPendingWrites)fn(Object.fromEntries(s.docs.map(d=>[d.id,d.data()])));},error);
 export const watchParticipants=(code,fn,error)=>onSnapshot(collection(db,'sessions',code,'participants'),s=>fn(s.docs.map(d=>({uid:d.id,...d.data()}))),error);
 export const saveOrder=(code,index,order)=>setDoc(doc(db,'sessions',code,'participants',currentUser().uid,'orders',String(index)),{...order,savedAt:serverTimestamp()});

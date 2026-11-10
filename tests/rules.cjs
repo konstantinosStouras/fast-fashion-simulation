@@ -1,3 +1,4 @@
+const {equal:assertEqual}=require('node:assert/strict');
 const {test,before,after,beforeEach}=require('node:test');
 const fs=require('node:fs');
 const {initializeTestEnvironment,assertSucceeds,assertFails}=require('@firebase/rules-unit-testing');
@@ -22,3 +23,30 @@ test('own in-window initial order allowed; forged totals, decimals and another u
 test('replenishment can change only cap; missing plan uses locked defaults',async()=>{await seed(20);const d=db('alice');await assertSucceeds(setDoc(doc(d,path()),order({quantity:70})));await seed(110);await assertSucceeds(setDoc(doc(d,path()),order({quantity:70,cap:60})));await assertFails(setDoc(doc(d,path()),order({quantity:100,cap:60})));await assertSucceeds(setDoc(doc(db('bob'),path('bob')),order({cap:50})));await assertFails(setDoc(doc(db('bob'),path('bob')),order({quantity:90,cap:50})));});
 test('closed, expired, future and traditional-response decisions rejected',async()=>{await seed(200);await assertFails(setDoc(doc(db('alice'),path()),order()));await assertFails(setDoc(doc(db('alice'),path('alice','2')),order()));await assertSucceeds(setDoc(doc(db('alice'),path('alice','1')),order()));await assertFails(setDoc(doc(db('alice'),path('alice','1')),order({cap:1})));await seed(1090);await assertFails(setDoc(doc(db('alice'),path('alice','3')),order({variety:8})));await seed(20,{status:'closed',closedAt:Timestamp.now()});await assertFails(setDoc(doc(db('alice'),path()),order()));});
 test('instructors cannot read another instructor roster; admin can',async()=>{await seed();await env.withSecurityRulesDisabled(c=>setDoc(doc(c.firestore(),'instructors/other@example.test'),{createdAt:Timestamp.now()}));await assertSucceeds(getDocs(collection(db('teacher'),'sessions/ABCDEFGH/participants')));await assertFails(getDocs(collection(db('other'),'sessions/ABCDEFGH/participants')));await assertSucceeds(getDocs(collection(admin(),'sessions/ABCDEFGH/participants')));});
+
+test('private profiles work before verification but cannot grant roles or expose other students',async()=>{
+ const alice=db('alice','alice@example.test',false),p={firstName:'Ada',lastName:'Lovelace',universityId:'123'};
+ await assertSucceeds(setDoc(doc(alice,'profiles/alice'),p));
+ await assertSucceeds(getDoc(doc(alice,'profiles/alice')));
+ await assertFails(getDoc(doc(db('bob'),'profiles/alice')));
+ await assertFails(getDoc(doc(admin(),'profiles/alice')));
+ await assertFails(setDoc(doc(alice,'profiles/alice'),{...p,role:'admin'}));
+ await assertFails(setDoc(doc(alice,'profiles/alice'),{...p,password:'secret'}));
+ await assertFails(getDocs(collection(alice,'profiles')));
+ await assertFails(setDoc(doc(alice,'profiles/alice'),{...p,firstName:''}));
+});
+test('profile edits preserve portal data while imports cannot carry permissions',async()=>{
+ const d=db('alice'),ref=doc(d,'profiles/alice'),p={firstName:'Ada',lastName:'Lovelace',universityId:'123'};
+ await assertSucceeds(setDoc(ref,{...p,platformRegistration:{email:'alice@example.test',age:'30',industry:'Education'}}));
+ await assertSucceeds(setDoc(ref,{firstName:'Updated'},{merge:true}));
+ assertEqual((await getDoc(ref)).data().platformRegistration.industry,'Education');
+ await assertFails(setDoc(ref,{platformRegistration:{approved:true}},{merge:true}));
+ await assertFails(setDoc(ref,{platformRegistration:{age:{nested:'invalid'}}},{merge:true}));
+});
+test('play-history references require real membership and cannot forge scores',async()=>{
+ await seed();const d=db('alice'),ref=doc(d,'profiles/alice/sessions/ABCDEFGH');
+ await assertSucceeds(setDoc(ref,{joined:true}));await assertSucceeds(getDocs(collection(d,'profiles/alice/sessions')));
+ await assertFails(getDocs(collection(db('bob'),'profiles/alice/sessions')));
+ await assertFails(setDoc(doc(d,'profiles/alice/sessions/NOTREALX'),{joined:true}));
+ await assertFails(setDoc(ref,{joined:true,profit:999999}));
+});

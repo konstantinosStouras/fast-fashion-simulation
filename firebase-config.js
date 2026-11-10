@@ -1,4 +1,4 @@
 // Public Firebase web identifiers. Authorization is enforced in firestore.rules.
-export const firebaseConfig={apiKey:'AIzaSyBRaqf45w4jAvZahGd0otppY4a1VZkaw7Q',authDomain:'stouras-ucd-blog.firebaseapp.com',projectId:'stouras-ucd-blog',appId:'1:513789063041:web:5366b0287ee05d7407c280'};
-export const DATABASE='fashion-futures';
+export const firebaseConfig={apiKey:'AIzaSyBaStOaTtK0-uZA8_-iSaAfvZt0p3P2ox8',authDomain:'stouras-ffo.firebaseapp.com',projectId:'stouras-ffo',appId:'1:770387632175:web:e8b6e38584e01c0c2a26da'};
+export const DATABASE='(default)';
 export const ADMIN_EMAIL='kstouras@gmail.com';

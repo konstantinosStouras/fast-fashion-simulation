@@ -1,1 +1,31 @@
-{"firestore":[{"database":"fashion-futures","rules":"firestore.rules"}],"emulators":{"firestore":{"port":8180},"ui":{"enabled":false}}}
+{
+  "firestore": [
+    {
+      "database": "(default)",
+      "rules": "firestore.rules"
+    }
+  ],
+  "auth": {
+    "providers": {
+      "emailPassword": true,
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "Fast Fashion Ops",
+        "supportEmail": "kstouras@gmail.com",
+        "authorizedRedirectUris": [
+          "https://stouras-ffo.firebaseapp.com/__/auth/handler"
+        ]
+      }
+    }
+  },
+  "emulators": {
+    "firestore": {
+      "port": 8180
+    },
+    "auth": {
+      "port": 9198
+    },
+    "ui": {
+      "enabled": false
+    }
+  }
+}
