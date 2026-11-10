@@ -1,5 +1,5 @@
 import {friendlyAuthError,setBusy} from '../ui.js';
-import {ADMIN_LOGIN_ALIAS,accountLabel} from '../auth-identity.js';
+import {ADMIN_LOGIN_ALIAS,accountLabel} from '../auth-identity.js?v=multi-admin-1';
 const $=id=>document.getElementById(id);
 const demo=/^(localhost|127\.0\.0\.1)$/.test(location.hostname)&&new URLSearchParams(location.search).has('demo');
 let api,working=false,authVersion=0;

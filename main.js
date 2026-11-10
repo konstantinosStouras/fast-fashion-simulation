@@ -4,7 +4,7 @@ import {ROUNDS,DEFAULT_ORDER,DEFAULT_CONFIG,SETTINGS,validateConfig,phaseAt,sign
 import {sessionState,partitionSessions} from './studio.js';
 import {profileComplete,profileFields,historyStats,PLATFORM_FIELDS} from './profile.js?v=competition-1';
 import {friendlyAuthError,safeStorage,setBusy,revealInvalidField} from './ui.js';
-import {accountLabel,ADMIN_ACCOUNT_EMAIL} from './auth-identity.js';
+import {accountLabel,ADMIN_ACCOUNT_EMAIL} from './auth-identity.js?v=multi-admin-1';
 const resumeStorage=safeStorage(()=>localStorage);
 const demo=/^(localhost|127\.0\.0\.1)$/.test(location.hostname)&&new URLSearchParams(location.search).has('demo');
 const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
