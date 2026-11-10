@@ -9,15 +9,16 @@ test('real backend registration stores profile and sends a working verification 
  let source=readFileSync(new URL('../backend.js',import.meta.url),'utf8');
  for(const component of ['app','auth','firestore'])source=source.replace(`https://www.gstatic.com/firebasejs/12.5.0/firebase-${component}.js`,import.meta.resolve('firebase/'+component));
  source=source.replace("import {firebaseConfig,DATABASE,ADMIN_EMAIL} from './firebase-config.js';","const firebaseConfig={projectId:'demo-fashion-futures',apiKey:'demo-api-key',authDomain:'demo-fashion-futures.firebaseapp.com'},DATABASE='(default)',ADMIN_EMAIL='kstouras@gmail.com';");
- source=source.replace("'./model.js'",JSON.stringify(new URL('../model.js',import.meta.url).href)).replace("'./profile.js'",JSON.stringify(new URL('../profile.js',import.meta.url).href));
+ source=source.replace("'./competition.js'",JSON.stringify(new URL('../competition.js',import.meta.url).href)).replace("'./model.js'",JSON.stringify(new URL('../model.js',import.meta.url).href)).replace("'./profile.js?v=competition-1'",JSON.stringify(new URL('../profile.js',import.meta.url).href));
  const api=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
  const app=getApp('fashion-futures');connectAuthEmulator(getAuth(app),'http://127.0.0.1:9198',{disableWarnings:true});connectFirestoreEmulator(getFirestore(app),'127.0.0.1',8180);t.after(()=>deleteApp(app));
  const email='emulator-'+Date.now()+'@example.test',p={firstName:'Test',lastName:'Student',universityId:'QA-ONLY'};
  const outcome=await api.register(email,'emulator-only-password',p);assert.deepEqual(outcome,{profileSaved:true,verificationSent:true});assert.equal(api.currentUser().emailVerified,false);assert.deepEqual(await api.getProfile(),p);
  const codes=await fetch('http://127.0.0.1:9198/emulator/v1/projects/demo-fashion-futures/oobCodes').then(r=>r.json());const code=codes.oobCodes.find(c=>c.email===email&&c.requestType==='VERIFY_EMAIL');assert.ok(code);assert.ok(code.oobLink);
  await applyActionCode(getAuth(app),code.oobCode);await api.refreshUser();assert.equal(api.currentUser().emailVerified,true);
- await api.importPlatformProfile({getItem:()=>JSON.stringify({v:1,ts:Date.now(),sim:'ffo',profile:{email,industry:'Education',age:'31',studentId:'QA-ONLY'}})});
+ await api.importPlatformProfile({getItem:()=>JSON.stringify({v:1,ts:Date.now()-1000,sim:'ffo',profile:{email,industry:'Education',age:'31',studentId:'QA-ONLY'}})});
  await api.saveProfile({...p,firstName:'Edited'});assert.equal((await api.getProfile()).platformRegistration.industry,'Education');
  await api.resetPassword(email);const reset=await fetch('http://127.0.0.1:9198/emulator/v1/projects/demo-fashion-futures/oobCodes').then(r=>r.json());assert.ok(reset.oobCodes.some(c=>c.email===email&&c.requestType==='PASSWORD_RESET'));
+ const solo=await api.createSession('Solo backend QA',(await import('../model.js')).DEFAULT_CONFIG,'solo');await api.joinSession(solo,'Test Student');await api.startSession(solo);await api.saveOrder(solo,0,{variety:4,quantity:70,cap:0});const history=await api.playHistory();assert.equal(history[0].mode,'solo');assert.equal(history[0].orders[0].quantity,70);
  await api.logout();await api.loginEmail(email,'emulator-only-password');assert.equal((await api.getProfile()).firstName,'Edited');await api.logout();
 });

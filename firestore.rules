@@ -5,9 +5,12 @@ service cloud.firestore {
   function admin() { return verified() && request.auth.token.email == 'kstouras@gmail.com'; }
   function instructor() { return admin() || (verified() && exists(/databases/$(database)/documents/instructors/$(request.auth.token.email))); }
   function session(code) { return get(/databases/$(database)/documents/sessions/$(code)).data; }
-  function owner(code) { return admin() || (instructor() && session(code).owner == request.auth.uid); }
+  function owner(code) { return admin() || (verified() && session(code).owner == request.auth.uid && (instructor() || session(code).get('mode','individual')=='solo'));  }
   function own(uid) { return verified() && request.auth.uid == uid; }
   function member(code,uid) { return exists(/databases/$(database)/documents/sessions/$(code)/participants/$(uid)); }
+  function captain(code,uid) { return session(code).get('mode','individual')!='team' || session(code).assignments.get(uid,'')==uid; }
+  function teammate(code,uid) { return verified() && member(code,request.auth.uid) && session(code).get('mode','individual')=='team' && session(code).assignments.get(request.auth.uid,'')==uid; }
+  function lockedTeamRound(code,uid,r) { let s=session(code); return verified() && member(code,request.auth.uid) && s.get('mode','individual')=='team' && uid in s.teamNames && r in ['0','1','2','3'] && s.startedAt!=null && request.time>=s.startedAt+duration.value(split(r),'s') && (s.closedAt==null || s.closedAt>=s.startedAt+duration.value(split(r),'s')); }
   function start(r) { return r=='0'?0:r=='1'?180:r=='2'?420:660; }
   function split(r) { return r=='0'?90:r=='1'?420:r=='2'?540:810; }
   function end(r) { return r=='0'?180:r=='1'?420:r=='2'?660:960; }
@@ -38,16 +41,17 @@ service cloud.firestore {
   match /sessions/{code} {
    allow get: if verified();
    allow list: if admin() || (instructor() && resource.data.owner==request.auth.uid);
-   allow create: if instructor() && code.matches('^[A-Z2-9]{8}$') && request.resource.data.keys().hasOnly(['name','owner','config','seed','status','createdAt','startedAt','closedAt']) && request.resource.data.name is string && request.resource.data.name.size()>0 && request.resource.data.name.size()<=80 && request.resource.data.owner==request.auth.uid && configShape(request.resource.data.config) && request.resource.data.seed is int && request.resource.data.seed>=0 && request.resource.data.seed<=1000000 && request.resource.data.status=='lobby' && request.resource.data.createdAt==request.time && request.resource.data.startedAt==null && request.resource.data.closedAt==null;
-   allow update: if owner(code) && ((resource.data.status=='lobby' && request.resource.data.status=='running' && request.resource.data.startedAt==request.time && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','startedAt'])) || (resource.data.status in ['lobby','running'] && request.resource.data.status=='closed' && request.resource.data.closedAt==request.time && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','closedAt'])));
+   allow create: if verified() && (instructor() || request.resource.data.get('mode','individual')=='solo') && code.matches('^[A-Z2-9]{8}$') && request.resource.data.keys().hasOnly(['name','owner','config','seed','status','createdAt','startedAt','closedAt','mode','assignments','teamNames']) && request.resource.data.get('mode','individual') in ['individual','team','solo'] && request.resource.data.get('assignments',{})=={} && request.resource.data.get('teamNames',{})=={} && request.resource.data.name is string && request.resource.data.name.size()>0 && request.resource.data.name.size()<=80 && request.resource.data.owner==request.auth.uid && configShape(request.resource.data.config) && request.resource.data.seed is int && request.resource.data.seed>=0 && request.resource.data.seed<=1000000 && request.resource.data.status=='lobby' && request.resource.data.createdAt==request.time && request.resource.data.startedAt==null && request.resource.data.closedAt==null;
+   allow update: if owner(code) && ((resource.data.status=='lobby' && resource.data.get('mode','individual')=='team' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['assignments','teamNames']) && request.resource.data.assignments is map && request.resource.data.teamNames is map && request.resource.data.assignments.size()<=500 && request.resource.data.teamNames.size()<=100) || (resource.data.status=='lobby' && request.resource.data.status=='running' && request.resource.data.startedAt==request.time && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','startedAt'])) || (resource.data.status in ['lobby','running'] && request.resource.data.status=='closed' && request.resource.data.closedAt==request.time && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','closedAt'])));
    match /participants/{uid} {
     allow get: if own(uid) || owner(code);
     allow list: if owner(code);
-    allow create: if own(uid) && session(code).status=='lobby' && request.resource.data.keys().hasOnly(['name','email','joinedAt']) && request.resource.data.name is string && request.resource.data.name.size()>0 && request.resource.data.name.size()<=80 && request.resource.data.email==request.auth.token.email && request.resource.data.joinedAt==request.time;
+    allow create: if own(uid) && (session(code).get('mode','individual')!='solo' || session(code).owner==request.auth.uid) && session(code).status=='lobby' && request.resource.data.keys().hasOnly(['name','email','joinedAt']) && request.resource.data.name is string && request.resource.data.name.size()>0 && request.resource.data.name.size()<=80 && request.resource.data.email==request.auth.token.email && request.resource.data.joinedAt==request.time;
     match /orders/{r} {
-     allow read: if own(uid) || owner(code);
-     allow create: if own(uid) && member(code,uid) && r in ['0','1','2','3'] && orderShape(r) && ((inWindow(code,start(r),split(r)) && request.resource.data.cap==0) || (r!='1' && inWindow(code,split(r),end(r)) && request.resource.data.quantity==80 && request.resource.data.variety==4));
-     allow update: if own(uid) && member(code,uid) && r in ['0','1','2','3'] && orderShape(r) && ((inWindow(code,start(r),split(r)) && request.resource.data.cap==0) || (r!='1' && inWindow(code,split(r),end(r)) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['cap','savedAt'])));
+     allow get: if own(uid) || owner(code) || teammate(code,uid) || lockedTeamRound(code,uid,r);
+     allow list: if own(uid) || owner(code) || teammate(code,uid);
+     allow create: if own(uid) && captain(code,uid) && member(code,uid) && r in ['0','1','2','3'] && orderShape(r) && ((inWindow(code,start(r),split(r)) && request.resource.data.cap==0) || (r!='1' && inWindow(code,split(r),end(r)) && request.resource.data.quantity==80 && request.resource.data.variety==4));
+     allow update: if own(uid) && captain(code,uid) && member(code,uid) && r in ['0','1','2','3'] && orderShape(r) && ((inWindow(code,start(r),split(r)) && request.resource.data.cap==0) || (r!='1' && inWindow(code,split(r),end(r)) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['cap','savedAt'])));
     }
    }
   }

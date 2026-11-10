@@ -1,9 +1,10 @@
+import {decisionOwner,validateTeams} from './competition.js';
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js';
 import {getAuth,GoogleAuthProvider,signInWithPopup,signInWithEmailAndPassword,createUserWithEmailAndPassword,sendEmailVerification,sendPasswordResetEmail,signOut,onAuthStateChanged,verifyBeforeUpdateEmail} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js';
 import {getFirestore,doc,collection,getDoc,getDocs,setDoc,updateDoc,onSnapshot,serverTimestamp,query,where,runTransaction} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js';
 import {firebaseConfig,DATABASE,ADMIN_EMAIL} from './firebase-config.js';
-import {platformHandoff} from './profile.js';
-import {DEFAULT_CONFIG} from './model.js';
+import {platformHandoff} from './profile.js?v=competition-1';
+import {ROUNDS,DEFAULT_CONFIG} from './model.js';
 const app=initializeApp(firebaseConfig,'fashion-futures'),auth=getAuth(app),db=getFirestore(app,DATABASE);
 export const currentUser=()=>auth.currentUser;
 export const observeAuth=fn=>onAuthStateChanged(auth,fn);
@@ -21,7 +22,7 @@ export const saveProfile=profile=>setDoc(doc(db,'profiles',currentUser().uid),{f
 export async function importPlatformProfile(storage){const p=platformHandoff(storage,currentUser());if(p)await setDoc(doc(db,'profiles',currentUser().uid),{platformRegistration:p},{merge:true});}
 export async function playHistory(){
  const uid=currentUser().uid,refs=await getDocs(collection(db,'profiles',uid,'sessions'));
- return Promise.all(refs.docs.map(async ref=>{const d=await getDoc(doc(db,'sessions',ref.id));return d.exists()?{code:ref.id,...d.data(),orders:await readOrders(ref.id,uid)}:null;})).then(rows=>rows.filter(Boolean));
+ return Promise.all(refs.docs.map(async ref=>{const d=await getDoc(doc(db,'sessions',ref.id));return d.exists()?{code:ref.id,...d.data(),decisionUid:decisionOwner(d.data(),uid),orders:await readOrders(ref.id,decisionOwner(d.data(),uid)||uid),teamOrders:d.data().mode==='team'?await readMarketOrders(ref.id,Object.keys(d.data().teamNames||{}),[1,2,3].filter(i=>d.data().startedAt&&((d.data().closedAt?.toMillis()??Date.now())-d.data().startedAt.toMillis())/1000>=ROUNDS[i].end)):null}:null;})).then(rows=>rows.filter(Boolean));
 }
 export const resetPassword=email=>sendPasswordResetEmail(auth,email);
 export const logout=()=>signOut(auth);
@@ -33,19 +34,21 @@ export async function listInstructors(){return (await getDocs(collection(db,'ins
 export async function revoke(email){const {deleteDoc}=await import('https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js');await deleteDoc(doc(db,'instructors',email));}
 export async function getDefaults(){const d=await getDoc(doc(db,'settings','defaults'));return d.exists()?d.data():{...DEFAULT_CONFIG};}
 export const saveDefaults=config=>setDoc(doc(db,'settings','defaults'),config);
-export async function createSession(name,config){
+export async function createSession(name,config,mode='individual'){
  for(let tries=0;tries<4;tries++){
   const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';const bytes=crypto.getRandomValues(new Uint8Array(8));const code=Array.from(bytes,b=>alphabet[b%alphabet.length]).join('');
   const ref=doc(db,'sessions',code);
-  const created=await runTransaction(db,async tx=>{if((await tx.get(ref)).exists())return false;tx.set(ref,{name,owner:currentUser().uid,config,seed:crypto.getRandomValues(new Uint32Array(1))[0]%1000001,status:'lobby',createdAt:serverTimestamp(),startedAt:null,closedAt:null});return true;});
+  const created=await runTransaction(db,async tx=>{if((await tx.get(ref)).exists())return false;tx.set(ref,{name,mode,assignments:{},teamNames:{},owner:currentUser().uid,config,seed:crypto.getRandomValues(new Uint32Array(1))[0]%1000001,status:'lobby',createdAt:serverTimestamp(),startedAt:null,closedAt:null});return true;});
   if(created)return code;
  }throw new Error('Could not reserve a code. Please try again.');
 }
 export async function listSessions(isAdmin){const c=collection(db,'sessions');return (await getDocs(isAdmin?c:query(c,where('owner','==',currentUser().uid)))).docs.map(d=>({code:d.id,...d.data()})).sort((a,b)=>(b.createdAt?.toMillis()||0)-(a.createdAt?.toMillis()||0));}
 export const watchSession=(code,fn,error)=>onSnapshot(doc(db,'sessions',code),d=>fn(d.exists()?{code,...d.data({serverTimestamps:'estimate'})}:null),error);
-export const startSession=code=>updateDoc(doc(db,'sessions',code),{status:'running',startedAt:serverTimestamp()});
+export async function startSession(code){const ref=doc(db,'sessions',code);await runTransaction(db,async tx=>{const s=(await tx.get(ref)).data();if(s.mode==='team'){const people=(await getDocs(collection(db,'sessions',code,'participants'))).docs.map(d=>({uid:d.id}));if(!validateTeams(people,s.assignments,s.teamNames))throw Error('Assign every participant to a team before starting.');}tx.update(ref,{status:'running',startedAt:serverTimestamp()});});}
+export async function saveTeams(code,assignments,teamNames){const people=(await getDocs(collection(db,'sessions',code,'participants'))).docs.map(d=>({uid:d.id}));if(!validateTeams(people,assignments,teamNames))throw Error('Each participant needs a team with a captain; maximum 20 per team.');await updateDoc(doc(db,'sessions',code),{assignments,teamNames});}
+export async function readMarketOrders(code,captains,rounds){return Object.fromEntries(await Promise.all(captains.map(async uid=>[uid,Object.fromEntries(await Promise.all(rounds.map(async r=>{const d=await getDoc(doc(db,'sessions',code,'participants',uid,'orders',String(r)));return [r,d.exists()?d.data():null];})))])));}
 export const closeSession=code=>updateDoc(doc(db,'sessions',code),{status:'closed',closedAt:serverTimestamp()});
-export async function joinSession(code,name){const s=await getDoc(doc(db,'sessions',code));if(!s.exists())throw new Error('Session code not found.');const ref=doc(db,'sessions',code,'participants',currentUser().uid);if(!(await getDoc(ref)).exists()){if(s.data().status!=='lobby')throw new Error('This session has already started or is closed. Ask your instructor for a new code.');await setDoc(ref,{name,email:currentUser().email,joinedAt:serverTimestamp()});}await setDoc(doc(db,'profiles',currentUser().uid,'sessions',code),{joined:true});}
+export async function joinSession(code,name){const s=await getDoc(doc(db,'sessions',code));if(!s.exists())throw new Error('Session code not found.');if(s.data().mode==='solo'&&s.data().owner!==currentUser().uid)throw Error('This is a private solo game.');const ref=doc(db,'sessions',code,'participants',currentUser().uid);if(!(await getDoc(ref)).exists()){if(s.data().status!=='lobby')throw new Error('This session has already started or is closed. Ask your instructor for a new code.');await setDoc(ref,{name,email:currentUser().email,joinedAt:serverTimestamp()});}await setDoc(doc(db,'profiles',currentUser().uid,'sessions',code),{joined:true});}
 export const watchOrders=(code,uid,fn,error)=>onSnapshot(collection(db,'sessions',code,'participants',uid,'orders'),{includeMetadataChanges:true},s=>{if(!s.metadata.hasPendingWrites)fn(Object.fromEntries(s.docs.map(d=>[d.id,d.data()])));},error);
 export const watchParticipants=(code,fn,error)=>onSnapshot(collection(db,'sessions',code,'participants'),s=>fn(s.docs.map(d=>({uid:d.id,...d.data()}))),error);
 export const saveOrder=(code,index,order)=>setDoc(doc(db,'sessions',code,'participants',currentUser().uid,'orders',String(index)),{...order,savedAt:serverTimestamp()});

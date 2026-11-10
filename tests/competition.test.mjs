@@ -1,0 +1,6 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {groupTeams,validateTeams,decisionOwner,leaderboard} from '../competition.js';
+import {DEFAULT_CONFIG} from '../model.js';
+test('team allocation covers every joined student, keeps captains in their team and handles a remainder',()=>{const people=Array.from({length:7},(_,i)=>({uid:'u'+i}));const t=groupTeams(people,3);assert.ok(validateTeams(people,t.assignments,t.teamNames));assert.equal(Object.keys(t.teamNames).length,3);assert.deepEqual(Object.keys(t.assignments).sort(),people.map(p=>p.uid));assert.equal(validateTeams(people,{...t.assignments,u0:'outsider'},t.teamNames),false);assert.throws(()=>groupTeams(people,0));assert.equal(decisionOwner({mode:'team',assignments:{}},'u0'),null);});
+test('leaderboard excludes practice and unfinished periods; ties share rank and early closure freezes results',()=>{const s={mode:'team',seed:42,config:DEFAULT_CONFIG,teamNames:{a:'A',b:'B'}};const orders={a:{0:{variety:4,quantity:200,cap:200},1:{variety:4,quantity:0,cap:0}},b:{1:{variety:4,quantity:0,cap:0}}};assert.equal(leaderboard(s,orders,419)[0].periods,0);assert.equal(leaderboard(s,orders,420)[0].periods,1);assert.deepEqual(leaderboard(s,orders,420).map(r=>r.rank),[1,1]);assert.equal(leaderboard(s,orders,659)[0].periods,1);assert.equal(leaderboard(s,orders,960)[0].periods,3);});

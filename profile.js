@@ -1,3 +1,4 @@
+import {teamRound} from './market.js';
 import {ROUNDS,DEFAULT_ORDER,resultFor} from './model.js';
 export const PLATFORM_FIELDS=['name','email','studentId','age','gender','nationality','country','levelOfStudy','workExperience','occupation','industry','englishFluency','createdAt','updatedAt'];
 export const profileComplete=p=>!!(p?.firstName?.trim()&&p?.lastName?.trim()&&p?.universityId?.trim());
@@ -20,7 +21,7 @@ export function platformHandoff(storage,user,now=Date.now()){
 export function historyStats(sessions,now=Date.now()){
  const rows=sessions.map(s=>{
   const seconds=s.startedAt?((s.closedAt?.toMillis()??now)-s.startedAt.toMillis())/1000:-1;
-  const rounds=[1,2,3].filter(i=>seconds>=ROUNDS[i].end).map(i=>({round:i,...resultFor(s.seed,i,s.orders[i]||DEFAULT_ORDER,s.config)}));
+  const rounds=[1,2,3].filter(i=>seconds>=ROUNDS[i].end).map(i=>({round:i,...(s.mode==='team'?teamRound(s,i,s.teamOrders||{}).teams[s.decisionUid]:resultFor(s.seed,i,s.orders[i]||DEFAULT_ORDER,s.config))}));
   const sum=k=>rounds.reduce((a,r)=>a+r[k],0);
   return {...s,rounds,profit:sum('profit'),leftovers:sum('leftovers'),footprint:sum('footprint'),finished:rounds.length===3};
  }).sort((a,b)=>(b.createdAt?.toMillis()||0)-(a.createdAt?.toMillis()||0));
