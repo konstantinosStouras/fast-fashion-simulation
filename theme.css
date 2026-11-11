@@ -1,0 +1,53 @@
+/* Theme tokens also apply to student screens, dialogs and the admin entrance. */
+:root{--surface-soft:#e8ebdf;--positive:#23784b;--danger:#a52d20;--primary:#bc4926;--primary-hover:#b44825;--on-primary:#fff}
+:root[data-theme=dark]{color-scheme:dark;--paper:#1b1b18;--white:#26251f;--ink:#f4f1e8;--muted:#b8b5a8;--line:#45443b;--acid:#c9dc88;--focus:#d4e997;--surface-soft:#33352a;--positive:#23784b;--danger:#ff9985;--primary:#ed7950;--primary-hover:#f28e6c;--on-primary:#20160e}
+body{background:var(--paper);color:var(--ink)}
+header{background:var(--white)}
+#theme-toggle{margin-left:auto;white-space:nowrap;flex-shrink:0}
+.session-card-top{display:flex;justify-content:space-between;align-items:start;gap:20px}
+.session-id-label{font-size:10px;letter-spacing:1.5px;color:var(--muted);margin:0 0 8px}
+.session-identity{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.studio-session-card .session-identity h3{font:600 clamp(24px,2.5vw,32px)/1.2 'Playfair Display',Georgia,serif;letter-spacing:.5px}
+.session-summary{font-size:13px;text-align:right;flex-shrink:0}
+.session-summary strong{font-size:16px}
+.session-summary p{margin:5px 0;text-align:right!important;text-align-last:right!important;color:var(--muted)}
+.session-format{display:block;color:var(--muted);font-size:12px}
+.session-name{font-size:17px;line-height:1.5;margin:26px 0 18px;overflow-wrap:anywhere}
+.session-created{margin:0}
+.studio-session-card .button-row{gap:8px;margin-top:20px}
+.studio-session-card .button-row button{flex:0 1 auto;padding:12px 14px;font-size:13px;min-height:46px;border-radius:12px}
+.studio-session-card [data-session]{background:var(--primary);border-color:var(--primary);color:var(--on-primary)}
+.studio-session-card [data-session]:hover:not(:disabled){background:var(--primary-hover);border-color:var(--primary-hover)}
+button.export-button{background:var(--positive);border-color:var(--positive);color:#fff}
+button.export-button:hover:not(:disabled){background:#1b633d;border-color:#1b633d;color:#fff}
+button.danger{color:var(--danger);border-color:var(--danger)}
+button.danger:hover:not(:disabled){background:var(--danger);border-color:var(--danger);color:var(--paper)}
+#card-export-status:not(:empty){padding:14px 0;font-size:13px;overflow-wrap:anywhere}
+#card-export-status a,#export-status a{color:var(--ink);text-decoration:underline}
+:root[data-theme=dark] .secondary,:root[data-theme=dark] .auth-links button{border-color:var(--line);color:var(--ink);background:transparent}
+:root[data-theme=dark] .secondary:hover:not(:disabled),:root[data-theme=dark] .auth-links button:hover:not(:disabled),:root[data-theme=dark] .close:hover:not(:disabled){background:var(--surface-soft);color:var(--ink);border-color:#777b67}
+:root[data-theme=dark] button:not(.secondary):not(.google):not(.export-button):not([data-session]):hover:not(:disabled){background:#d8e8ad;color:#1c2116;border-color:#d8e8ad}
+:root[data-theme=dark] .danger{color:var(--danger);border-color:#8f4d3e}
+:root[data-theme=dark] .danger:hover:not(:disabled){background:#552d24;color:#ffb09f;border-color:var(--danger)}
+:root[data-theme=dark] input,:root[data-theme=dark] select{border-color:#74776a}
+:root[data-theme=dark] input:disabled,:root[data-theme=dark] select:disabled{background:var(--surface-soft);color:var(--muted);-webkit-text-fill-color:var(--muted)}
+:root[data-theme=dark] h1 em,:root[data-theme=dark] .manifesto h2 em,:root[data-theme=dark] .code-display,:root[data-theme=dark] .save-state,:root[data-theme=dark] .brand .brand-dot{color:#c4d795}
+:root[data-theme=dark] .session-status{background:#253e2b;color:#b8e6be}
+:root[data-theme=dark] .session-status.past{background:#38382f;color:#d0cdbf}
+:root[data-theme=dark] .preview-bar{background:#303923;border-color:#788e49}
+:root[data-theme=dark] .timer{background:var(--surface-soft)}
+:root[data-theme=dark] .stats article{background:#343c2b;color:var(--ink)}
+:root[data-theme=dark] .stats article:nth-child(2),:root[data-theme=dark] .steps .active,:root[data-theme=dark] #notice,:root[data-theme=dark] .art-caption b{background:var(--acid);color:#20251a}
+:root[data-theme=dark] .stats article:nth-child(3){background:#38463d;color:var(--ink)}
+:root[data-theme=dark] #auth-error{color:#ffac99}
+:root[data-theme=dark] .editorial{color:#20251a}
+:root[data-theme=dark] .skip-link{background:#d4e997;color:#20251a}
+@media(max-width:600px){
+ .session-card-top{flex-direction:column;gap:16px}
+ .session-summary{text-align:left;flex-shrink:1}
+ .session-summary p{text-align:left!important;text-align-last:left!important}
+ .session-name{margin-top:22px}
+ .studio-session-card .button-row button{flex:1 1 calc(50% - 8px);min-width:0}
+ .session-identity{gap:10px}
+ #theme-toggle{font-size:12px}
+}

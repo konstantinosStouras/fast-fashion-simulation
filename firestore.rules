@@ -6,6 +6,7 @@ service cloud.firestore {
   function instructor() { return admin() || (verified() && exists(/databases/$(database)/documents/instructors/$(request.auth.token.email))); }
   function session(code) { return get(/databases/$(database)/documents/sessions/$(code)).data; }
   function owner(code) { return admin() || (verified() && session(code).owner == request.auth.uid && (instructor() || session(code).get('mode','individual')=='solo'));  }
+  function canDeleteSession(code) { return instructor() && owner(code) && session(code).status=='closed'; }
   function own(uid) { return verified() && request.auth.uid == uid; }
   function member(code,uid) { return exists(/databases/$(database)/documents/sessions/$(code)/participants/$(uid)); }
   function captain(code,uid) { return session(code).get('mode','individual')!='team' || session(code).assignments.get(uid,'')==uid; }
@@ -29,6 +30,7 @@ service cloud.firestore {
    allow create,update: if self() && request.resource.data.keys().hasOnly(['firstName','lastName','universityId','platformRegistration']) && optionalText('firstName',60) && optionalText('lastName',60) && optionalText('universityId',80) && (!('platformRegistration' in request.resource.data) || portalShape(request.resource.data.platformRegistration));
    match /sessions/{code} {
     allow read: if own(uid);
+    allow delete: if canDeleteSession(code);
     allow create,update: if own(uid) && getAfter(/databases/$(database)/documents/sessions/$(code)/participants/$(uid)).data.joinedAt is timestamp && request.resource.data.keys().hasOnly(['joined']) && request.resource.data.joined==true;
    }
   }
@@ -40,6 +42,7 @@ service cloud.firestore {
   }
   match /sessions/{code} {
    allow get: if verified();
+   allow delete: if canDeleteSession(code);
    allow list: if admin() || (instructor() && resource.data.owner==request.auth.uid);
    allow create: if verified() && (instructor() || request.resource.data.get('mode','individual')=='solo') && code.matches('^[A-Z2-9]{8}$') && request.resource.data.keys().hasOnly(['name','owner','config','seed','status','createdAt','startedAt','closedAt','mode','assignments','teamNames','rosterVersion']) && request.resource.data.get('mode','individual') in ['individual','team','solo'] && request.resource.data.get('rosterVersion',0)==0 && request.resource.data.get('assignments',{})=={} && request.resource.data.get('teamNames',{})=={} && request.resource.data.name is string && request.resource.data.name.size()>0 && request.resource.data.name.size()<=80 && request.resource.data.owner==request.auth.uid && configShape(request.resource.data.config) && request.resource.data.seed is int && request.resource.data.seed>=0 && request.resource.data.seed<=1000000 && request.resource.data.status=='lobby' && request.resource.data.createdAt==request.time && request.resource.data.startedAt==null && request.resource.data.closedAt==null;
    // Joining increments a revision atomically; team assignment/start transactions retry on a concurrent join.
@@ -48,8 +51,10 @@ service cloud.firestore {
    match /participants/{uid} {
     allow get: if own(uid) || owner(code);
     allow list: if owner(code);
+    allow delete: if canDeleteSession(code);
     allow create: if own(uid) && (session(code).get('mode','individual')!='solo' || session(code).owner==request.auth.uid) && session(code).status=='lobby' && (session(code).get('mode','individual')!='team' || getAfter(/databases/$(database)/documents/sessions/$(code)).data.rosterVersion==session(code).get('rosterVersion',0)+1) && request.resource.data.keys().hasOnly(['name','email','joinedAt']) && request.resource.data.name is string && request.resource.data.name.size()>0 && request.resource.data.name.size()<=80 && request.resource.data.email==request.auth.token.email && request.resource.data.joinedAt==request.time;
     match /orders/{r} {
+     allow delete: if canDeleteSession(code);
      allow get: if own(uid) || owner(code) || teammate(code,uid) || lockedTeamRound(code,uid,r);
      allow list: if own(uid) || owner(code) || teammate(code,uid);
      allow create: if own(uid) && captain(code,uid) && member(code,uid) && r in ['0','1','2','3'] && orderShape(r) && ((inWindow(code,start(r),split(r)) && request.resource.data.cap==0) || (r!='1' && inWindow(code,split(r),end(r)) && request.resource.data.quantity==80 && request.resource.data.variety==4));

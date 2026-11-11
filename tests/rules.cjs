@@ -2,7 +2,7 @@ const {equal:assertEqual}=require('node:assert/strict');
 const {test,before,after,beforeEach}=require('node:test');
 const fs=require('node:fs');
 const {initializeTestEnvironment,assertSucceeds,assertFails}=require('@firebase/rules-unit-testing');
-const {doc,setDoc,getDoc,getDocs,collection,updateDoc,serverTimestamp,Timestamp,writeBatch,runTransaction}=require('firebase/firestore');
+const {doc,setDoc,getDoc,getDocs,collection,updateDoc,serverTimestamp,Timestamp,writeBatch,runTransaction,deleteDoc}=require('firebase/firestore');
 let env;
 const config={demandMean:480,demandSd:96,forecastSd:.2,rebound:.2,price:40,initialCost:12,refillCost:16,styleCost:150,salvage:5,unitCarbon:5,leftoverCarbon:1};
 const db=(uid,email=uid+'@example.test',verified=true)=>env.authenticatedContext(uid,{email,email_verified:verified}).firestore();
@@ -78,4 +78,14 @@ test('a student joining during start invalidates the instructor transaction',asy
   tx.update(ref,{status:'running',startedAt:serverTimestamp()});
  });
  await require('node:assert/strict').rejects(started,/Unassigned participant/);assertEqual(attempts>=2,true);assertEqual((await getDoc(ref)).data().status,'lobby');
+});
+
+
+test('deletion is limited to closed sessions and their owning instructor or platform owner',async()=>{
+ await seed();await assertFails(deleteDoc(doc(db('teacher'),'sessions/ABCDEFGH')));
+ await seed(50,{status:'closed',closedAt:Timestamp.now()});
+ await env.withSecurityRulesDisabled(async c=>{const d=c.firestore();await setDoc(doc(d,path()),{variety:4,quantity:80,cap:0});await setDoc(doc(d,'profiles/alice/sessions/ABCDEFGH'),{joined:true});await setDoc(doc(d,'instructors/other@example.test'),{createdAt:Timestamp.now()});});
+ for(const actor of [db('alice'),db('other'),db('teacher','teacher@example.test',false)])for(const p of [path(),'sessions/ABCDEFGH/participants/alice','profiles/alice/sessions/ABCDEFGH','sessions/ABCDEFGH'])await assertFails(deleteDoc(doc(actor,p)));
+ const d=db('teacher'),batch=writeBatch(d);for(const p of [path(),'profiles/alice/sessions/ABCDEFGH','sessions/ABCDEFGH/participants/alice'])batch.delete(doc(d,p));await assertSucceeds(batch.commit());await assertSucceeds(deleteDoc(doc(d,'sessions/ABCDEFGH')));
+ await seed(50,{status:'closed',closedAt:Timestamp.now()});await assertSucceeds(deleteDoc(doc(admin(),'sessions/ABCDEFGH')));
 });

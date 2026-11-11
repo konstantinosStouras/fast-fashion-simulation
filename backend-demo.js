@@ -31,7 +31,7 @@ export const listInstructors=async()=>load().instructors;
 export const getDefaults=async()=>load().defaults||DEFAULT_CONFIG;
 export const saveDefaults=async config=>{const d=load();d.defaults=config;write(d);};
 const toSession=s=>s?{...s,createdAt:timestamp(s.createdAt),startedAt:timestamp(s.startedAt),closedAt:timestamp(s.closedAt)}:null;
-export async function createSession(name,config,mode='individual'){const d=load(),code='DEMO'+String(Object.keys(d.sessions).length).padStart(4,'A').replace(/0/g,'B').replace(/1/g,'C');d.sessions[code]={code,name,config,mode,assignments:{},teamNames:{},seed:Math.floor(Math.random()*1000001),owner:user.uid,status:'lobby',createdAt:Date.now(),startedAt:null,closedAt:null};write(d);return code;}
+export async function createSession(name,config,mode='individual'){const d=load();let index=0,code;do{code='DEMO'+String(index++).padStart(4,'A').replace(/0/g,'B').replace(/1/g,'C');}while(d.sessions[code]);d.sessions[code]={code,name,config,mode,assignments:{},teamNames:{},seed:Math.floor(Math.random()*1000001),owner:user.uid,status:'lobby',createdAt:Date.now(),startedAt:null,closedAt:null};write(d);return code;}
 export const listSessions=async(isOwner=false)=>Object.values(load().sessions).filter(s=>isOwner||s.owner===user.uid).map(toSession);
 export const watchSession=(code,fn)=>watch(()=>fn(toSession(load().sessions[code])));
 export const startSession=async code=>{const d=load();if(d.sessions[code].mode==='team'&&!validateTeams(Object.values(d.people[code]||{}),d.sessions[code].assignments,d.sessions[code].teamNames))throw Error('Assign every participant to a team before starting.');Object.assign(d.sessions[code],{status:'running',startedAt:Date.now()});write(d);};
@@ -43,3 +43,7 @@ export const saveOrder=async(code,index,order)=>{const d=load();d.orders[code]??
 
 export const saveTeams=async(code,assignments,teamNames)=>{const d=load();if(d.sessions[code].status!=='lobby'||!validateTeams(Object.values(d.people[code]||{}),assignments,teamNames))throw Error('Invalid teams.');Object.assign(d.sessions[code],{assignments,teamNames});write(d);};
 export const readMarketOrders=async(code,captains,rounds)=>Object.fromEntries(captains.map(uid=>[uid,Object.fromEntries(rounds.map(r=>[r,load().orders[code]?.[uid]?.[r]||null]))]));
+
+export const readParticipants=async code=>Object.values(load().people[code]||{});
+export const readOrders=async(code,uid)=>load().orders[code]?.[uid]||{};
+export const deleteSession=async code=>{const d=load();delete d.sessions[code];delete d.people[code];delete d.orders[code];write(d);};

@@ -1,7 +1,7 @@
 import {decisionOwner,validateTeams} from './competition.js?v=qa-20261111';
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js';
 import {getAuth,GoogleAuthProvider,signInWithPopup,signInWithEmailAndPassword,createUserWithEmailAndPassword,sendEmailVerification,sendPasswordResetEmail,signOut,onAuthStateChanged,verifyBeforeUpdateEmail} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js';
-import {getFirestore,doc,collection,getDoc,getDocs,setDoc,updateDoc,onSnapshot,serverTimestamp,query,where,runTransaction,increment} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js';
+import {getFirestore,doc,collection,getDoc,getDocs,setDoc,updateDoc,onSnapshot,serverTimestamp,query,where,runTransaction,increment,writeBatch,deleteDoc} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js';
 import {firebaseConfig,DATABASE,ADMIN_EMAIL} from './firebase-config.js';
 import {platformHandoff} from './profile.js?v=qa-20261110';
 import {loginEmailAddress,assertAccountEmail,ADMIN_ACCOUNT_EMAIL} from './auth-identity.js?v=multi-admin-1';
@@ -77,3 +77,19 @@ export const watchOrders=(code,uid,fn,error)=>onSnapshot(collection(db,'sessions
 export const watchParticipants=(code,fn,error)=>onSnapshot(collection(db,'sessions',code,'participants'),{includeMetadataChanges:true},s=>{if(!s.metadata.fromCache&&!s.metadata.hasPendingWrites)fn(s.docs.map(d=>({uid:d.id,...d.data()})));},error);
 export const saveOrder=(code,index,order)=>setDoc(doc(db,'sessions',code,'participants',currentUser().uid,'orders',String(index)),{...order,savedAt:serverTimestamp()});
 export async function readOrders(code,uid){return Object.fromEntries((await getDocs(collection(db,'sessions',code,'participants',uid,'orders'))).docs.map(d=>[d.id,d.data()]));}
+
+export const readParticipants=async code=>(await getDocs(collection(db,'sessions',code,'participants'))).docs.map(d=>({uid:d.id,...d.data()}));
+export async function deleteSession(code){
+ const ref=doc(db,'sessions',code),snapshot=await getDoc(ref);if(!snapshot.exists())return;
+ // Close first to prevent joins or new decisions during a retryable cleanup.
+ if(snapshot.data().status!=='closed')await closeSession(code);
+ const people=await readParticipants(code);
+ for(const person of people){
+  const orders=await getDocs(collection(db,'sessions',code,'participants',person.uid,'orders'));
+  const batch=writeBatch(db);orders.docs.forEach(d=>batch.delete(d.ref));
+  batch.delete(doc(db,'profiles',person.uid,'sessions',code));
+  batch.delete(doc(db,'sessions',code,'participants',person.uid));await batch.commit();
+ }
+ // Keep the parent until last: authorization and retries rely on its owner.
+ await deleteDoc(ref);
+}

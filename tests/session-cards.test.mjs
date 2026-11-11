@@ -1,0 +1,38 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {JSDOM} from 'jsdom';
+import {DEFAULT_CONFIG} from '../model.js';
+
+test('session cards show counts, export directly, rehearse privately, close and confirm deletion',async t=>{
+ const dom=new JSDOM(readFileSync('index.html','utf8'),{url:'http://localhost:8791/?demo&studio=1',pretendToBeVisual:true}),w=dom.window;
+ for(const key of ['document','location','localStorage','FormData'])globalThis[key]=w[key];
+ globalThis.addEventListener=w.addEventListener.bind(w);
+ w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
+ const $=s=>w.document.querySelector(s),wait=async fn=>{for(let i=0;i<200;i++){await new Promise(r=>setTimeout(r,10));if(fn())return;}throw Error('UI condition not reached');};
+ const created=URL.createObjectURL,revoke=URL.revokeObjectURL;let csv,download;
+ URL.createObjectURL=blob=>{csv=blob;return 'blob:test-export';};URL.revokeObjectURL=()=>{};
+ w.HTMLAnchorElement.prototype.click=function(){download=this.download;};
+ const common={owner:'demo-admin',mode:'individual',config:DEFAULT_CONFIG,seed:42,createdAt:Date.now()-2000000};
+ w.localStorage.setItem('ff:demo:v1',JSON.stringify({instructors:[],sessions:{ACTIVEAA:{...common,code:'ACTIVEAA',name:'Current class',status:'lobby'},PASTAAAA:{...common,code:'PASTAAAA',name:'Previous class',status:'running',startedAt:Date.now()-1200000}},people:{ACTIVEAA:{alice:{uid:'alice',name:'Alice',email:'alice@example.test'}},PASTAAAA:{bob:{uid:'bob',name:'Bob',email:'bob@example.test'}}},orders:{PASTAAAA:{bob:{1:{variety:4,quantity:100,cap:0}}}}}));
+ const api=await import('../backend-demo.js');
+ t.after(async()=>{await api.logout();await new Promise(r=>setTimeout(r,20));w.close();URL.createObjectURL=created;URL.revokeObjectURL=revoke;});
+ await api.loginGoogle();await import('../main.js?session-cards');await wait(()=>$('[data-participant-count="ACTIVEAA"]')?.textContent==='1 participant');
+ const labels=id=>Array.from($(id).querySelectorAll('button'),b=>b.textContent.trim());
+ assert.deepEqual(labels('#active-sessions'),['Open','Copy link','↓ Export data','🧪 Test round','Close session','Delete']);
+ assert.deepEqual(labels('#past-sessions'),['Open','↓ Export data','🧪 Test round','Delete']);
+ assert.match($('#past-sessions').textContent,/Completed.*1 participant/s);
+ assert.doesNotMatch($('#app').textContent,/Preview as student/);
+ $('[data-card-export="PASTAAAA"]').click();await wait(()=>download);
+ assert.equal(download,'fast-fashion-ops-PASTAAAA.csv');assert.equal((await csv.text()).trim().split('\r\n').length,4);assert.ok($('#create'),'export stays on dashboard');
+ const before=w.localStorage.getItem('ff:demo:v1');
+ $('[data-card-preview="PASTAAAA"]').click();await wait(()=>$('#preview-next'));$('#preview-round').click();$('#preview-exit').click();await wait(()=>$('#back-staff'));
+ assert.equal(w.localStorage.getItem('ff:demo:v1'),before);$('#back-staff').click();await wait(()=>$('[data-card-close]'));
+ $('[data-card-close]').click();await wait(()=>$('[data-no]'));$('[data-no]').click();await new Promise(r=>setTimeout(r,20));assert.equal(JSON.parse(w.localStorage.getItem('ff:demo:v1')).sessions.ACTIVEAA.status,'lobby');
+ $('[data-card-close]').click();await wait(()=>$('[data-yes]'));$('[data-yes]').click();await wait(()=>$('#active-count').textContent==='0 active');
+ assert.ok($('#past-sessions [data-session="ACTIVEAA"]'));assert.ok(JSON.parse(w.localStorage.getItem('ff:demo:v1')).people.ACTIVEAA.alice);
+ $('[data-card-delete="PASTAAAA"]').click();await wait(()=>$('[data-no]'));$('[data-no]').click();await new Promise(r=>setTimeout(r,20));assert.ok(JSON.parse(w.localStorage.getItem('ff:demo:v1')).sessions.PASTAAAA);
+ $('[data-card-delete="PASTAAAA"]').click();await wait(()=>$('[data-yes]'));$('[data-yes]').click();await wait(()=>!$('[data-session="PASTAAAA"]'));
+ const after=JSON.parse(w.localStorage.getItem('ff:demo:v1'));assert.equal(after.sessions.PASTAAAA,undefined);assert.equal(after.people.PASTAAAA,undefined);assert.equal(after.orders.PASTAAAA,undefined);assert.ok(after.sessions.ACTIVEAA);
+ const first=await api.createSession('First local class',DEFAULT_CONFIG),second=await api.createSession('Second local class',DEFAULT_CONFIG);await api.deleteSession(first);const third=await api.createSession('Third local class',DEFAULT_CONFIG);assert.notEqual(third,second);assert.equal(JSON.parse(w.localStorage.getItem('ff:demo:v1')).sessions[second].name,'Second local class');
+});

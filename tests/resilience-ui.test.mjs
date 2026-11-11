@@ -13,7 +13,7 @@ test('slow subscriptions, live updates, cancelled navigation and large classroom
  const wait=async fn=>{for(let i=0;i<1000;i++){await new Promise(r=>setTimeout(r,10));if(fn())return;}throw Error('Condition not reached: '+w.document.body.textContent.slice(-1000));};
  const api=await import('../backend-demo.js');let holdOrders=false,pendingOrders=[],slowProfile=null;
  globalThis.__resilienceApi={...api,watchOrders:(code,uid,fn,error)=>api.watchOrders(code,uid,o=>{if(holdOrders)pendingOrders.push(()=>fn(o));else fn(o);},error),getProfile:()=>slowProfile||api.getProfile()};
- let source=readFileSync('main.js','utf8').replace("api=await import(demo?'./backend-demo.js':'./backend.js?v=qa-20261110')","api=globalThis.__resilienceApi");
+ let source=readFileSync('main.js','utf8').replace(/api=await import\(demo\?'\.\/backend-demo\.js':'\.\/backend\.js\?v=[^']+'\)/,"api=globalThis.__resilienceApi");
  source=source.replace(/from '(\.\/[^']+)'/g,(_,p)=>'from '+JSON.stringify(new URL('../'+p.slice(2),import.meta.url).href));
  t.after(async()=>{await api.logout();await new Promise(r=>setTimeout(r,20));w.close();delete globalThis.__resilienceApi;});
  await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
