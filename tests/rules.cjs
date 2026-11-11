@@ -163,3 +163,36 @@ test('simultaneous saves from the same revision accept exactly one winner; old r
  await assertSucceeds(setDoc(refA,order({quantity:120})));assertEqual((await getDoc(refA)).data().revision,1);
  const legacy=order();delete legacy.revision;await assertFails(setDoc(refB,legacy));
 });
+
+test('admin closure rejects queued initial and replenishment saves and freezes every reader',async()=>{
+ const {disableNetwork,enableNetwork,getDocFromServer}=require('firebase/firestore');
+ const team={mode:'team',assignments:{alice:'alice',bob:'alice'},teamNames:{alice:'A'}};
+ for(const phase of ['plan','respond']){
+  await env.clearFirestore();await seed(phase==='plan'?200:600,team);
+  const captain=db('alice'),mate=db('bob'),teacher=db('teacher'),round=phase==='plan'?'1':'2',ref=doc(captain,path('alice',round));
+  const confirmed=order(phase==='plan'?{quantity:120}:{phase,cap:35});await assertSucceeds(setDoc(ref,confirmed));
+  await disableNetwork(captain);
+  const rejected=assertFails(setDoc(ref,order(phase==='plan'?{quantity:170,revision:2}:{phase,cap:99,revision:2})));
+  const room=doc(teacher,'sessions/ABCDEFGH');await assertSucceeds(updateDoc(room,{status:'closed',closedAt:serverTimestamp()}));
+  const closedAt=(await getDoc(room)).data().closedAt.toMillis();
+  try{
+   await enableNetwork(captain);await rejected;
+   for(const reader of [captain,mate,teacher]){const saved=(await getDocFromServer(doc(reader,path('alice',round)))).data();assertEqual(saved.quantity,confirmed.quantity);assertEqual(saved.cap,confirmed.cap);assertEqual(saved.revision,1);}
+   await assertFails(setDoc(ref,order({...confirmed,revision:2})));
+   await assertFails(updateDoc(room,{status:'running'}));await assertFails(updateDoc(room,{closedAt:serverTimestamp()}));
+   assertEqual((await getDoc(room)).data().closedAt.toMillis(),closedAt);
+  }finally{await enableNetwork(captain);}
+ }
+});
+
+test('simultaneous admin close and captain save have a stable server-ordered outcome',async()=>{
+ const team={mode:'team',assignments:{alice:'alice',bob:'alice'},teamNames:{alice:'A'}};
+ await seed(600,team);const captain=db('alice'),teacher=db('teacher'),mate=db('bob'),ref=doc(captain,path('alice','2')),room=doc(teacher,'sessions/ABCDEFGH');
+ await assertSucceeds(setDoc(ref,order({phase:'respond',cap:30})));
+ const [saved,closed]=await Promise.allSettled([setDoc(ref,order({phase:'respond',cap:60,revision:2})),updateDoc(room,{status:'closed',closedAt:serverTimestamp()})]);
+ assertEqual(closed.status,'fulfilled');
+ const snapshot=(await getDoc(doc(mate,path('alice','2')))).data(),session=(await getDoc(room)).data();
+ assertEqual(snapshot.cap,saved.status==='fulfilled'?60:30);assertEqual(snapshot.savedAt.toMillis()<=session.closedAt.toMillis(),true);
+ await assertFails(setDoc(ref,order({phase:'respond',cap:99,revision:snapshot.revision+1})));
+ assertEqual((await getDoc(ref)).data().cap,snapshot.cap);
+});
