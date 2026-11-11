@@ -73,6 +73,30 @@ test('slow subscriptions, live updates, cancelled navigation and large classroom
   assert.match($('#notice').textContent,/Your save was not applied/);assert.equal(JSON.parse(w.localStorage.getItem('ff:demo:v1')).orders[code][api.currentUser().uid][0].quantity,180);
   $('#order-form [name=quantity]').value='190';submit('#order-form');await wait(()=>$('.save-state')?.textContent.includes('Saved:')&&$('.save-state').textContent.includes('190'));
  });
+ await t.test('own confirmed snapshot after the save acknowledgement is not a remote update',async()=>{
+  holdOrders=true;
+  $('#order-form [name=quantity]').value='191';submit('#order-form');
+  await wait(()=>$('#notice').textContent.startsWith('Decision saved.'));
+  assert.ok(pendingOrders.length);
+  holdOrders=false;pendingOrders.splice(0).forEach(fn=>fn());
+  await wait(()=>$('#order-form [name=quantity]').value==='191');
+  assert.match($('.save-state').textContent,/Saved:.*191 units/);
+  assert.doesNotMatch($('.save-state').textContent,/another device/);
+  assert.doesNotMatch($('#notice').textContent,/another device/);
+ });
+ await t.test('own snapshot before acknowledgement and a later remote revision remain distinct',async()=>{
+  let release;ackGate=new Promise(resolve=>release=resolve);
+  try{
+   $('#order-form [name=quantity]').value='192';submit('#order-form');
+   await wait(()=>JSON.parse(w.localStorage.getItem('ff:demo:v1')).orders[code][api.currentUser().uid][0].quantity===192);
+   assert.doesNotMatch($('#notice').textContent,/another device/);
+  }finally{release();ackGate=null;}
+  await wait(()=>$('#notice').textContent.startsWith('Decision saved.'));
+  // Even identical values from a new revision must still be recognized as remote.
+  await api.saveOrder(code,0,{variety:4,quantity:192,cap:0});
+  await wait(()=>$('.save-state').textContent.includes('Updated on another device'));
+  assert.match($('#notice').textContent,/Review them before editing/);
+ });
  await t.test('another device update replaces stale input with an explicit notice',async()=>{
   $('#order-form [name=quantity]').value='195';$('#order-form [name=quantity]').dispatchEvent(new w.Event('input',{bubbles:true}));
   await api.saveOrder(code,0,{variety:4,quantity:185,cap:0});await wait(()=>$('#order-form [name=quantity]').value==='185');assert.match($('.save-state').textContent,/Updated on another device/);assert.match($('#notice').textContent,/Review them before editing/);

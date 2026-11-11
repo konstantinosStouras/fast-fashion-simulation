@@ -9,6 +9,9 @@ import {accountLabel,ADMIN_ACCOUNT_EMAIL} from './auth-identity.js?v=multi-admin
 const resumeStorage=safeStorage(()=>localStorage),tabStorage=safeStorage(()=>sessionStorage);
 const pageWindow=document.defaultView;
 let connected=pageWindow.navigator.onLine!==false,sessionFresh=true,ordersFresh=true,savePending=false,pendingDecision=null;
+// The write acknowledgement and confirmed subscription can arrive in either order.
+// Retain local revisions until observed, rather than using the request's pending flag.
+const localDecisionWrites=new Map();
 const connectionBanner=document.createElement('div');connectionBanner.id='connection-status';connectionBanner.hidden=true;connectionBanner.setAttribute('role','status');connectionBanner.setAttribute('aria-live','polite');
 document.getElementById('app').before(connectionBanner);
 const demo=/^(localhost|127\.0\.0\.1)$/.test(location.hostname)&&new URLSearchParams(location.search).has('demo');
@@ -29,7 +32,7 @@ document.addEventListener('invalid',revealInvalidField,true);
 document.querySelector('.brand').addEventListener('click',e=>{e.preventDefault();action(async()=>{clean();note('');landing();window.scrollTo?.({top:0,behavior:'auto'});});});
 function confirmAction(message){return new Promise(resolve=>{const d=document.createElement('dialog');d.innerHTML=`<h2>Confirm your decision.</h2><p>${esc(message)}</p><div class="button-row"><button data-yes>Confirm</button><button class="secondary" data-no>Cancel</button></div>`;document.body.append(d);const done=value=>{d.close();d.remove();resolve(value);};d.querySelector('[data-yes]').onclick=()=>done(true);d.querySelector('[data-no]').onclick=()=>done(false);d.oncancel=e=>{e.preventDefault();done(false);};d.showModal();});}
 function clearExport(){if(exportUrl){URL.revokeObjectURL(exportUrl);exportUrl=null;}}
-function clean(){historyNeedsRefresh=false;sessionFresh=true;ordersFresh=true;savePending=false;pendingDecision=null;connectionBanner.hidden=true;historyReviewCode=null;historyReviewPending=false;sessionEntryPending=false;clearExport();viewVersion++;ordersReady=false;rosterReady=false;renderedOrderKey='';teamEditor=null;clearTimeout(rosterTimer);rosterTimer=null;orderUnsub?.();orderUnsub=null;currentOrderUid=null;marketReady='';marketLoading='';finalTeamOrders=null;subscriptions.forEach(f=>f());subscriptions=[];rosterSubs.forEach(f=>f());rosterSubs.clear();clearInterval(tickHandle);session=null;orders={};roster=[];classOrders={};phaseKey='';studentPreview=null;demoOffset=0;}
+function clean(){localDecisionWrites.clear();historyNeedsRefresh=false;sessionFresh=true;ordersFresh=true;savePending=false;pendingDecision=null;connectionBanner.hidden=true;historyReviewCode=null;historyReviewPending=false;sessionEntryPending=false;clearExport();viewVersion++;ordersReady=false;rosterReady=false;renderedOrderKey='';teamEditor=null;clearTimeout(rosterTimer);rosterTimer=null;orderUnsub?.();orderUnsub=null;currentOrderUid=null;marketReady='';marketLoading='';finalTeamOrders=null;subscriptions.forEach(f=>f());subscriptions=[];rosterSubs.forEach(f=>f());rosterSubs.clear();clearInterval(tickHandle);session=null;orders={};roster=[];classOrders={};phaseKey='';studentPreview=null;demoOffset=0;}
 function updateConnection(){
  const active=session&&!staffView&&!studentPreview;
  connectionBanner.hidden=!active;
@@ -176,7 +179,15 @@ async function openSession(code,staff,review=false,focusEntry=false){
   const unchanged=session&&signature(session)===signature(s),justClosed=s.status==='closed'&&session?.status!=='closed';session=s;if(justClosed&&!staff)note('Your instructor closed this session. Decisions are locked; only completed seasons count.');updateConnection();if(unchanged){if($('session-rechecking')&&sessionFresh&&connected)renderSession();return;}
   if(!staff){const uid=decisionOwner(s,user.uid);if(uid!==currentOrderUid){
    orderUnsub?.();orders={};ordersReady=false;currentOrderUid=uid;
-   orderUnsub=uid?api.watchOrders(code,uid,o=>{if(version!==viewVersion||uid!==currentOrderUid)return;const index=phase().index,changedElsewhere=ordersReady&&!savePending&&decisionOwner(session,user.uid)===user.uid&&JSON.stringify(orders[index]||null)!==JSON.stringify(o[index]||null);orders=o;ordersReady=true;ordersFresh=true;if(session)renderSession();if(changedElsewhere&&$('order-form')){note('A decision was updated on another device. The latest saved values are loaded. Review them before editing.');decisionStatus('Updated on another device. '+savedDecisionText(index));}},e=>{if(version===viewVersion){failure(e);$('app').innerHTML='<section class="panel"><h1>Saved decisions could not load.</h1><button id="retry-orders">Retry</button></section>';$('retry-orders').onclick=()=>openSession(code,staff,review);}},fresh=>{if(version!==viewVersion||uid!==currentOrderUid)return;ordersFresh=fresh;updateConnection();}):null;
+   orderUnsub=uid?api.watchOrders(code,uid,o=>{
+    if(version!==viewVersion||uid!==currentOrderUid)return;
+    const index=phase().index,local=localDecisionWrites.get(index);
+    const ownUpdate=local&&['variety','quantity','cap','phase','revision'].every(key=>local[key]===o[index]?.[key]);
+    const changedElsewhere=ordersReady&&!savePending&&!ownUpdate&&decisionOwner(session,user.uid)===user.uid&&JSON.stringify(orders[index]||null)!==JSON.stringify(o[index]||null);
+    for(const [round,write]of localDecisionWrites)if((o[round]?.revision??0)>=write.revision)localDecisionWrites.delete(round);
+    orders=o;ordersReady=true;ordersFresh=true;if(session)renderSession();
+    if(changedElsewhere&&$('order-form')){note('A decision was updated on another device. The latest saved values are loaded. Review them before editing.');decisionStatus('Updated on another device. '+savedDecisionText(index));}
+   },e=>{if(version===viewVersion){failure(e);$('app').innerHTML='<section class="panel"><h1>Saved decisions could not load.</h1><button id="retry-orders">Retry</button></section>';$('retry-orders').onclick=()=>openSession(code,staff,review);}},fresh=>{if(version!==viewVersion||uid!==currentOrderUid)return;ordersFresh=fresh;updateConnection();}):null;
   }}renderSession();
  },e=>{if(version===viewVersion){failure(e);sessionFresh=false;updateConnection();$('app').innerHTML='<section class="panel"><h1>Session could not reconnect.</h1><p>Your saved session ID is kept. Check your connection and account, then retry.</p><button id="retry-session">Retry session</button></section>';$('retry-session').onclick=()=>openSession(code,staff,review);}},fresh=>{if(version!==viewVersion)return;sessionFresh=fresh;updateConnection();}));
  if(staff)subscriptions.push(api.watchParticipants(code,people=>{
@@ -207,12 +218,14 @@ async function saveDecision(index,kind,order,expectedRevision){
  if(session.mode==='team'&&decisionOwner(session,user.uid)!==user.uid)throw Error('Only your team captain can save decisions.');
  if(studentPreview){orders[index]={...order};renderSession();note('Preview decision saved.');return;}
  const version=viewVersion,code=session.code;
+ localDecisionWrites.set(index,{...order,phase:kind,revision:expectedRevision+1});
  savePending=true;pendingDecision={index,kind};updateConnection();
  decisionStatus('Saving… wait for confirmation.','saving');note('Saving your decision… wait for confirmation before leaving.');
  let accepted=false,conflict='';
  try{await api.saveOrder(code,index,order,kind,expectedRevision);accepted=true;}
  catch(error){
   if(version!==viewVersion)return;
+  localDecisionWrites.delete(index);
   if(session?.status==='closed')note('The session is closed. This save was not accepted. Final scores use confirmed decisions from completed seasons.');
   else if(error.code==='decision-conflict'){conflict=error.message;note(conflict);}
   else if(!decisionPhaseMatches(index,kind))note('The deadline has passed. This save was not accepted. Your team keeps the last confirmed decision, or the defaults if none was saved.');
