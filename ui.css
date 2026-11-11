@@ -112,6 +112,34 @@ li,blockquote,.field-description,.manifesto>div{
 #team-form label,#team-names label{min-width:0;margin:0;overflow-wrap:anywhere}
 .team-banner h2{overflow-wrap:anywhere}
 .decision-role{padding:12px 14px;border-left:3px solid var(--focus);background:var(--surface-soft,#e8eddf);font-size:14px!important;line-height:1.65;color:var(--ink)!important}
+.results-nav{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0 24px}
+.results-nav a{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:10px 16px;border:1px solid var(--line);border-radius:6px;color:var(--ink);font-size:14px;text-decoration:underline;text-underline-offset:3px}
+.team-standing{padding:14px 16px;border-left:3px solid var(--focus);background:var(--surface-soft);overflow-wrap:anywhere}
+.team-standing strong,.team-standing span{display:block}
+.team-standing span{font-size:14px;margin-top:5px}
+.leaderboard-results .own-team{background:var(--surface-soft)}
+.own-team-label{color:var(--ink);font-size:12px;margin-top:4px;font-weight:600}
+#season-results,#leaderboard,#final-feedback{scroll-margin-top:24px}
+@media(max-width:600px){
+ .results-nav{width:100%;gap:8px}.results-nav a{flex:1 1 120px}
+ .result-stats article{padding:20px}.result-stats span{font-size:12px;letter-spacing:.5px}.result-stats strong{margin-top:10px}
+ #season-results>.hint{font-size:14px;line-height:1.7}
+ #season-results .season-results,#season-results .season-results tbody,#season-results .season-results tr{display:block;width:100%;min-width:0}
+ .season-results thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+ .season-results tbody tr{margin:16px 0;padding:14px;border:1px solid var(--line);border-radius:8px}
+ .season-results td{display:flex;justify-content:space-between;gap:12px;padding:10px 0;font-size:14px;overflow-wrap:anywhere}
+ .season-results td::before{content:attr(data-label);font-weight:600;color:var(--muted)}
+ .season-results td:first-child{display:block;padding-top:0;font-size:16px;font-weight:600;line-height:1.5}
+ .season-results td:first-child::before{content:none}.season-results td:last-child{border-bottom:0;padding-bottom:0}
+ #leaderboard.final-leaderboard .leaderboard-results tbody tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 16px}
+ .final-leaderboard .leaderboard-results td{display:block;min-width:0;font-variant-numeric:tabular-nums}
+ .final-leaderboard .leaderboard-results td::before{display:block;font-size:12px;line-height:1.5;margin-bottom:5px}
+ .final-leaderboard .leaderboard-results td:nth-child(2){font-size:16px;padding-top:0}
+ .final-leaderboard .leaderboard-results td:nth-last-child(-n+2){border-bottom:0}
+ .final-leaderboard .leaderboard-results .own-team{border-color:var(--focus);background:var(--surface-soft)}
+ #final-feedback{padding-top:24px}#final-feedback h2{font-size:clamp(25px,7vw,29px);line-height:1.35}
+ #finish{width:100%;margin:12px 0 24px}
+}
 .decision-deadline{font-size:14px;color:var(--muted);margin:18px 0 10px}.decision-deadline strong{color:var(--ink);font-variant-numeric:tabular-nums}
 #order-form .save-state{padding:12px 14px;background:#edf1e5;border-radius:6px;font-size:14px;line-height:1.6;overflow-wrap:anywhere}
 #order-form .save-state[data-state=dirty],#order-form .save-state[data-state=error]{background:#fff1d9;color:#684313}

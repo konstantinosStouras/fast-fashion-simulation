@@ -24,6 +24,20 @@ test('solo start, team setup, captain saves, teammate read-only view and period 
  await api.logout();await wait(()=>$('#open-login'));w.localStorage.removeItem('ff:session:demo-alice@example.test');await api.loginEmail('alice@example.test');await wait(()=>$('#join'));$('#join [name=code]').value=code;submit('#join');await wait(()=>$('#order-form'));assert.equal($('#save-order').disabled,false);$('#order-form [name=quantity]').value='93';submit('#order-form');await wait(()=>$('.save-state').textContent.includes('93'));
  await api.logout();await wait(()=>$('#open-login'));await api.loginEmail('bob@example.test');await wait(()=>$('#join'));$('#join [name=code]').value=code;submit('#join');await wait(()=>$('#order-form'));assert.equal($('#save-order').disabled,true);assert.equal($('#order-form [name=quantity]').value,'93');assert.match($('.team-banner').textContent,/captain submits/);
  for(let i=0;i<3;i++){click('#demo-forward');await wait(()=>$('#demo-forward'));}await wait(()=>$('#leaderboard').textContent.includes('after 1 scored periods'));assert.match($('#leaderboard').textContent,/Team A/);assert.match($('#leaderboard').textContent,/Team B/);
+ // A teammate receives the same final team score, an identifiable rank, and results before the exit.
+ for(let i=0;i<4;i++){click('#demo-forward');await wait(()=>$('#demo-forward')||$('#season-results'));}
+ await wait(()=>$('#leaderboard h2').textContent==='Final team leaderboard');
+ assert.match($('.team-standing').textContent,/Your team: rank \d of 2/);
+ assert.match($('.own-team').textContent,/Team A/);
+ assert.equal($('.own-team [data-label="Profit"]').textContent,$('.result-stats strong').textContent);
+ assert.equal($('.own-team [data-label="Leftovers"]').textContent,w.document.querySelectorAll('.result-stats strong')[1].textContent);
+ assert.doesNotMatch($('.team-banner').textContent,/captain submits|save one shared decision/);
+ assert.ok($('#leaderboard').compareDocumentPosition($('#finish')) & w.Node.DOCUMENT_POSITION_FOLLOWING);
+ assert.ok($('#leaderboard').compareDocumentPosition($('#season-results')) & w.Node.DOCUMENT_POSITION_FOLLOWING);
+ assert.equal($('#leaderboard .table-wrap').getAttribute('aria-label'),'Team leaderboard');
+ assert.equal(w.document.querySelectorAll('.season-results tbody tr').length,4);
+ assert.match($('.season-results tbody tr').textContent,/unscored/);
+ assert.equal($('.results-nav a').getAttribute('href'),'#leaderboard');
  click('#my-profile');await wait(()=>$('#profile-history').textContent.includes('Teams'));assert.doesNotMatch($('#profile-history').textContent,/Solo/);
 });
 
