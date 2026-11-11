@@ -1,0 +1,32 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {JSDOM} from 'jsdom';
+import {DEFAULT_CONFIG} from '../model.js';
+
+test('completed roster and downloadable CSV agree with saved decisions and survive a save dialog',async t=>{
+ const dom=new JSDOM(readFileSync('index.html','utf8'),{url:'http://localhost:8791/?demo&studio=1',pretendToBeVisual:true}),w=dom.window;
+ for(const k of ['document','location','localStorage','sessionStorage','FormData'])globalThis[k]=w[k];
+ globalThis.addEventListener=w.addEventListener.bind(w);
+ const $=s=>w.document.querySelector(s),wait=async fn=>{for(let i=0;i<200;i++){await new Promise(r=>setTimeout(r,10));if(fn())return;}throw Error('UI did not become ready');};
+ const blobs=new Map(),revoked=[],originalCreate=URL.createObjectURL,originalRevoke=URL.revokeObjectURL;let clicked;
+ URL.createObjectURL=blob=>{const url='blob:qa-'+blobs.size;blobs.set(url,blob);return url;};URL.revokeObjectURL=url=>revoked.push(url);
+ w.HTMLAnchorElement.prototype.click=function(){assert.equal(this.isConnected,true);clicked=this;};
+ const code='CSVTEST2',uid='qa-student';
+ w.localStorage.setItem('ff:demo:v1',JSON.stringify({instructors:[],sessions:{[code]:{code,name:'CSV test',owner:'demo-admin',mode:'individual',status:'running',startedAt:Date.now()-1081000,createdAt:Date.now()-1200000,seed:65846,config:DEFAULT_CONFIG}},people:{[code]:{[uid]:{uid,name:'QA, "Student"',email:'qa@example.test'}}},orders:{[code]:{[uid]:{0:{variety:4,quantity:100,cap:30},1:{variety:4,quantity:120,cap:0},2:{variety:4,quantity:80,cap:100},3:{variety:8,quantity:60,cap:60}}}}}));
+ const api=await import('../backend-demo.js');
+ t.after(async()=>{await api.logout();await new Promise(r=>setTimeout(r,20));w.close();URL.createObjectURL=originalCreate;URL.revokeObjectURL=originalRevoke;});
+ await api.loginGoogle();await import('../main.js?results-export-test');await wait(()=>$('[data-session]'));
+ $('[data-session]').click();await wait(()=>$('#roster')?.textContent.includes('3/3 scored decisions saved'));
+ assert.match($('#roster').textContent,/Saved decisions/);assert.doesNotMatch($('#roster').textContent,/No saved decision/);assert.equal($('#close-session'),null);
+ $('#export').click();assert.equal(clicked.download,'fast-fashion-ops-CSVTEST2.csv');assert.match($('#export-status').textContent,/CSV ready: 3 scored-season rows/);
+ const bytes=Buffer.from(await blobs.get(clicked.href).arrayBuffer());assert.deepEqual([...bytes.subarray(0,3)],[239,187,191]);
+ const csv=bytes.toString('utf8');const lines=csv.trim().split('\r\n');assert.equal(lines.length,4);
+ assert.match(lines[1],/"QA, ""Student"""/);
+ assert.match(lines[1],/"1","4","120","0","false","9235","377","480","103","2503"$/);
+ assert.match(lines[2],/"2","4","80","100","false","11010","435","445","10","2235"$/);
+ assert.match(lines[3],/"3","8","60","60","false","13732","566","618","52","3142"$/);
+ await new Promise(r=>setTimeout(r,1100));assert.deepEqual(revoked,[],'download remains valid while the save dialog is open');
+ const previous=clicked.href;$('#export').click();assert.deepEqual(revoked,[previous]);const latest=clicked.href;
+ $('#back-staff').click();await wait(()=>$('#create'));assert.ok(revoked.includes(latest),'leaving the session releases its download');
+});
