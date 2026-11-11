@@ -111,6 +111,14 @@ li,blockquote,.field-description,.manifesto>div{
 .team-assignment-summary,.team-captain{display:block;margin-top:8px;font-size:13px;font-weight:400;line-height:1.6;color:var(--muted);text-align:start;overflow-wrap:anywhere}
 #team-form label,#team-names label{min-width:0;margin:0;overflow-wrap:anywhere}
 .team-banner h2{overflow-wrap:anywhere}
+.decision-role{padding:12px 14px;border-left:3px solid var(--focus);background:var(--surface-soft,#e8eddf);font-size:14px!important;line-height:1.65;color:var(--ink)!important}
+.decision-deadline{font-size:14px;color:var(--muted);margin:18px 0 10px}.decision-deadline strong{color:var(--ink);font-variant-numeric:tabular-nums}
+#order-form .save-state{padding:12px 14px;background:#edf1e5;border-radius:6px;font-size:14px;line-height:1.6;overflow-wrap:anywhere}
+#order-form .save-state[data-state=dirty],#order-form .save-state[data-state=error]{background:#fff1d9;color:#684313}
+#order-form .save-state[data-state=saving]{background:#e7edf3;color:#304658}
+:root[data-theme=dark] #order-form .save-state{background:#303923;color:#c4d795}
+:root[data-theme=dark] #order-form .save-state[data-state=dirty],:root[data-theme=dark] #order-form .save-state[data-state=error]{background:#44331d;color:#f4cd8b}
+:root[data-theme=dark] #order-form .save-state[data-state=saving]{background:#263949;color:#c8def4}
 
 /* Phone-sized admin forms and per-student results. */
 @media(max-width:600px){
@@ -139,6 +147,8 @@ li,blockquote,.field-description,.manifesto>div{
 
 @media(max-width:600px){
  #team-setup .hint,#leaderboard>.hint{font-size:14px;line-height:1.7}
+ .decision #order-form .hint,.decision>.hint{font-size:14px;line-height:1.7}
+ #order-form #save-order{width:100%}
  #team-setup button{width:100%}
  #team-form,#team-names{gap:20px}
  #team-names{border-top:1px solid var(--line);padding-top:24px}

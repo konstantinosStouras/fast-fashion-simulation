@@ -11,8 +11,9 @@ test('slow subscriptions, live updates, cancelled navigation and large classroom
  w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
  const $=s=>w.document.querySelector(s),click=s=>$(s).click(),submit=s=>$(s).dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
  const wait=async fn=>{for(let i=0;i<1000;i++){await new Promise(r=>setTimeout(r,10));if(fn())return;}throw Error('Condition not reached: '+w.document.body.textContent.slice(-1000));};
- const api=await import('../backend-demo.js');let holdOrders=false,pendingOrders=[],slowProfile=null;
- globalThis.__resilienceApi={...api,watchOrders:(code,uid,fn,error)=>api.watchOrders(code,uid,o=>{if(holdOrders)pendingOrders.push(()=>fn(o));else fn(o);},error),getProfile:()=>slowProfile||api.getProfile()};
+ const api=await import('../backend-demo.js');let holdOrders=false,pendingOrders=[],slowProfile=null,failSave=false,saveGate=null;
+ globalThis.__resilienceApi={...api,saveOrder:async(...args)=>{if(saveGate)await saveGate;if(failSave)throw Error('Test connection unavailable');return api.saveOrder(...args);},watchOrders:(code,uid,fn,error)=>api.watchOrders(code,uid,o=>{if(holdOrders)pendingOrders.push(()=>fn(o));else fn(o);},error),getProfile:()=>slowProfile||api.getProfile()};
+
  let source=readFileSync('main.js','utf8').replace(/api=await import\(demo\?'\.\/backend-demo\.js':'\.\/backend\.js\?v=[^']+'\)/,"api=globalThis.__resilienceApi");
  source=source.replace(/from '(\.\/[^']+)'/g,(_,p)=>'from '+JSON.stringify(new URL('../'+p.slice(2),import.meta.url).href));
  t.after(async()=>{await api.logout();await new Promise(r=>setTimeout(r,20));w.close();delete globalThis.__resilienceApi;});
@@ -26,6 +27,12 @@ test('slow subscriptions, live updates, cancelled navigation and large classroom
  $('#order-form [name=quantity]').value='137';await api.saveDefaults(DEFAULT_CONFIG);
  await t.test('unrelated subscription updates preserve unsaved quantities',()=>assert.equal($('#order-form [name=quantity]').value,'137'));
  submit('#order-form');await wait(()=>$('.save-state').textContent.includes('137'));
+ await t.test('unsaved edits, pending saves and failed retries are visible next to the decision',async()=>{
+  $('#order-form [name=quantity]').value='145';$('#order-form [name=quantity]').dispatchEvent(new w.Event('input',{bubbles:true}));assert.match($('.save-state').textContent,/Unsaved changes/);
+  let releaseSave;saveGate=new Promise(resolve=>releaseSave=resolve);failSave=true;submit('#order-form');await wait(()=>$('.save-state').dataset.state==='saving');assert.match($('.save-state').textContent,/Saving/);
+  releaseSave();await wait(()=>$('.save-state').dataset.state==='error');assert.equal($('#order-form [name=quantity]').value,'145');assert.match($('.save-state').textContent,/not confirmed/);
+  saveGate=null;failSave=false;submit('#order-form');await wait(()=>$('.save-state').textContent.includes('Saved:')&&$('.save-state').textContent.includes('145'));assert.equal($('.save-state').getAttribute('role'),'status');
+ });
  let resolveProfile;slowProfile=new Promise(resolve=>{resolveProfile=resolve;});click('#my-profile');
  // Signing out from another tab can arrive while the profile request is pending.
  await api.logout();await wait(()=>$('#open-login'));resolveProfile({firstName:'Old',lastName:'User',universityId:'old'});slowProfile=null;await new Promise(r=>setTimeout(r,30));
