@@ -88,3 +88,12 @@ button.google{position:relative;gap:12px;background:#fff;color:#1f1f1f;border:1p
 .team-banner{border-left:4px solid var(--accent,#bd5b36)}
 .play-instructions li{margin-bottom:10px}
 @media(max-width:600px){#team-form,#team-names{grid-template-columns:1fr}}
+
+/* Shared prose styling also covers dynamically rendered instructions and debriefs. */
+p:not(.eyebrow):not(.divider):not(.session-code):not(.save-state),
+li,blockquote,.field-description,.manifesto>div{
+ text-align:justify;
+ text-align-last:start;
+ text-justify:inter-word;
+ hyphens:auto;
+}
