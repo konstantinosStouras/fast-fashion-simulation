@@ -108,6 +108,10 @@ li,blockquote,.field-description,.manifesto>div{
  .table-wrap table{min-width:480px}
 }
 
+.team-assignment-summary,.team-captain{display:block;margin-top:8px;font-size:13px;font-weight:400;line-height:1.6;color:var(--muted);text-align:start;overflow-wrap:anywhere}
+#team-form label,#team-names label{min-width:0;margin:0;overflow-wrap:anywhere}
+.team-banner h2{overflow-wrap:anywhere}
+
 /* Phone-sized admin forms and per-student results. */
 @media(max-width:600px){
  .studio-options .hint,.studio-options .field-description,.studio-sessions .hint,
@@ -131,4 +135,21 @@ li,blockquote,.field-description,.manifesto>div{
  .participant-results td:first-child small{font-size:12px;font-weight:400;line-height:1.6;margin-top:6px}
  .participant-results td:nth-child(2)::before{display:block;margin-bottom:5px;font-size:12px}
  .participant-results td:last-child{border-bottom:0;padding-bottom:0}
+}
+
+@media(max-width:600px){
+ #team-setup .hint,#leaderboard>.hint{font-size:14px;line-height:1.7}
+ #team-setup button{width:100%}
+ #team-form,#team-names{gap:20px}
+ #team-names{border-top:1px solid var(--line);padding-top:24px}
+ #leaderboard .leaderboard-results,#leaderboard .leaderboard-results tbody,#leaderboard .leaderboard-results tr{display:block;width:100%;min-width:0}
+ .leaderboard-results thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+ .leaderboard-results tbody tr{margin:16px 0;padding:14px;border:1px solid var(--line);border-radius:8px;background:var(--white)}
+ .leaderboard-results td{display:flex;justify-content:space-between;gap:12px;padding:10px 0;font-size:14px;overflow-wrap:anywhere}
+ .leaderboard-results td::before{content:attr(data-label);font-weight:600;color:var(--muted)}
+ .leaderboard-results td:first-child{padding-top:0}
+ .leaderboard-results td:nth-child(2){display:block;font-size:18px;font-weight:600;line-height:1.5}
+ .leaderboard-results td:nth-child(2)::before{display:block;font-size:12px;margin-bottom:5px}
+ .leaderboard-results td:nth-child(3){font-weight:600}
+ .leaderboard-results td:last-child{border-bottom:0;padding-bottom:0}
 }
