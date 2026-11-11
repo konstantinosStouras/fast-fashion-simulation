@@ -1,10 +1,10 @@
 import {decisionOwner,validateTeams} from './competition.js';
 // Test harness, selected only on loopback hosts with ?demo. Never real authentication.
 import {platformHandoff} from './profile.js';
-import {loginEmailAddress,assertAccountEmail} from './auth-identity.js';
+import {loginEmailAddress,assertAccountEmail,ADMIN_ACCOUNT_EMAIL} from './auth-identity.js';
 import {DEFAULT_CONFIG} from './model.js';
 const KEY='ff:demo:v1';let user=null;const authListeners=new Set(),listeners=new Set();
-const load=()=>JSON.parse(localStorage.getItem(KEY)||'{"sessions":{},"people":{},"orders":{},"instructors":[]}');
+const load=()=>JSON.parse(localStorage.getItem(KEY)||JSON.stringify({sessions:{},people:{},orders:{},instructors:[ADMIN_ACCOUNT_EMAIL]}));
 function write(data){localStorage.setItem(KEY,JSON.stringify(data));listeners.forEach(fn=>fn());}
 const timestamp=n=>n==null?null:{toMillis:()=>n};
 function watch(fn){listeners.add(fn);queueMicrotask(fn);return ()=>listeners.delete(fn);}
@@ -24,15 +24,15 @@ export const logout=async()=>{user=null;authListeners.forEach(fn=>fn(null));};
 export const verifyEmail=async()=>{};
 export const refreshUser=async()=>user;
 export const resetPassword=async()=>{};
-export const role=async()=>user?.email==='kstouras@gmail.com'?'admin':load().instructors.includes(user?.email)?'instructor':'student';
-export const grant=async email=>{const d=load();d.instructors.push(email);write(d);};
-export const revoke=async email=>{const d=load();d.instructors=d.instructors.filter(x=>x!==email);write(d);};
+export const role=async()=>!user?.emailVerified?'student':user.email==='kstouras@gmail.com'?'admin':load().instructors.includes(user.email)?'instructor':'student';
+export const grant=async email=>{const d=load();d.instructors=[...new Set([...d.instructors,loginEmailAddress(email)])];write(d);};
+export const revoke=async email=>{const d=load();d.instructors=d.instructors.filter(x=>x!==loginEmailAddress(email));write(d);};
 export const listInstructors=async()=>load().instructors;
 export const getDefaults=async()=>load().defaults||DEFAULT_CONFIG;
 export const saveDefaults=async config=>{const d=load();d.defaults=config;write(d);};
 const toSession=s=>s?{...s,createdAt:timestamp(s.createdAt),startedAt:timestamp(s.startedAt),closedAt:timestamp(s.closedAt)}:null;
 export async function createSession(name,config,mode='individual'){const d=load(),code='DEMO'+String(Object.keys(d.sessions).length).padStart(4,'A').replace(/0/g,'B').replace(/1/g,'C');d.sessions[code]={code,name,config,mode,assignments:{},teamNames:{},seed:Math.floor(Math.random()*1000001),owner:user.uid,status:'lobby',createdAt:Date.now(),startedAt:null,closedAt:null};write(d);return code;}
-export const listSessions=async()=>Object.values(load().sessions).map(toSession);
+export const listSessions=async(isOwner=false)=>Object.values(load().sessions).filter(s=>isOwner||s.owner===user.uid).map(toSession);
 export const watchSession=(code,fn)=>watch(()=>fn(toSession(load().sessions[code])));
 export const startSession=async code=>{const d=load();if(d.sessions[code].mode==='team'&&!validateTeams(Object.values(d.people[code]||{}),d.sessions[code].assignments,d.sessions[code].teamNames))throw Error('Assign every participant to a team before starting.');Object.assign(d.sessions[code],{status:'running',startedAt:Date.now()});write(d);};
 export const closeSession=async code=>{const d=load();Object.assign(d.sessions[code],{status:'closed',closedAt:Date.now()});write(d);};

@@ -3,3 +3,7 @@ node_modules/
 .firebase/
 test-results/
 competition-*.log
+
+.test-tools/
+.test-config/
+.admin-backend-test.log
