@@ -107,3 +107,28 @@ li,blockquote,.field-description,.manifesto>div{
  /* Scroll data as a table instead of splitting season names into fragments. */
  .table-wrap table{min-width:480px}
 }
+
+/* Phone-sized admin forms and per-student results. */
+@media(max-width:600px){
+ .studio-options .hint,.studio-options .field-description,.studio-sessions .hint,
+ .session-controls .hint,.participant-panel>.hint{font-size:14px;line-height:1.7}
+ .studio-options #create>button,.studio-options #defaults>button{width:100%;margin-top:10px}
+ .studio-options .settings-grid{grid-template-columns:1fr}
+ .studio-options .settings-grid label{min-width:0}
+ .studio-session-card{padding:16px 12px}
+ .session-code .hint{display:block;letter-spacing:1px}
+ .participant-panel>.heading{align-items:stretch;gap:12px}
+ .participant-panel>.heading h2{width:100%;margin-bottom:0}
+ .participant-panel #export{width:100%}
+ #roster .participant-results,#roster .participant-results tbody,#roster .participant-results tr{display:block;width:100%;min-width:0}
+ .participant-results thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+ .participant-results tbody tr{margin:16px 0;padding:14px;border:1px solid var(--line);border-radius:8px;background:var(--white)}
+ .participant-results td{display:flex;justify-content:space-between;gap:12px;padding:10px 0;font-size:14px;overflow-wrap:anywhere}
+ .participant-results td::before{content:attr(data-label);font-weight:600;color:var(--muted)}
+ .participant-results td:first-child,.participant-results td:nth-child(2){display:block}
+ .participant-results td:first-child{padding-top:0;font-weight:600;font-size:16px}
+ .participant-results td:first-child::before{content:none}
+ .participant-results td:first-child small{font-size:12px;font-weight:400;line-height:1.6;margin-top:6px}
+ .participant-results td:nth-child(2)::before{display:block;margin-bottom:5px;font-size:12px}
+ .participant-results td:last-child{border-bottom:0;padding-bottom:0}
+}
