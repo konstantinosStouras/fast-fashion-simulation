@@ -1,4 +1,10 @@
 // Small interaction helpers shared across browsers and exercised independently.
+export function csvCell(value){
+ let text=String(value??'');
+ // Guard user-supplied text, while retaining real negative numbers as numbers.
+ if(typeof value==='string'&&(/^[\s]*[=+@\-]/.test(text)||/^[\t\r\n]/.test(text)))text="'"+text;
+ return '"'+text.replace(/"/g,'""')+'"';
+}
 export function friendlyAuthError(error){
  const messages={
   'auth/requires-recent-login':'For this account change, log out and sign in again, then retry.',

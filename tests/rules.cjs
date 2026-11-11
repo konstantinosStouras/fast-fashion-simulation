@@ -2,7 +2,7 @@ const {equal:assertEqual}=require('node:assert/strict');
 const {test,before,after,beforeEach}=require('node:test');
 const fs=require('node:fs');
 const {initializeTestEnvironment,assertSucceeds,assertFails}=require('@firebase/rules-unit-testing');
-const {doc,setDoc,getDoc,getDocs,collection,updateDoc,serverTimestamp,Timestamp}=require('firebase/firestore');
+const {doc,setDoc,getDoc,getDocs,collection,updateDoc,serverTimestamp,Timestamp,writeBatch,runTransaction}=require('firebase/firestore');
 let env;
 const config={demandMean:480,demandSd:96,forecastSd:.2,rebound:.2,price:40,initialCost:12,refillCost:16,styleCost:150,salvage:5,unitCarbon:5,leftoverCarbon:1};
 const db=(uid,email=uid+'@example.test',verified=true)=>env.authenticatedContext(uid,{email,email_verified:verified}).firestore();
@@ -56,3 +56,26 @@ test('team captain submits, teammates read shared decisions, rivals see only com
 test('only owning instructor assigns teams in lobby; assignments freeze at start',async()=>{await seed(null,{mode:'team',assignments:{},teamNames:{}});const change={assignments:{alice:'alice',bob:'alice'},teamNames:{alice:'Team A'}};await assertFails(updateDoc(doc(db('alice'),'sessions/ABCDEFGH'),change));await assertSucceeds(updateDoc(doc(db('teacher'),'sessions/ABCDEFGH'),change));await assertSucceeds(updateDoc(doc(db('teacher'),'sessions/ABCDEFGH'),{status:'running',startedAt:serverTimestamp()}));await assertFails(updateDoc(doc(db('teacher'),'sessions/ABCDEFGH'),{assignments:{}}));});
 
 test('shared-market reads unlock only when initial orders are locked, without exposing the roster',async()=>{const extra={mode:'team',assignments:{alice:'alice',bob:'bob'},teamNames:{alice:'A',bob:'B'}};await seed(80,extra);await assertFails(getDoc(doc(db('bob'),path('alice','0'))));await seed(100,extra);await assertSucceeds(getDoc(doc(db('bob'),path('alice','0'))));await assertFails(getDocs(collection(db('bob'),'sessions/ABCDEFGH/participants')));await seed(550,extra);await assertSucceeds(getDoc(doc(db('bob'),path('alice','2'))));await assertFails(getDoc(doc(db('bob'),path('alice','3'))));});
+
+test('team joins atomically update roster revision and private history; forged revisions fail',async()=>{
+ await seed(null,{mode:'team',assignments:{alice:'alice',bob:'alice'},teamNames:{alice:'A'},rosterVersion:0});
+ const d=db('charlie'),sessionRef=doc(d,'sessions/ABCDEFGH'),participant=doc(d,'sessions/ABCDEFGH/participants/charlie');
+ await assertFails(setDoc(participant,{name:'Charlie',email:'charlie@example.test',joinedAt:serverTimestamp()}));
+ await assertFails(updateDoc(sessionRef,{rosterVersion:1}));
+ const batch=writeBatch(d);batch.set(participant,{name:'Charlie',email:'charlie@example.test',joinedAt:serverTimestamp()});batch.update(sessionRef,{rosterVersion:1});batch.set(doc(d,'profiles/charlie/sessions/ABCDEFGH'),{joined:true});await assertSucceeds(batch.commit());
+ assertEqual((await getDoc(sessionRef)).data().rosterVersion,1);
+ await assertFails(updateDoc(sessionRef,{rosterVersion:2}));
+ await assertFails(updateDoc(sessionRef,{rosterVersion:0}));
+});
+
+test('a student joining during start invalidates the instructor transaction',async()=>{
+ await seed(null,{mode:'team',assignments:{alice:'alice',bob:'alice'},teamNames:{alice:'A'},rosterVersion:0});
+ const teacher=db('teacher'),ref=doc(teacher,'sessions/ABCDEFGH');let first=true,attempts=0;
+ const started=runTransaction(teacher,async tx=>{
+  attempts++;const s=(await tx.get(ref)).data();const participants=await getDocs(collection(teacher,'sessions/ABCDEFGH/participants'));
+  if(participants.docs.some(d=>!s.assignments[d.id]))throw Error('Unassigned participant');
+  if(first){first=false;const student=db('charlie'),batch=writeBatch(student);batch.set(doc(student,'sessions/ABCDEFGH/participants/charlie'),{name:'Charlie',email:'charlie@example.test',joinedAt:serverTimestamp()});batch.update(doc(student,'sessions/ABCDEFGH'),{rosterVersion:1});await batch.commit();}
+  tx.update(ref,{status:'running',startedAt:serverTimestamp()});
+ });
+ await require('node:assert/strict').rejects(started,/Unassigned participant/);assertEqual(attempts>=2,true);assertEqual((await getDoc(ref)).data().status,'lobby');
+});

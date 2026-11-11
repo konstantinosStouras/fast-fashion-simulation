@@ -33,6 +33,7 @@ test('staff preview plays every phase without writes, clock waiting or live-sess
  assert.equal(w.localStorage.getItem('ff:session:demo-admin'),null,'preview must not replace real student resume state');
  click('#preview-next');assert.equal($('#preview-next').disabled,true);
  click('#preview-restart');assert.match($('h1').textContent,/Practice/);assert.match($('.save-state').textContent,/Not saved/);
+ $('#order-form [name=quantity]').value='137';click('#preview-restart');assert.equal($('#order-form [name=quantity]').value,'80','Restart must clear an unsaved draft too');
  click('#preview-round');assert.match($('h1').textContent,/Order ahead/);
  click('#preview-exit');await wait(()=>$('#create'));
  // Preview an already-running classroom and verify its status, timing and records are unchanged.

@@ -15,6 +15,8 @@ For a synthetic local preview, open http://localhost:8791/?demo. The Google butt
 ## Test
 
 - `npm test`: model and DOM integration tests.
+- `npm run test:stress`: synthetic market/accounting stress tests, 500-participant/100-team leaderboard benchmark, and 2,000 local HTTP requests.
+- `npm run test:backend:stress`: local Auth/Firestore checks plus a 500-participant classroom workload (100 joins, 100 captain writes and 300 result reads).
 - `npm run test:rules`: Firestore emulator access tests; Java 21+ required on PATH.
 - `npm run test:backend`: authentication verification-link and Firestore access tests, entirely local.
 - `node tools/check-backend.cjs`: read-only production configuration checks using existing Firebase CLI authorization; no credentials are printed.
@@ -24,6 +26,8 @@ For a synthetic local preview, open http://localhost:8791/?demo. The Google butt
 GitHub Pages publishes main at the existing URL. Deploy database rules separately with `npx firebase deploy --only firestore --project stouras-ffo`. The checked-in firebase.json and .firebaserc target **only the dedicated FFO project**. `npx firebase deploy --only auth --project stouras-ffo` configures Google/email providers. Authorized domains include www.stouras.com, stouras.com and localhost.
 
 See PROTOTYPE-NOTES.md for assumptions, defaults, teaching workflow, limitations and verification scope. No private emails or real student records are included in this repository.
+
+See [QA-REPORT.md](QA-REPORT.md) for the 10 November functionality audit, fixes, stress measurements and release requirements. The new team-join transaction and Firestore rules must ship together; existing tabs need to reload after release.
 
 Admin entrance: https://www.stouras.com/fast-fashion-simulation/admin/ — Google or email/password, with password reset. Verified administrators and authorized instructors are redirected to the studio; the URL does not grant access.
 

@@ -56,7 +56,11 @@ All current portal registration fields are preserved under the private `platform
 
 Future portal integration should add a catalog entry with key `ffo` and path `/fast-fashion-simulation/`, retaining the same `www.stouras.com` origin. This release prepares the receiver; it does not add or activate the portal card, migrate its anonymous accounts or synchronize completion markers back to the portal.
 
-### Interface coverage (10 November 2026)
+### Latest functionality audit (10 November 2026)
+
+The subsequent audit passes 41 model/DOM checks, 22 Firebase/backend checks and 3 stress tests. It covers 500-participant team editing, concurrent joins, delayed subscriptions, draft preservation and CSV export. See [QA-REPORT.md](QA-REPORT.md) for fixes, measurements, limits and the coordinated frontend/rules release requirement.
+
+### Earlier interface coverage (10 November 2026)
 
 32 automated checks pass: 18 model/DOM/helper tests plus 14 Firebase Auth/Firestore emulator checks. The real backend module is exercised against emulators for registration, profile persistence, verification-link redemption, login and password-reset link generation. No test email or fake account is sent to the live Firebase project.
 

@@ -10,7 +10,7 @@ test('Google, Gmail/password and admin alias retain one Firebase UID and admin r
  for(const component of ['app','auth','firestore'])source=source.replace(`https://www.gstatic.com/firebasejs/12.5.0/firebase-${component}.js`,import.meta.resolve('firebase/'+component));
  source=source.replace("import {firebaseConfig,DATABASE,ADMIN_EMAIL} from './firebase-config.js';","const firebaseConfig={projectId:'demo-fashion-futures',apiKey:'demo-api-key',authDomain:'demo-fashion-futures.firebaseapp.com'},DATABASE='(default)',ADMIN_EMAIL='kstouras@gmail.com';");
  for(const name of ['model','profile','auth-identity','competition'])source=source.replace(`'./${name}.js'`,JSON.stringify(new URL(`../${name}.js`,import.meta.url).href));
- source=source.replace("'./profile.js?v=competition-1'",JSON.stringify(new URL('../profile.js',import.meta.url).href));
+ source=source.replace("'./profile.js?v=qa-20261110'",JSON.stringify(new URL('../profile.js',import.meta.url).href));
  const api=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
  const app=getApp('fashion-futures'),auth=getAuth(app);connectAuthEmulator(auth,'http://127.0.0.1:9198',{disableWarnings:true});t.after(()=>deleteApp(app));
  const credential=GoogleAuthProvider.credential(JSON.stringify({sub:'alias-test-google-user',email:'kstouras@gmail.com',email_verified:true}));

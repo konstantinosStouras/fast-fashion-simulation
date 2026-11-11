@@ -27,6 +27,10 @@ test('history excludes practice and freezes early-closed results',()=>{
  assert.equal(stats.finished,1);assert.equal(stats.seasons,4);assert.equal(stats.rows[1].rounds.length,1);
  assert.equal(stats.profit,[1,2,3,1].reduce((sum,i)=>sum+resultFor(42,i,DEFAULT_ORDER,DEFAULT_CONFIG).profit,0));
 });
+test('legacy unassigned team memberships do not contaminate profile totals with NaN',()=>{
+ const stats=historyStats([{mode:'team',decisionUid:null,teamNames:{captain:'A'},teamOrders:{},seed:42,config:DEFAULT_CONFIG,orders:{},startedAt:{toMillis:()=>0}}],1080000);
+ assert.equal(stats.seasons,0);assert.equal(stats.profit,0);assert.equal(stats.footprint,0);assert.equal(stats.finished,0);
+});
 test('blocked storage is safe and busy controls restore their original state',()=>{
  const s=safeStorage(()=>{throw Error('storage blocked')});assert.equal(s.getItem('x'),null);s.setItem('x','y');s.removeItem('x');
  const dom=new JSDOM('<main><button>A</button><button disabled>B</button><details><input required></details></main>');
