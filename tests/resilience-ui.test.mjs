@@ -65,6 +65,18 @@ test('slow subscriptions, live updates, cancelled navigation and large classroom
   }finally{release();ackGate=null;Date.now=realNow;w.dispatchEvent(new w.Event('pageshow'));}
   assert.equal($('#order-form [name=quantity]').value,'163');
  });
+ await t.test('a stale device save is rejected, reloads the winner and never retries automatically',async()=>{
+  let release;saveGate=new Promise(resolve=>release=resolve);holdOrders=true;
+  $('#order-form [name=quantity]').value='170';submit('#order-form');await wait(()=>$('.save-state')?.dataset.state==='saving');
+  await api.saveOrder(code,0,{variety:4,quantity:180,cap:0});release();await wait(()=>$('#notice').textContent.includes('Another device saved'));
+  holdOrders=false;saveGate=null;pendingOrders.splice(0).forEach(fn=>fn());await wait(()=>$('#order-form [name=quantity]')?.value==='180');
+  assert.match($('#notice').textContent,/Your save was not applied/);assert.equal(JSON.parse(w.localStorage.getItem('ff:demo:v1')).orders[code][api.currentUser().uid][0].quantity,180);
+  $('#order-form [name=quantity]').value='190';submit('#order-form');await wait(()=>$('.save-state')?.textContent.includes('Saved:')&&$('.save-state').textContent.includes('190'));
+ });
+ await t.test('another device update replaces stale input with an explicit notice',async()=>{
+  $('#order-form [name=quantity]').value='195';$('#order-form [name=quantity]').dispatchEvent(new w.Event('input',{bubbles:true}));
+  await api.saveOrder(code,0,{variety:4,quantity:185,cap:0});await wait(()=>$('#order-form [name=quantity]').value==='185');assert.match($('.save-state').textContent,/Updated on another device/);assert.match($('#notice').textContent,/Review them before editing/);
+ });
  let resolveProfile;slowProfile=new Promise(resolve=>{resolveProfile=resolve;});click('#my-profile');
  // Signing out from another tab can arrive while the profile request is pending.
  await api.logout();await wait(()=>$('#open-login'));resolveProfile({firstName:'Old',lastName:'User',universityId:'old'});slowProfile=null;await new Promise(r=>setTimeout(r,30));

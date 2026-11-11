@@ -39,7 +39,7 @@ export const closeSession=async code=>{const d=load();Object.assign(d.sessions[c
 export async function joinSession(code,name){const d=load();if(!d.sessions[code])throw new Error('Session code not found.');d.people[code]??={};if(!d.people[code][user.uid]){if(d.sessions[code].status!=='lobby')throw new Error('Already started.');d.people[code][user.uid]={uid:user.uid,name,email:user.email};write(d);}}
 export const watchParticipants=(code,fn)=>watch(()=>fn(Object.values(load().people[code]||{})));
 export const watchOrders=(code,uid,fn)=>watch(()=>fn(load().orders[code]?.[uid]||{}));
-export const saveOrder=async(code,index,order)=>{const d=load();d.orders[code]??={};d.orders[code][user.uid]??={};d.orders[code][user.uid][index]=order;write(d);};
+export const saveOrder=async(code,index,order,phase='plan',expectedRevision)=>{const d=load();d.orders[code]??={};d.orders[code][user.uid]??={};const revision=d.orders[code][user.uid][index]?.revision??0;if(expectedRevision!==undefined&&expectedRevision!==revision)throw Object.assign(new Error('Another device saved a newer decision. Your save was not applied. Review the latest saved values before editing again.'),{code:'decision-conflict'});d.orders[code][user.uid][index]={...order,phase,revision:revision+1};write(d);};
 
 export const saveTeams=async(code,assignments,teamNames)=>{const d=load();if(d.sessions[code].status!=='lobby'||!validateTeams(Object.values(d.people[code]||{}),assignments,teamNames))throw Error('Invalid teams.');Object.assign(d.sessions[code],{assignments,teamNames});write(d);};
 export const readMarketOrders=async(code,captains,rounds)=>Object.fromEntries(captains.map(uid=>[uid,Object.fromEntries(rounds.map(r=>[r,load().orders[code]?.[uid]?.[r]||null]))]));

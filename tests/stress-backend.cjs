@@ -18,9 +18,9 @@ test('500-member classroom: 100 captain writes and 300 result reads with 20 conc
  await env.withSecurityRulesDisabled(c=>setDoc(doc(c.firestore(),'sessions/JOINTEST'),{name:'Concurrent joins',mode:'team',owner:'teacher',config,seed:42,status:'lobby',createdAt:Timestamp.now(),startedAt:null,closedAt:null,assignments:{},teamNames:{},rosterVersion:0}));
  await concurrent(100,async i=>{const d=clients[i],uid='u'+i*5;await runTransaction(d,async tx=>{const participant=doc(d,'sessions/JOINTEST/participants',uid);if(!(await tx.get(participant)).exists()){tx.set(participant,{name:uid,email:uid+'@example.test',joinedAt:serverTimestamp()});tx.update(doc(d,'sessions/JOINTEST'),{rosterVersion:increment(1)});}tx.set(doc(d,'profiles',uid,'sessions/JOINTEST'),{joined:true});});});
  assert.equal((await getDoc(doc(clients[0],'sessions/JOINTEST'))).data().rosterVersion,100,'Concurrent joins must not lose roster increments');
- await concurrent(100,i=>setDoc(doc(clients[i],'sessions/STRESSAA/participants/u'+i*5+'/orders/0'),{variety:4,quantity:i+1,cap:0,phase:'plan',savedAt:serverTimestamp()}));
+ await concurrent(100,i=>setDoc(doc(clients[i],'sessions/STRESSAA/participants/u'+i*5+'/orders/0'),{variety:4,quantity:i+1,cap:0,phase:'plan',revision:1,savedAt:serverTimestamp()}));
  const student=env.authenticatedContext('u1',{email:'u1@example.test',email_verified:true}).firestore();
- await assertFails(setDoc(doc(student,'sessions/STRESSAA/participants/u1/orders/0'),{variety:4,quantity:200,cap:0,phase:'plan',savedAt:serverTimestamp()}));
+ await assertFails(setDoc(doc(student,'sessions/STRESSAA/participants/u1/orders/0'),{variety:4,quantity:200,cap:0,phase:'plan',revision:1,savedAt:serverTimestamp()}));
  await env.withSecurityRulesDisabled(c=>setDoc(doc(c.firestore(),'sessions/STRESSAA'),{startedAt:Timestamp.fromMillis(Date.now()-100000)},{merge:true}));
  await concurrent(300,async i=>{const captain=i%100,r=await getDoc(doc(student,'sessions/STRESSAA/participants/u'+captain*5+'/orders/0'));assert.equal(r.data().quantity,captain+1);});
  timings.sort((a,b)=>a-b);console.log(JSON.stringify({participants:500,teams:100,joins:100,writes:100,reads:300,concurrency:20,p95Ms:Math.round(timings[Math.floor(timings.length*.95)])}));

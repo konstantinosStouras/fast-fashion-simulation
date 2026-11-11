@@ -16,7 +16,7 @@ service cloud.firestore {
   function split(r) { return r=='0'?90:r=='1'?420:r=='2'?540:810; }
   function end(r) { return r=='0'?180:r=='1'?420:r=='2'?660:960; }
   function inWindow(code,a,b) { let s=session(code); return s.status=='running' && request.time >= s.startedAt+duration.value(a,'s') && request.time < s.startedAt+duration.value(b,'s'); }
-  function orderShape(r) { let d=request.resource.data; return d.keys().hasOnly(['variety','quantity','cap','savedAt','phase']) && d.keys().hasAll(['variety','quantity','cap','savedAt','phase']) && d.phase in ['plan','respond'] && d.variety is int && (d.variety==4 || (r=='3' && d.variety==8)) && d.quantity is int && d.quantity>=0 && d.quantity<=200 && d.cap is int && d.cap>=0 && d.cap<=200 && d.savedAt==request.time; }
+  function orderShape(r) { let d=request.resource.data; return d.keys().hasOnly(['variety','quantity','cap','savedAt','phase','revision']) && d.keys().hasAll(['variety','quantity','cap','savedAt','phase','revision']) && d.revision is int && d.revision>=1 && d.revision<=1000000000 && d.phase in ['plan','respond'] && d.variety is int && (d.variety==4 || (r=='3' && d.variety==8)) && d.quantity is int && d.quantity>=0 && d.quantity<=200 && d.cap is int && d.cap>=0 && d.cap<=200 && d.savedAt==request.time; }
   function bounded(c,k,lo,hi) { return c[k] is number && c[k]>=lo && c[k]<=hi; }
   function configShape(c) { return c.keys().hasOnly(['demandMean','demandSd','forecastSd','rebound','price','initialCost','refillCost','styleCost','salvage','unitCarbon','leftoverCarbon']) && bounded(c,'demandMean',80,2000) && bounded(c,'demandSd',0,1000) && bounded(c,'forecastSd',0,0.8) && bounded(c,'rebound',0,1) && bounded(c,'price',1,500) && bounded(c,'initialCost',0,500) && bounded(c,'refillCost',0,500) && bounded(c,'styleCost',0,5000) && bounded(c,'salvage',0,500) && bounded(c,'unitCarbon',0,100) && bounded(c,'leftoverCarbon',0,100) && c.salvage<=c.initialCost && c.salvage<=c.refillCost && c.salvage<=c.price; }
   // Private identity details; never permissions, passwords or client-supplied scores.
@@ -54,12 +54,13 @@ service cloud.firestore {
     allow delete: if canDeleteSession(code);
     allow create: if own(uid) && (session(code).get('mode','individual')!='solo' || session(code).owner==request.auth.uid) && session(code).status=='lobby' && (session(code).get('mode','individual')!='team' || getAfter(/databases/$(database)/documents/sessions/$(code)).data.rosterVersion==session(code).get('rosterVersion',0)+1) && request.resource.data.keys().hasOnly(['name','email','joinedAt']) && request.resource.data.name is string && request.resource.data.name.size()>0 && request.resource.data.name.size()<=80 && request.resource.data.email==request.auth.token.email && request.resource.data.joinedAt==request.time;
     // A queued plan must never become a response after its server deadline.
+    // Each save must advance the current revision once; stale device writes cannot rebase themselves.
     match /orders/{r} {
      allow delete: if canDeleteSession(code);
      allow get: if own(uid) || owner(code) || teammate(code,uid) || lockedTeamRound(code,uid,r);
      allow list: if own(uid) || owner(code) || teammate(code,uid);
-     allow create: if own(uid) && captain(code,uid) && member(code,uid) && r in ['0','1','2','3'] && orderShape(r) && ((request.resource.data.phase=='plan' && inWindow(code,start(r),split(r)) && request.resource.data.cap==0) || (request.resource.data.phase=='respond' && r!='1' && inWindow(code,split(r),end(r)) && request.resource.data.quantity==80 && request.resource.data.variety==4));
-     allow update: if own(uid) && captain(code,uid) && member(code,uid) && r in ['0','1','2','3'] && orderShape(r) && ((request.resource.data.phase=='plan' && inWindow(code,start(r),split(r)) && request.resource.data.cap==0) || (request.resource.data.phase=='respond' && r!='1' && inWindow(code,split(r),end(r)) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['cap','savedAt','phase'])));
+     allow create: if own(uid) && captain(code,uid) && member(code,uid) && r in ['0','1','2','3'] && orderShape(r) && request.resource.data.revision==1 && ((request.resource.data.phase=='plan' && inWindow(code,start(r),split(r)) && request.resource.data.cap==0) || (request.resource.data.phase=='respond' && r!='1' && inWindow(code,split(r),end(r)) && request.resource.data.quantity==80 && request.resource.data.variety==4));
+     allow update: if own(uid) && captain(code,uid) && member(code,uid) && r in ['0','1','2','3'] && orderShape(r) && request.resource.data.revision==resource.data.get('revision',0)+1 && ((request.resource.data.phase=='plan' && inWindow(code,start(r),split(r)) && request.resource.data.cap==0) || (request.resource.data.phase=='respond' && r!='1' && inWindow(code,split(r),end(r)) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['cap','savedAt','phase','revision'])));
     }
    }
   }

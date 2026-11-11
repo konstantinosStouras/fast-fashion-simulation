@@ -45,7 +45,7 @@ test('real backend registration stores profile and sends a working verification 
   await disableNetwork(db);await wait(()=>fresh===false&&sessionFresh===false);
   const missing=api.watchSession('ZZZZZZZZ',()=>missingCalls++,()=>{},()=>{});
   await assert.rejects(api.readMarketOrders(team,[uid],[0]),'shared market must not silently use cached orders');
-  let acknowledged=false;const pending=api.saveOrder(team,0,{variety:4,quantity:119,cap:0}).then(()=>acknowledged=true);
+  let acknowledged=false;const pending=api.saveOrder(team,0,{variety:4,quantity:119,cap:0},'plan',1).then(()=>acknowledged=true);
   await new Promise(r=>setTimeout(r,100));assert.equal(acknowledged,false);assert.equal(latest[0].quantity,101);assert.equal(missingCalls,0,'an uncached offline session is not a deleted session');missing();
   await enableNetwork(db);await pending;await wait(()=>fresh===true&&sessionFresh===true&&latest[0].quantity===119);
   await disableNetwork(db);await wait(()=>fresh===false);
@@ -56,9 +56,21 @@ test('real backend registration stores profile and sends a working verification 
  await t.test('real save API carries its original phase and cannot reset a locked plan',async()=>{
   await env.withSecurityRulesDisabled(async c=>{const ref=doc(c.firestore(),'sessions',team),snapshot=await getDoc(ref);await setDoc(ref,{...snapshot.data(),startedAt:Timestamp.fromMillis(Date.now()-95000)});});
   await api.saveOrder(team,0,{variety:4,quantity:127,cap:35},'respond');
-  await assert.rejects(api.saveOrder(team,0,{variety:4,quantity:127,cap:0},'plan'));
+  await assert.rejects(api.saveOrder(team,0,{variety:4,quantity:127,cap:0},'plan',1));
   assert.equal((await api.readOrders(team,uid))[0].cap,35);
   assert.equal((await api.readMarketOrders(team,[uid],[0]))[uid][0].cap,35);
+ });
+ await t.test('two real backend instances reject an offline stale revision with an actionable conflict',async()=>{
+  const secondSource=source.replace("initializeApp(firebaseConfig,'fashion-futures')","initializeApp(firebaseConfig,'fashion-futures-second-device')");
+  const other=await import('data:text/javascript;base64,'+Buffer.from(secondSource).toString('base64')),otherApp=getApp('fashion-futures-second-device'),otherDb=getFirestore(otherApp);
+  connectAuthEmulator(getAuth(otherApp),'http://127.0.0.1:9198',{disableWarnings:true});connectFirestoreEmulator(otherDb,'127.0.0.1',8180);t.after(()=>deleteApp(otherApp));await other.loginEmail(email,'emulator-only-password');
+  const code=await api.createSession('Two device race QA',(await import('../model.js')).DEFAULT_CONFIG,'team');await api.joinSession(code,'Captain');await api.saveTeams(code,{[uid]:uid},{[uid]:'Team A'});await api.startSession(code);
+  await api.saveOrder(code,0,{variety:4,quantity:110,cap:0},'plan',0);assert.equal((await other.readOrders(code,uid))[0].revision,1);
+  await disableNetwork(otherDb);const stale=assert.rejects(other.saveOrder(code,0,{variety:4,quantity:90,cap:0},'plan',1),e=>e.code==='decision-conflict');
+  await api.saveOrder(code,0,{variety:4,quantity:155,cap:0},'plan',1);await enableNetwork(otherDb);await stale;
+  assert.equal((await other.readOrders(code,uid))[0].quantity,155);assert.equal((await api.readOrders(code,uid))[0].revision,2);
+  await other.saveOrder(code,0,{variety:4,quantity:160,cap:0},'plan',2);assert.equal((await api.readOrders(code,uid))[0].quantity,160);
+  await other.logout();
  });
  await confirmPasswordReset(getAuth(app),resetCode.oobCode,'emulator-reset-password');await api.logout();await assert.rejects(api.loginEmail(email,'emulator-only-password'));await api.loginEmail(email,'emulator-reset-password');assert.equal((await api.getProfile()).firstName,'Edited');await api.logout();
 });

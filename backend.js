@@ -76,7 +76,19 @@ export async function joinSession(code,name){
 }
 export const watchOrders=(code,uid,fn,error,status)=>onSnapshot(collection(db,'sessions',code,'participants',uid,'orders'),{includeMetadataChanges:true},s=>{const fresh=!s.metadata.hasPendingWrites&&!s.metadata.fromCache;status?.(fresh);if(fresh)fn(Object.fromEntries(s.docs.map(d=>[d.id,d.data()])));},error);
 export const watchParticipants=(code,fn,error)=>onSnapshot(collection(db,'sessions',code,'participants'),{includeMetadataChanges:true},s=>{if(!s.metadata.fromCache&&!s.metadata.hasPendingWrites)fn(s.docs.map(d=>({uid:d.id,...d.data()})));},error);
-export const saveOrder=(code,index,order,phase='plan')=>setDoc(doc(db,'sessions',code,'participants',currentUser().uid,'orders',String(index)),{...order,phase,savedAt:serverTimestamp()});
+export async function saveOrder(code,index,order,phase='plan',expectedRevision=0){
+ if(!Number.isSafeInteger(expectedRevision)||expectedRevision<0)throw Error('Reload the saved decision before saving.');
+ const ref=doc(db,'sessions',code,'participants',currentUser().uid,'orders',String(index));
+ try{await setDoc(ref,{...order,phase,revision:expectedRevision+1,savedAt:serverTimestamp()});}
+ catch(error){
+  if(error.code==='permission-denied'){
+   let latest;try{latest=await getDocFromServer(ref);}catch{}
+   if(latest&&!latest.metadata.hasPendingWrites&&(latest.data()?.revision??0)!==expectedRevision)
+    throw Object.assign(new Error('Another device saved a newer decision. Your save was not applied. Review the latest saved values before editing again.'),{code:'decision-conflict'});
+  }
+  throw error;
+ }
+}
 export async function readOrders(code,uid){return Object.fromEntries((await getDocs(collection(db,'sessions',code,'participants',uid,'orders'))).docs.map(d=>[d.id,d.data()]));}
 
 export const readParticipants=async code=>(await getDocs(collection(db,'sessions',code,'participants'))).docs.map(d=>({uid:d.id,...d.data()}));
