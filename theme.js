@@ -10,7 +10,7 @@
   const button=document.getElementById('theme-toggle');
   if(button){
    const next=theme==='dark'?'light':'dark';
-   button.textContent=theme==='dark'?'☀ Light theme':'☾ Dark theme';
+   button.textContent=document.getElementById('account')?(theme==='dark'?'☀':'☾'):(theme==='dark'?'☀ Light theme':'☾ Dark theme');
    button.setAttribute('aria-label','Switch to '+next+' theme');
    button.title='Switch to '+next+' theme';
   }

@@ -4,6 +4,29 @@
 body{background:var(--paper);color:var(--ink)}
 header{background:var(--white)}
 #theme-toggle{margin-left:auto;white-space:nowrap;flex-shrink:0}
+/* Compact account disclosure, shared by students and teaching staff. */
+#account{position:relative;flex:0 1 auto;min-width:0;max-width:100%;width:auto;justify-content:flex-end}
+#account .account-toggle{display:inline-flex;gap:9px;min-height:40px;max-width:260px;margin:0;padding:4px 13px 4px 5px;border:1px solid var(--ink);border-radius:999px;background:transparent;color:var(--ink);box-shadow:none}
+.account-avatar{display:inline-flex;align-items:center;justify-content:center;flex:0 0 28px;height:28px;border-radius:50%;background:#d75e37;color:#fff;font-size:15px;font-weight:700}
+.account-display-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:500}
+#account .account-menu{position:absolute;right:0;top:calc(100% + 10px);z-index:50;width:250px;max-width:calc(100vw - 32px);max-height:calc(100dvh - 150px);overflow-y:auto;padding:7px;background:var(--white);color:var(--ink);border:1px solid var(--line);border-radius:13px;box-shadow:0 12px 32px #0003;text-align:left}
+.account-identity{padding:10px 11px 13px;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
+.account-identity strong,.account-identity span{display:block;line-height:1.6}
+.account-identity strong{font-size:13px;font-weight:700}
+.account-identity span{margin-top:3px;color:var(--muted);font-size:12px}
+.account-links{padding:5px 0}
+.account-signout{padding-top:5px;border-top:1px solid var(--line)}
+#account .account-menu button{display:flex;justify-content:flex-start;width:100%;min-height:44px;padding:10px 11px;margin:0;border:0;border-radius:6px;background:transparent;color:var(--ink);box-shadow:none;text-align:left;font-size:13px;font-weight:500}
+#account .account-menu button:hover:not(:disabled),#account .account-menu button:focus-visible{background:var(--surface-soft);color:var(--ink)}
+#account .account-menu #out{color:var(--danger)}
+#account .account-toggle:hover:not(:disabled){background:var(--surface-soft);color:var(--ink)}
+header:has(#account) #theme-toggle{width:38px;min-width:38px;min-height:38px;height:38px;padding:0;border-radius:50%;font-size:17px}
+@media(max-width:700px){
+ header:has(#account){flex-wrap:wrap;align-items:center;gap:12px;padding:16px}
+ header:has(#account)>.brand{flex-basis:100%}
+ #account{flex-wrap:nowrap;max-width:calc(100% - 50px)}
+ #account .account-toggle{max-width:100%}
+}
 .session-card-top{display:flex;justify-content:space-between;align-items:start;gap:20px}
 .session-id-label{font-size:10px;letter-spacing:1.5px;color:var(--muted);margin:0 0 8px}
 .session-identity{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
