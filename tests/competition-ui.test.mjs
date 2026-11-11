@@ -39,5 +39,25 @@ test('solo start, team setup, captain saves, teammate read-only view and period 
  assert.match($('.season-results tbody tr').textContent,/unscored/);
  assert.equal($('.results-nav a').getAttribute('href'),'#leaderboard');
  click('#my-profile');await wait(()=>$('#profile-history').textContent.includes('Teams'));assert.doesNotMatch($('#profile-history').textContent,/Solo/);
+ // Reopen a truly completed shared game from history, not only the local demo clock.
+ data=JSON.parse(w.localStorage.getItem('ff:demo:v1'));data.sessions[code].startedAt=Date.now()-1081000;
+ data.orders[code]['demo-alice@example.test'][1]={variety:4,quantity:111,cap:0};
+ w.localStorage.setItem('ff:demo:v1',JSON.stringify(data));click('#my-profile');await wait(()=>$('[data-review="true"]'));
+ const historyProfit=$('.history-results [data-label="Team profit"]').textContent;
+ assert.match($('.history-results').textContent,/Team competition · Team A/);
+ assert.match($('[data-history]').getAttribute('aria-label'),/View results: Teams/);
+ w.localStorage.setItem('ff:session:demo-bob@example.test','ACTIVEAA');
+ click('[data-history]');await wait(()=>$('#back-history')&&$('.own-team'));
+ assert.equal($('.result-stats strong').textContent,historyProfit);
+ assert.equal($('.own-team [data-label="Profit"]').textContent,historyProfit);
+ assert.equal($('#order-form'),null);
+ assert.equal(w.localStorage.getItem('ff:session:demo-bob@example.test'),'ACTIVEAA','reviewing a past game must preserve the active-session shortcut');
+ click('#finish');await wait(()=>$('[data-history]'));assert.equal(w.document.activeElement,$('[data-history]'));
+ click('[data-history]');await wait(()=>$('#back-history'));click('#back-history');await wait(()=>$('[data-history]'));
+ $('#profile-form [name=firstName]').value='Updated';submit('#profile-form');await wait(()=>$('#notice').textContent==='Profile saved.');
+ assert.equal($('.history-results [data-label="Team profit"]').textContent,historyProfit);
+ await api.logout();await wait(()=>$('#open-login'));await api.loginEmail('alice@example.test');await wait(()=>$('#my-profile'));click('#my-profile');await wait(()=>$('.history-results'));
+ const captainEntry=[...w.document.querySelectorAll('.history-results tr')].find(r=>r.textContent.includes('Team competition'));
+ assert.equal(captainEntry.querySelector('[data-label="Team profit"]').textContent,historyProfit);
 });
 

@@ -113,6 +113,27 @@ li,blockquote,.field-description,.manifesto>div{
 .team-banner h2{overflow-wrap:anywhere}
 .decision-role{padding:12px 14px;border-left:3px solid var(--focus);background:var(--surface-soft,#e8eddf);font-size:14px!important;line-height:1.65;color:var(--ink)!important}
 .results-nav{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0 24px}
+#play-history,#profile-details,#profile-security{scroll-margin-top:24px}
+.profile-email{overflow-wrap:anywhere}.profile-email .pill{display:inline-block;margin-top:8px}
+.profile-layout dd{min-width:0;overflow-wrap:anywhere}
+#profile-history .stats small{display:block;font-size:13px;line-height:1.6;margin-top:10px}
+#back-history{margin-bottom:24px}
+@media(max-width:600px){
+ .profile-layout .hint,#play-history>.hint{font-size:14px;line-height:1.7}
+ .profile-layout dl{grid-template-columns:1fr;gap:6px}.profile-layout dd{margin-bottom:12px}
+ #profile-security>button,#profile-home,#back-history{width:100%}
+ #profile-security>button+button{margin-top:12px}
+ #profile-history .stats article{padding:20px}#profile-history .stats span{font-size:12px;letter-spacing:.5px}
+ #profile-history .history-results,#profile-history .history-results tbody,#profile-history .history-results tr{display:block;width:100%;min-width:0}
+ .history-results thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+ .history-results tbody tr{margin:16px 0;padding:14px;border:1px solid var(--line);border-radius:8px;background:var(--white)}
+ .history-results td{display:flex;justify-content:space-between;gap:12px;padding:10px 0;font-size:14px;overflow-wrap:anywhere}
+ .history-results td::before{content:attr(data-label);font-weight:600;color:var(--muted)}
+ .history-results td:first-child{display:block;padding-top:0;font-size:16px;font-weight:600;line-height:1.5}
+ .history-results td:first-child::before,.history-results td:last-child::before{content:none}
+ #profile-history .history-results small{font-size:12px;font-weight:400;line-height:1.6}
+ .history-results td:last-child{padding-bottom:0;border-bottom:0}.history-results button{width:100%;min-height:48px}
+}
 .results-nav a{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:10px 16px;border:1px solid var(--line);border-radius:6px;color:var(--ink);font-size:14px;text-decoration:underline;text-underline-offset:3px}
 .team-standing{padding:14px 16px;border-left:3px solid var(--focus);background:var(--surface-soft);overflow-wrap:anywhere}
 .team-standing strong,.team-standing span{display:block}
