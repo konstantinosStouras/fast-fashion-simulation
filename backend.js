@@ -2,7 +2,7 @@ import {emailActionSettings} from './auth-flow.js?v=mobile-auth-9';
 import {decisionOwner,validateTeams} from './competition.js?v=qa-20261111';
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js';
 import {getAuth,GoogleAuthProvider,signInWithPopup,signInWithEmailAndPassword,createUserWithEmailAndPassword,sendEmailVerification,sendPasswordResetEmail,signOut,onAuthStateChanged,verifyBeforeUpdateEmail} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js';
-import {getFirestore,doc,collection,getDoc,getDocs,setDoc,updateDoc,onSnapshot,serverTimestamp,query,where,runTransaction,increment,writeBatch,deleteDoc} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js';
+import {getFirestore,doc,collection,getDoc,getDocFromServer,getDocs,setDoc,updateDoc,onSnapshot,serverTimestamp,query,where,runTransaction,increment,writeBatch,deleteDoc} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js';
 import {firebaseConfig,DATABASE,ADMIN_EMAIL} from './firebase-config.js';
 import {platformHandoff} from './profile.js?v=qa-20261110';
 import {loginEmailAddress,assertAccountEmail,ADMIN_ACCOUNT_EMAIL} from './auth-identity.js?v=multi-admin-1';
@@ -46,7 +46,7 @@ export async function createSession(name,config,mode='individual'){
  }throw new Error('Could not reserve a code. Please try again.');
 }
 export async function listSessions(isAdmin){const c=collection(db,'sessions');return (await getDocs(isAdmin?c:query(c,where('owner','==',currentUser().uid)))).docs.map(d=>({code:d.id,...d.data()})).sort((a,b)=>(b.createdAt?.toMillis()||0)-(a.createdAt?.toMillis()||0));}
-export const watchSession=(code,fn,error)=>onSnapshot(doc(db,'sessions',code),d=>fn(d.exists()?{code,...d.data({serverTimestamps:'estimate'})}:null),error);
+export const watchSession=(code,fn,error,status)=>onSnapshot(doc(db,'sessions',code),{includeMetadataChanges:true},d=>{const fresh=!d.metadata.fromCache&&!d.metadata.hasPendingWrites;status?.(fresh);if(fresh)fn(d.exists()?{code,...d.data()}:null);},error);
 export async function startSession(code){const ref=doc(db,'sessions',code);await runTransaction(db,async tx=>{const s=(await tx.get(ref)).data();if(s.mode==='team'){const people=(await getDocs(collection(db,'sessions',code,'participants'))).docs.map(d=>({uid:d.id}));if(!validateTeams(people,s.assignments,s.teamNames))throw Error('Assign every participant to a team before starting.');}tx.update(ref,{status:'running',startedAt:serverTimestamp()});});}
 export async function saveTeams(code,assignments,teamNames){
  const ref=doc(db,'sessions',code);
@@ -57,7 +57,7 @@ export async function saveTeams(code,assignments,teamNames){
   tx.update(ref,{assignments,teamNames});
  });
 }
-export async function readMarketOrders(code,captains,rounds){return Object.fromEntries(await Promise.all(captains.map(async uid=>[uid,Object.fromEntries(await Promise.all(rounds.map(async r=>{const d=await getDoc(doc(db,'sessions',code,'participants',uid,'orders',String(r)));return [r,d.exists()?d.data():null];})))])));}
+export async function readMarketOrders(code,captains,rounds){return Object.fromEntries(await Promise.all(captains.map(async uid=>[uid,Object.fromEntries(await Promise.all(rounds.map(async r=>{const d=await getDocFromServer(doc(db,'sessions',code,'participants',uid,'orders',String(r)));return [r,d.exists()?d.data():null];})))])));}
 export const closeSession=code=>updateDoc(doc(db,'sessions',code),{status:'closed',closedAt:serverTimestamp()});
 export async function joinSession(code,name){
  const uid=currentUser().uid,email=currentUser().email,sessionRef=doc(db,'sessions',code),participantRef=doc(db,'sessions',code,'participants',uid);
@@ -74,7 +74,7 @@ export async function joinSession(code,name){
   tx.set(doc(db,'profiles',uid,'sessions',code),{joined:true});
  });
 }
-export const watchOrders=(code,uid,fn,error)=>onSnapshot(collection(db,'sessions',code,'participants',uid,'orders'),{includeMetadataChanges:true},s=>{if(!s.metadata.hasPendingWrites&&!s.metadata.fromCache)fn(Object.fromEntries(s.docs.map(d=>[d.id,d.data()])));},error);
+export const watchOrders=(code,uid,fn,error,status)=>onSnapshot(collection(db,'sessions',code,'participants',uid,'orders'),{includeMetadataChanges:true},s=>{const fresh=!s.metadata.hasPendingWrites&&!s.metadata.fromCache;status?.(fresh);if(fresh)fn(Object.fromEntries(s.docs.map(d=>[d.id,d.data()])));},error);
 export const watchParticipants=(code,fn,error)=>onSnapshot(collection(db,'sessions',code,'participants'),{includeMetadataChanges:true},s=>{if(!s.metadata.fromCache&&!s.metadata.hasPendingWrites)fn(s.docs.map(d=>({uid:d.id,...d.data()})));},error);
 export const saveOrder=(code,index,order)=>setDoc(doc(db,'sessions',code,'participants',currentUser().uid,'orders',String(index)),{...order,savedAt:serverTimestamp()});
 export async function readOrders(code,uid){return Object.fromEntries((await getDocs(collection(db,'sessions',code,'participants',uid,'orders'))).docs.map(d=>[d.id,d.data()]));}

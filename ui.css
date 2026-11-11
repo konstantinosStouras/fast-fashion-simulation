@@ -233,3 +233,7 @@ li,blockquote,.field-description,.manifesto>div{
  .leaderboard-results td:nth-child(3){font-weight:600}
  .leaderboard-results td:last-child{border-bottom:0;padding-bottom:0}
 }
+
+#connection-status:not([hidden]){margin:12px auto;padding:12px 16px;max-width:1120px;box-sizing:border-box;font-size:14px;line-height:1.6;overflow-wrap:anywhere;text-align:left;border:1px solid var(--line);border-radius:8px;background:var(--white);color:var(--ink)}
+#connection-status[data-state="waiting"]{border-left:4px solid #ba6700}
+@media(max-width:600px){#connection-status:not([hidden]){margin:12px 20px}}

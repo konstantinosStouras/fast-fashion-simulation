@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {applyActionCode,confirmPasswordReset,getAuth,connectAuthEmulator} from 'firebase/auth';
 import {getApp,deleteApp} from 'firebase/app';
-import {connectFirestoreEmulator,getFirestore,doc,setDoc,serverTimestamp,getDoc} from 'firebase/firestore';
+import {connectFirestoreEmulator,getFirestore,doc,setDoc,serverTimestamp,getDoc,disableNetwork,enableNetwork} from 'firebase/firestore';
 import {initializeTestEnvironment} from '@firebase/rules-unit-testing';
 test('real backend registration stores profile and sends a working verification link',async t=>{
  assert.equal(process.env.FIREBASE_AUTH_EMULATOR_HOST,'127.0.0.1:9198','Must run inside the local emulator suite');
@@ -37,5 +37,21 @@ test('real backend registration stores profile and sends a working verification 
   new Promise((resolve,reject)=>{const stop=api.watchOrders(team,uid,o=>{if(o[0]?.quantity===101){stop();resolve();}},reject);t.after(stop);}),
   new Promise((resolve,reject)=>{const stop=api.watchParticipants(team,p=>{if(p.some(x=>x.uid===uid)){stop();resolve();}},reject);t.after(stop);})
  ]);
+ await t.test('team listeners distinguish offline and pending data, then restore server decisions',async()=>{
+  const db=getFirestore(app),wait=async fn=>{for(let i=0;i<200;i++){if(fn())return;await new Promise(r=>setTimeout(r,50));}throw Error('Recovery timed out');};
+  let fresh=null,sessionFresh=null,latest=null,missingCalls=0;
+  const stop=api.watchOrders(team,uid,o=>latest=o,assert.fail,value=>fresh=value),stopSession=api.watchSession(team,()=>{},assert.fail,value=>sessionFresh=value);
+  await wait(()=>fresh===true&&sessionFresh===true&&latest?.[0]?.quantity===101);
+  await disableNetwork(db);await wait(()=>fresh===false&&sessionFresh===false);
+  const missing=api.watchSession('ZZZZZZZZ',()=>missingCalls++,()=>{},()=>{});
+  await assert.rejects(api.readMarketOrders(team,[uid],[0]),'shared market must not silently use cached orders');
+  let acknowledged=false;const pending=api.saveOrder(team,0,{variety:4,quantity:119,cap:0}).then(()=>acknowledged=true);
+  await new Promise(r=>setTimeout(r,100));assert.equal(acknowledged,false);assert.equal(latest[0].quantity,101);assert.equal(missingCalls,0,'an uncached offline session is not a deleted session');missing();
+  await enableNetwork(db);await pending;await wait(()=>fresh===true&&sessionFresh===true&&latest[0].quantity===119);
+  await disableNetwork(db);await wait(()=>fresh===false);
+  await env.withSecurityRulesDisabled(c=>setDoc(doc(c.firestore(),'sessions',team,'participants',uid,'orders','0'),{variety:4,quantity:127,cap:0,savedAt:serverTimestamp()}));
+  await enableNetwork(db);await wait(()=>fresh===true&&latest[0].quantity===127);
+  stop();stopSession();assert.equal((await api.readOrders(team,uid))[0].quantity,127);
+ });
  await confirmPasswordReset(getAuth(app),resetCode.oobCode,'emulator-reset-password');await api.logout();await assert.rejects(api.loginEmail(email,'emulator-only-password'));await api.loginEmail(email,'emulator-reset-password');assert.equal((await api.getProfile()).firstName,'Edited');await api.logout();
 });
