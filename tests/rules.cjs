@@ -196,3 +196,21 @@ test('simultaneous admin close and captain save have a stable server-ordered out
  await assertFails(setDoc(ref,order({phase:'respond',cap:99,revision:snapshot.revision+1})));
  assertEqual((await getDoc(ref)).data().cap,snapshot.cap);
 });
+
+test('deletion marker requires closed owner authorization and cannot be forged or removed',async()=>{
+ await seed(600,{mode:'team',assignments:{alice:'alice',bob:'alice'},teamNames:{alice:'A'}});
+ const teacher=db('teacher'),room=doc(teacher,'sessions/ABCDEFGH');
+ await assertFails(updateDoc(room,{deletedAt:serverTimestamp()}));
+ await updateDoc(room,{status:'closed',closedAt:serverTimestamp()});
+ await assertFails(updateDoc(doc(db('alice'),'sessions/ABCDEFGH'),{deletedAt:serverTimestamp()}));
+ await assertFails(updateDoc(doc(db('other'),'sessions/ABCDEFGH'),{deletedAt:serverTimestamp()}));
+ await assertFails(updateDoc(room,{deletedAt:Timestamp.fromMillis(1)}));
+ await assertSucceeds(updateDoc(room,{deletedAt:serverTimestamp()}));
+ assertEqual(!!(await getDoc(doc(db('bob'),'sessions/ABCDEFGH'))).data().deletedAt,true);
+ await assertFails(updateDoc(room,{deletedAt:null}));
+ await assertFails(updateDoc(room,{deletedAt:serverTimestamp()}));
+ await assertFails(setDoc(doc(db('alice'),path()),order()));
+ await assertSucceeds(deleteDoc(doc(teacher,'sessions/ABCDEFGH/participants/alice')));
+ await assertSucceeds(deleteDoc(room));
+ assertEqual((await getDoc(doc(db('bob'),'sessions/ABCDEFGH'))).exists(),false);
+});

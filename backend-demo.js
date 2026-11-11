@@ -19,7 +19,7 @@ export const getProfile=async()=>load().profiles?.[user.uid]||{firstName:'Demo',
 export const saveProfile=async profile=>{const d=load();d.profiles??={};d.profiles[user.uid]={...d.profiles[user.uid],...profile};write(d);};
 export async function importPlatformProfile(storage){const p=platformHandoff(storage,user);if(p)await saveProfile({platformRegistration:p});}
 export const changeEmail=async email=>{assertAccountEmail(email);};
-export const playHistory=async()=>Object.values(load().sessions).filter(s=>load().people[s.code]?.[user.uid]).map(s=>({...toSession(s),decisionUid:decisionOwner(s,user.uid),teamOrders:load().orders[s.code]||{},orders:load().orders[s.code]?.[decisionOwner(s,user.uid)]||{}}));
+export const playHistory=async()=>Object.values(load().sessions).filter(s=>!s.deletedAt&&load().people[s.code]?.[user.uid]).map(s=>({...toSession(s),decisionUid:decisionOwner(s,user.uid),teamOrders:load().orders[s.code]||{},orders:load().orders[s.code]?.[decisionOwner(s,user.uid)]||{}}));
 export const logout=async()=>{user=null;authListeners.forEach(fn=>fn(null));};
 export const verifyEmail=async()=>{};
 export const refreshUser=async()=>user;

@@ -72,5 +72,21 @@ test('real backend registration stores profile and sends a working verification 
   await other.saveOrder(code,0,{variety:4,quantity:160,cap:0},'plan',2);assert.equal((await api.readOrders(code,uid))[0].quantity,160);
   await other.logout();
  });
+ await t.test('deletion notifies open and offline clients and server reads cannot resurrect cached results',async()=>{
+  const {onSnapshot,getDocs,collection}=await import('firebase/firestore');
+  const code=await api.createSession('Delete recovery QA',(await import('../model.js')).DEFAULT_CONFIG,'team');await api.joinSession(code,'Captain');await api.saveTeams(code,{[uid]:uid},{[uid]:'Team A'});await api.startSession(code);await api.saveOrder(code,0,{variety:4,quantity:135,cap:0});await api.closeSession(code);
+  const offline=env.authenticatedContext(uid,{email,email_verified:true}).firestore(),ref=doc(offline,'sessions',code),wait=async fn=>{for(let i=0;i<200;i++){if(fn())return;await new Promise(r=>setTimeout(r,25));}throw Error('Deletion notification timed out');};
+  let seen=null,missing=false,marked=false;const stopOffline=onSnapshot(ref,{includeMetadataChanges:true},snap=>{if(!snap.metadata.fromCache&&!snap.metadata.hasPendingWrites)seen=snap.exists()?snap.data():null;});
+  const stop=api.watchSession(code,s=>{if(s?.deletedAt)marked=true;if(s===null)missing=true;},assert.fail);
+  try{
+   await wait(()=>seen?.status==='closed');await disableNetwork(offline);
+   await api.deleteSession(code);await wait(()=>missing);assert.equal(marked,true,'marker is confirmed before cleanup ends');
+   assert.equal(seen.status,'closed','offline SDK still has old cache until reconnect');await enableNetwork(offline);await wait(()=>seen===null);
+   await assert.rejects(api.readMarketOrders(code,[uid],[0]),e=>e.code==='session-deleted');
+   assert.equal((await api.playHistory()).some(s=>s.code===code),false);
+   await env.withSecurityRulesDisabled(async c=>{assert.equal((await getDocs(collection(c.firestore(),'sessions',code,'participants'))).size,0);});
+   await assert.rejects(api.saveOrder(code,0,{variety:4,quantity:199,cap:0},'plan',1));
+  }finally{await enableNetwork(offline);stopOffline();stop();await offline.terminate();}
+ });
  await confirmPasswordReset(getAuth(app),resetCode.oobCode,'emulator-reset-password');await api.logout();await assert.rejects(api.loginEmail(email,'emulator-only-password'));await api.loginEmail(email,'emulator-reset-password');assert.equal((await api.getProfile()).firstName,'Edited');await api.logout();
 });

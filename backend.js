@@ -2,7 +2,7 @@ import {emailActionSettings} from './auth-flow.js?v=mobile-auth-9';
 import {decisionOwner,validateTeams} from './competition.js?v=qa-20261111';
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js';
 import {getAuth,GoogleAuthProvider,signInWithPopup,signInWithEmailAndPassword,createUserWithEmailAndPassword,sendEmailVerification,sendPasswordResetEmail,signOut,onAuthStateChanged,verifyBeforeUpdateEmail} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js';
-import {getFirestore,doc,collection,getDoc,getDocFromServer,getDocs,setDoc,updateDoc,onSnapshot,serverTimestamp,query,where,runTransaction,increment,writeBatch,deleteDoc} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js';
+import {getFirestore,doc,collection,getDoc,getDocFromServer,getDocs,getDocsFromServer,setDoc,updateDoc,onSnapshot,serverTimestamp,query,where,runTransaction,increment,writeBatch,deleteDoc} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js';
 import {firebaseConfig,DATABASE,ADMIN_EMAIL} from './firebase-config.js';
 import {platformHandoff} from './profile.js?v=qa-20261110';
 import {loginEmailAddress,assertAccountEmail,ADMIN_ACCOUNT_EMAIL} from './auth-identity.js?v=multi-admin-1';
@@ -24,8 +24,21 @@ export async function getProfile(){const d=await getDoc(doc(db,'profiles',curren
 export const saveProfile=profile=>setDoc(doc(db,'profiles',currentUser().uid),{firstName:profile.firstName.trim(),lastName:profile.lastName.trim(),universityId:profile.universityId.trim()},{merge:true});
 export async function importPlatformProfile(storage){const p=platformHandoff(storage,currentUser());if(p)await setDoc(doc(db,'profiles',currentUser().uid),{platformRegistration:p},{merge:true});}
 export async function playHistory(){
- const uid=currentUser().uid,refs=await getDocs(collection(db,'profiles',uid,'sessions'));
- return Promise.all(refs.docs.map(async ref=>{const d=await getDoc(doc(db,'sessions',ref.id));return d.exists()?{code:ref.id,...d.data(),decisionUid:decisionOwner(d.data(),uid),orders:await readOrders(ref.id,decisionOwner(d.data(),uid)||uid),teamOrders:d.data().mode==='team'?await readMarketOrders(ref.id,Object.keys(d.data().teamNames||{}),[1,2,3].filter(i=>d.data().startedAt&&((d.data().closedAt?.toMillis()??Date.now())-d.data().startedAt.toMillis())/1000>=ROUNDS[i].end)):null}:null;})).then(rows=>rows.filter(Boolean));
+ const uid=currentUser().uid,refs=await getDocsFromServer(collection(db,'profiles',uid,'sessions'));
+ return Promise.all(refs.docs.map(async ref=>{
+  try{
+   const data=await requireSession(ref.id),owner=decisionOwner(data,uid)||uid;
+   const orders=await readOrders(ref.id,owner),teamOrders=data.mode==='team'?await readMarketOrders(ref.id,Object.keys(data.teamNames||{}),[1,2,3].filter(i=>data.startedAt&&((data.closedAt?.toMillis()??Date.now())-data.startedAt.toMillis())/1000>=ROUNDS[i].end)):null;
+   await requireSession(ref.id);return {code:ref.id,...data,decisionUid:decisionOwner(data,uid),orders,teamOrders};
+  }catch(error){if(error.code==='session-deleted')return null;try{await requireSession(ref.id);}catch(check){if(check.code==='session-deleted')return null;}throw error;}
+ })).then(rows=>rows.filter(Boolean));
+}
+// Use confirmed parent state before and after multi-document reads: deletion is staged.
+async function requireSession(code){
+ const snapshot=await getDocFromServer(doc(db,'sessions',code));
+ if(snapshot.metadata.hasPendingWrites)throw Object.assign(new Error('Waiting for session confirmation.'),{code:'unavailable'});
+ if(!snapshot.exists()||snapshot.data().deletedAt)throw Object.assign(new Error('This session has been deleted. Its results are no longer available.'),{code:'session-deleted'});
+ return snapshot.data();
 }
 export const resetPassword=(email,sessionCode='')=>sendPasswordResetEmail(auth,loginEmailAddress(email),emailSettings('login',sessionCode));
 export const logout=()=>signOut(auth);
@@ -57,7 +70,7 @@ export async function saveTeams(code,assignments,teamNames){
   tx.update(ref,{assignments,teamNames});
  });
 }
-export async function readMarketOrders(code,captains,rounds){return Object.fromEntries(await Promise.all(captains.map(async uid=>[uid,Object.fromEntries(await Promise.all(rounds.map(async r=>{const d=await getDocFromServer(doc(db,'sessions',code,'participants',uid,'orders',String(r)));if(d.metadata.hasPendingWrites)throw Object.assign(new Error('Waiting for the server to confirm a decision.'),{code:'unavailable'});return [r,d.exists()?d.data():null];})))])));}
+export async function readMarketOrders(code,captains,rounds){await requireSession(code);const result=Object.fromEntries(await Promise.all(captains.map(async uid=>[uid,Object.fromEntries(await Promise.all(rounds.map(async r=>{const d=await getDocFromServer(doc(db,'sessions',code,'participants',uid,'orders',String(r)));if(d.metadata.hasPendingWrites)throw Object.assign(new Error('Waiting for the server to confirm a decision.'),{code:'unavailable'});return [r,d.exists()?d.data():null];})))])));await requireSession(code);return result;}
 export const closeSession=code=>updateDoc(doc(db,'sessions',code),{status:'closed',closedAt:serverTimestamp()});
 export async function joinSession(code,name){
  const uid=currentUser().uid,email=currentUser().email,sessionRef=doc(db,'sessions',code),participantRef=doc(db,'sessions',code,'participants',uid);
@@ -89,13 +102,15 @@ export async function saveOrder(code,index,order,phase='plan',expectedRevision=0
   throw error;
  }
 }
-export async function readOrders(code,uid){return Object.fromEntries((await getDocs(collection(db,'sessions',code,'participants',uid,'orders'))).docs.map(d=>[d.id,d.data()]));}
+export async function readOrders(code,uid){return Object.fromEntries((await getDocsFromServer(collection(db,'sessions',code,'participants',uid,'orders'))).docs.map(d=>[d.id,d.data()]));}
 
 export const readParticipants=async code=>(await getDocs(collection(db,'sessions',code,'participants'))).docs.map(d=>({uid:d.id,...d.data()}));
 export async function deleteSession(code){
- const ref=doc(db,'sessions',code),snapshot=await getDoc(ref);if(!snapshot.exists())return;
+ const ref=doc(db,'sessions',code),snapshot=await getDocFromServer(ref);if(!snapshot.exists())return;
  // Close first to prevent joins or new decisions during a retryable cleanup.
  if(snapshot.data().status!=='closed')await closeSession(code);
+ // Notify open/offline clients before removing any data; retries preserve this marker.
+ if(!snapshot.data().deletedAt)await updateDoc(ref,{deletedAt:serverTimestamp()});
  const people=await readParticipants(code);
  for(const person of people){
   const orders=await getDocs(collection(db,'sessions',code,'participants',person.uid,'orders'));
