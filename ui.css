@@ -31,6 +31,20 @@ input,select{min-height:48px;border-radius:5px;font-size:16px;line-height:1.4}
 input:focus,select:focus{border-color:var(--focus)}
 input:disabled,select:disabled{-webkit-text-fill-color:#626c58;opacity:1;background:#ecefe5;color:#626c58}
 .code-input{text-transform:uppercase}
+#join #session-code{letter-spacing:3px;font-size:20px;font-variant-numeric:tabular-nums;margin-top:0}
+#join #session-code-help{margin:10px 0 16px}
+#join-status:empty{display:none}
+#join-status{font-size:14px;line-height:1.65;overflow-wrap:anywhere;border-left:3px solid var(--focus);padding:10px 12px;background:var(--surface-soft)}
+#password-help{margin-top:-8px}
+#auth .close{position:sticky;top:0;z-index:1;background:var(--paper)}
+.session-context{overflow-wrap:anywhere;font-size:14px;color:var(--muted)}
+.team-role{font-weight:500}
+@media(max-width:600px){
+ #join .hint,#auth .hint{font-size:14px;line-height:1.7}
+ .team-banner .hint,.team-banner>p{font-size:14px;line-height:1.7}
+ .waiting{margin:24px auto}.waiting>#leave{width:100%}
+ .hero-actions #verified,.hero-actions #resend,.hero-actions #complete-profile{width:100%;margin-top:12px}
+}
 summary{min-height:44px;padding:10px 0;line-height:1.5;touch-action:manipulation}
 .button-row{align-items:stretch;gap:10px}.button-row button{flex:0 1 auto}
 .session-card{display:block;text-align:left;padding:16px 18px}.session-card strong{font-size:14px;overflow-wrap:anywhere}
