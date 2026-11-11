@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {applyActionCode,getAuth,connectAuthEmulator} from 'firebase/auth';
+import {applyActionCode,confirmPasswordReset,getAuth,connectAuthEmulator} from 'firebase/auth';
 import {getApp,deleteApp} from 'firebase/app';
 import {connectFirestoreEmulator,getFirestore,doc,setDoc,serverTimestamp,getDoc} from 'firebase/firestore';
 import {initializeTestEnvironment} from '@firebase/rules-unit-testing';
@@ -14,15 +14,17 @@ test('real backend registration stores profile and sends a working verification 
  source=source.replace("'./auth-identity.js'",JSON.stringify(new URL('../auth-identity.js',import.meta.url).href));
  source=source.replace("'./auth-identity.js?v=multi-admin-1'",JSON.stringify(new URL('../auth-identity.js',import.meta.url).href));
  source=source.replace("'./competition.js?v=qa-20261111'",JSON.stringify(new URL('../competition.js',import.meta.url).href));
+ source=source.replace("'./auth-flow.js?v=mobile-auth-9'",JSON.stringify(new URL('../auth-flow.js',import.meta.url).href));
  const api=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
  const app=getApp('fashion-futures');connectAuthEmulator(getAuth(app),'http://127.0.0.1:9198',{disableWarnings:true});connectFirestoreEmulator(getFirestore(app),'127.0.0.1',8180);t.after(()=>deleteApp(app));
+ globalThis.location={href:'https://www.stouras.com/fast-fashion-simulation/?session=abcd-efgh'};t.after(()=>delete globalThis.location);
  const email='emulator-'+Date.now()+'@example.test',p={firstName:'Test',lastName:'Student',universityId:'QA-ONLY'};
  const outcome=await api.register(email,'emulator-only-password',p);assert.deepEqual(outcome,{profileSaved:true,verificationSent:true});assert.equal(api.currentUser().emailVerified,false);assert.deepEqual(await api.getProfile(),p);
- const codes=await fetch('http://127.0.0.1:9198/emulator/v1/projects/demo-fashion-futures/oobCodes').then(r=>r.json());const code=codes.oobCodes.find(c=>c.email===email&&c.requestType==='VERIFY_EMAIL');assert.ok(code);assert.ok(code.oobLink);
+ const codes=await fetch('http://127.0.0.1:9198/emulator/v1/projects/demo-fashion-futures/oobCodes').then(r=>r.json());const code=codes.oobCodes.find(c=>c.email===email&&c.requestType==='VERIFY_EMAIL');assert.ok(code);assert.ok(code.oobLink);assert.equal(code.continueUrl||new URL(code.oobLink).searchParams.get('continueUrl'),'https://www.stouras.com/fast-fashion-simulation/?session=ABCDEFGH&auth=verify');
  await applyActionCode(getAuth(app),code.oobCode);await api.refreshUser();assert.equal(api.currentUser().emailVerified,true);
  await api.importPlatformProfile({getItem:()=>JSON.stringify({v:1,ts:Date.now()-1000,sim:'ffo',profile:{email,industry:'Education',age:'31',studentId:'QA-ONLY'}})});
  await api.saveProfile({...p,firstName:'Edited'});assert.equal((await api.getProfile()).platformRegistration.industry,'Education');
- await api.resetPassword(email);const reset=await fetch('http://127.0.0.1:9198/emulator/v1/projects/demo-fashion-futures/oobCodes').then(r=>r.json());assert.ok(reset.oobCodes.some(c=>c.email===email&&c.requestType==='PASSWORD_RESET'));
+ await api.resetPassword(email);const reset=await fetch('http://127.0.0.1:9198/emulator/v1/projects/demo-fashion-futures/oobCodes').then(r=>r.json());const resetCode=reset.oobCodes.find(c=>c.email===email&&c.requestType==='PASSWORD_RESET');assert.ok(resetCode);assert.equal(resetCode.continueUrl||new URL(resetCode.oobLink).searchParams.get('continueUrl'),'https://www.stouras.com/fast-fashion-simulation/?session=ABCDEFGH&auth=login');
  const solo=await api.createSession('Solo backend QA',(await import('../model.js')).DEFAULT_CONFIG,'solo');await api.joinSession(solo,'Test Student');await api.startSession(solo);await api.saveOrder(solo,0,{variety:4,quantity:70,cap:0});const history=await api.playHistory();assert.equal(history[0].mode,'solo');assert.equal(history[0].orders[0].quantity,70);
  const env=await initializeTestEnvironment({projectId:'demo-fashion-futures',firestore:{host:'127.0.0.1',port:8180}});t.after(()=>env.cleanup());
  await env.withSecurityRulesDisabled(c=>setDoc(doc(c.firestore(),'instructors',email),{createdAt:serverTimestamp()}));
@@ -35,5 +37,5 @@ test('real backend registration stores profile and sends a working verification 
   new Promise((resolve,reject)=>{const stop=api.watchOrders(team,uid,o=>{if(o[0]?.quantity===101){stop();resolve();}},reject);t.after(stop);}),
   new Promise((resolve,reject)=>{const stop=api.watchParticipants(team,p=>{if(p.some(x=>x.uid===uid)){stop();resolve();}},reject);t.after(stop);})
  ]);
- await api.logout();await api.loginEmail(email,'emulator-only-password');assert.equal((await api.getProfile()).firstName,'Edited');await api.logout();
+ await confirmPasswordReset(getAuth(app),resetCode.oobCode,'emulator-reset-password');await api.logout();await assert.rejects(api.loginEmail(email,'emulator-only-password'));await api.loginEmail(email,'emulator-reset-password');assert.equal((await api.getProfile()).firstName,'Edited');await api.logout();
 });

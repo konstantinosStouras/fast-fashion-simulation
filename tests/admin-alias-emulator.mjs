@@ -17,6 +17,7 @@ test('separate admin accounts own their classes; students register, join and pla
  source=source.replace("'./profile.js?v=qa-20261110'",JSON.stringify(new URL('../profile.js',import.meta.url).href));
  source=source.replace("'./auth-identity.js?v=multi-admin-1'",JSON.stringify(new URL('../auth-identity.js',import.meta.url).href));
  source=source.replace("'./competition.js?v=qa-20261111'",JSON.stringify(new URL('../competition.js',import.meta.url).href));
+ source=source.replace("'./auth-flow.js?v=mobile-auth-9'",JSON.stringify(new URL('../auth-flow.js',import.meta.url).href));
  const api=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
  const app=getApp('fashion-futures'),auth=getAuth(app);connectAuthEmulator(auth,'http://127.0.0.1:9198',{disableWarnings:true});connectFirestoreEmulator(getFirestore(app),'127.0.0.1',8180);t.after(()=>deleteApp(app));
  const google=email=>GoogleAuthProvider.credential(JSON.stringify({sub:'google-'+email,email,email_verified:true}));

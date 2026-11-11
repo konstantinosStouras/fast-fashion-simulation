@@ -1,3 +1,4 @@
+import {emailActionSettings} from './auth-flow.js?v=mobile-auth-9';
 import {decisionOwner,validateTeams} from './competition.js?v=qa-20261111';
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js';
 import {getAuth,GoogleAuthProvider,signInWithPopup,signInWithEmailAndPassword,createUserWithEmailAndPassword,sendEmailVerification,sendPasswordResetEmail,signOut,onAuthStateChanged,verifyBeforeUpdateEmail} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js';
@@ -11,14 +12,14 @@ export const currentUser=()=>auth.currentUser;
 export const observeAuth=fn=>onAuthStateChanged(auth,fn);
 export const loginGoogle=()=>signInWithPopup(auth,new GoogleAuthProvider());
 export const loginEmail=(email,password)=>signInWithEmailAndPassword(auth,loginEmailAddress(email),password);
-const emailSettings={url:'https://www.stouras.com/fast-fashion-simulation/'};
+const emailSettings=(action='verify',sessionCode='')=>emailActionSettings(globalThis.location?.href||'',action,sessionCode);
 export async function register(email,password,profile){
  assertAccountEmail(email);
  const {user}=await createUserWithEmailAndPassword(auth,email,password);
- const saved=await Promise.allSettled([saveProfile(profile),sendEmailVerification(user,emailSettings)]);
+ const saved=await Promise.allSettled([saveProfile(profile),sendEmailVerification(user,emailSettings())]);
  return {profileSaved:saved[0].status==='fulfilled',verificationSent:saved[1].status==='fulfilled'};
 }
-export const changeEmail=email=>{if(currentUser()?.email===ADMIN_ACCOUNT_EMAIL)throw Error("This administrator account uses owner-managed recovery.");assertAccountEmail(email);return verifyBeforeUpdateEmail(auth.currentUser,email,emailSettings);};
+export const changeEmail=email=>{if(currentUser()?.email===ADMIN_ACCOUNT_EMAIL)throw Error("This administrator account uses owner-managed recovery.");assertAccountEmail(email);return verifyBeforeUpdateEmail(auth.currentUser,email,emailSettings());};
 export async function getProfile(){const d=await getDoc(doc(db,'profiles',currentUser().uid));return d.exists()?d.data():null;}
 export const saveProfile=profile=>setDoc(doc(db,'profiles',currentUser().uid),{firstName:profile.firstName.trim(),lastName:profile.lastName.trim(),universityId:profile.universityId.trim()},{merge:true});
 export async function importPlatformProfile(storage){const p=platformHandoff(storage,currentUser());if(p)await setDoc(doc(db,'profiles',currentUser().uid),{platformRegistration:p},{merge:true});}
@@ -26,9 +27,9 @@ export async function playHistory(){
  const uid=currentUser().uid,refs=await getDocs(collection(db,'profiles',uid,'sessions'));
  return Promise.all(refs.docs.map(async ref=>{const d=await getDoc(doc(db,'sessions',ref.id));return d.exists()?{code:ref.id,...d.data(),decisionUid:decisionOwner(d.data(),uid),orders:await readOrders(ref.id,decisionOwner(d.data(),uid)||uid),teamOrders:d.data().mode==='team'?await readMarketOrders(ref.id,Object.keys(d.data().teamNames||{}),[1,2,3].filter(i=>d.data().startedAt&&((d.data().closedAt?.toMillis()??Date.now())-d.data().startedAt.toMillis())/1000>=ROUNDS[i].end)):null}:null;})).then(rows=>rows.filter(Boolean));
 }
-export const resetPassword=email=>sendPasswordResetEmail(auth,loginEmailAddress(email));
+export const resetPassword=(email,sessionCode='')=>sendPasswordResetEmail(auth,loginEmailAddress(email),emailSettings('login',sessionCode));
 export const logout=()=>signOut(auth);
-export const verifyEmail=()=>sendEmailVerification(auth.currentUser,emailSettings);
+export const verifyEmail=(sessionCode='')=>sendEmailVerification(auth.currentUser,emailSettings('verify',sessionCode));
 export async function refreshUser(){await auth.currentUser.reload();await auth.currentUser.getIdToken(true);return auth.currentUser;}
 export async function role(){const u=currentUser();if(!u?.emailVerified)return 'student';if(u.email===ADMIN_EMAIL)return 'admin';return (await getDoc(doc(db,'instructors',u.email))).exists()?'instructor':'student';}
 export async function grant(email){await setDoc(doc(db,'instructors',loginEmailAddress(email)),{createdAt:serverTimestamp()});}

@@ -36,6 +36,13 @@ input:disabled,select:disabled{-webkit-text-fill-color:#626c58;opacity:1;backgro
 #join-status:empty{display:none}
 #join-status{font-size:14px;line-height:1.65;overflow-wrap:anywhere;border-left:3px solid var(--focus);padding:10px 12px;background:var(--surface-soft)}
 #password-help{margin-top:-8px}
+.auth-context{font-size:14px;line-height:1.65;overflow-wrap:anywhere;padding:12px;border-left:3px solid var(--focus);background:var(--surface-soft)}
+#auth-status:empty,#auth-error:empty{display:none}
+#auth-status:not(:empty),#auth-error:not(:empty){font-size:14px;line-height:1.7;padding:12px;border:1px solid var(--line);border-radius:6px;overflow-wrap:anywhere}
+#auth-status{background:var(--surface-soft);color:var(--ink)}
+.verification-email{display:block;overflow-wrap:anywhere;text-align:start}
+#verification-status{font-size:14px;line-height:1.7;padding:12px;background:var(--surface-soft);border-radius:6px;overflow-wrap:anywhere}
+.verification-panel>button{width:100%;margin-top:12px}
 #auth .close{position:sticky;top:0;z-index:1;background:var(--paper)}
 .session-context{overflow-wrap:anywhere;font-size:14px;color:var(--muted)}
 .team-role{font-weight:500}
