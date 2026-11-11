@@ -97,3 +97,13 @@ li,blockquote,.field-description,.manifesto>div{
  text-justify:inter-word;
  hyphens:auto;
 }
+
+/* Keep justified reading columns usable on phones. */
+@media(max-width:600px){
+ .play-instructions ol,.debrief ol{padding-inline-start:20px}
+ .play-instructions li,.debrief li{padding-inline-start:2px;line-height:1.75}
+ .play-instructions .hint,.debrief .hint,.competition-instructions .hint{font-size:14px;line-height:1.75}
+ .play-instructions p,.debrief p,.competition-instructions p{overflow-wrap:break-word}
+ /* Scroll data as a table instead of splitting season names into fragments. */
+ .table-wrap table{min-width:480px}
+}
