@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {applyActionCode,confirmPasswordReset,getAuth,connectAuthEmulator} from 'firebase/auth';
 import {getApp,deleteApp} from 'firebase/app';
-import {connectFirestoreEmulator,getFirestore,doc,setDoc,serverTimestamp,getDoc,disableNetwork,enableNetwork} from 'firebase/firestore';
+import {connectFirestoreEmulator,getFirestore,doc,setDoc,serverTimestamp,getDoc,disableNetwork,enableNetwork,Timestamp} from 'firebase/firestore';
 import {initializeTestEnvironment} from '@firebase/rules-unit-testing';
 test('real backend registration stores profile and sends a working verification link',async t=>{
  assert.equal(process.env.FIREBASE_AUTH_EMULATOR_HOST,'127.0.0.1:9198','Must run inside the local emulator suite');
@@ -52,6 +52,13 @@ test('real backend registration stores profile and sends a working verification 
   await env.withSecurityRulesDisabled(c=>setDoc(doc(c.firestore(),'sessions',team,'participants',uid,'orders','0'),{variety:4,quantity:127,cap:0,savedAt:serverTimestamp()}));
   await enableNetwork(db);await wait(()=>fresh===true&&latest[0].quantity===127);
   stop();stopSession();assert.equal((await api.readOrders(team,uid))[0].quantity,127);
+ });
+ await t.test('real save API carries its original phase and cannot reset a locked plan',async()=>{
+  await env.withSecurityRulesDisabled(async c=>{const ref=doc(c.firestore(),'sessions',team),snapshot=await getDoc(ref);await setDoc(ref,{...snapshot.data(),startedAt:Timestamp.fromMillis(Date.now()-95000)});});
+  await api.saveOrder(team,0,{variety:4,quantity:127,cap:35},'respond');
+  await assert.rejects(api.saveOrder(team,0,{variety:4,quantity:127,cap:0},'plan'));
+  assert.equal((await api.readOrders(team,uid))[0].cap,35);
+  assert.equal((await api.readMarketOrders(team,[uid],[0]))[uid][0].cap,35);
  });
  await confirmPasswordReset(getAuth(app),resetCode.oobCode,'emulator-reset-password');await api.logout();await assert.rejects(api.loginEmail(email,'emulator-only-password'));await api.loginEmail(email,'emulator-reset-password');assert.equal((await api.getProfile()).firstName,'Edited');await api.logout();
 });

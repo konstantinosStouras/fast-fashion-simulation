@@ -11,8 +11,8 @@ test('slow subscriptions, live updates, cancelled navigation and large classroom
  w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
  const $=s=>w.document.querySelector(s),click=s=>$(s).click(),submit=s=>$(s).dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
  const wait=async fn=>{for(let i=0;i<1000;i++){await new Promise(r=>setTimeout(r,10));if(fn())return;}throw Error('Condition not reached: '+w.document.body.textContent.slice(-1000));};
- const api=await import('../backend-demo.js');let holdOrders=false,pendingOrders=[],slowProfile=null,failSave=false,saveGate=null,orderStatus=null;
- globalThis.__resilienceApi={...api,saveOrder:async(...args)=>{if(saveGate)await saveGate;if(failSave)throw Error('Test connection unavailable');return api.saveOrder(...args);},watchOrders:(code,uid,fn,error,status)=>{orderStatus=status;return api.watchOrders(code,uid,o=>{if(holdOrders)pendingOrders.push(()=>fn(o));else fn(o);},error);},getProfile:()=>slowProfile||api.getProfile()};
+ const api=await import('../backend-demo.js');let holdOrders=false,pendingOrders=[],slowProfile=null,failSave=false,saveGate=null,ackGate=null,orderStatus=null;
+ globalThis.__resilienceApi={...api,saveOrder:async(...args)=>{if(saveGate)await saveGate;if(failSave)throw Error('Test connection unavailable');const result=await api.saveOrder(...args);if(ackGate)await ackGate;return result;},watchOrders:(code,uid,fn,error,status)=>{orderStatus=status;return api.watchOrders(code,uid,o=>{if(holdOrders)pendingOrders.push(()=>fn(o));else fn(o);},error);},getProfile:()=>slowProfile||api.getProfile()};
 
  let source=readFileSync('main.js','utf8').replace(/api=await import\(demo\?'\.\/backend-demo\.js':'\.\/backend\.js\?v=[^']+'\)/,"api=globalThis.__resilienceApi");
  source=source.replace(/from '(\.\/[^']+)'/g,(_,p)=>'from '+JSON.stringify(new URL('../'+p.slice(2),import.meta.url).href));
@@ -44,6 +44,26 @@ test('slow subscriptions, live updates, cancelled navigation and large classroom
   const realNow=Date.now;Date.now=()=>realNow()+95000;
   try{w.document.dispatchEvent(new w.Event('visibilitychange'));assert.equal($('#order-form [name=quantity]'),null);assert.ok($('#order-form [name=cap]'));assert.equal($('#order-form [name=cap]').value,'0');}finally{Date.now=realNow;w.dispatchEvent(new w.Event('pageshow'));}
   assert.equal($('#order-form [name=quantity]').value,'151');
+ });
+ await t.test('a rejected save crossing the deadline keeps the confirmed decision and explains the rejection',async()=>{
+  const realNow=Date.now;let release;saveGate=new Promise(resolve=>release=resolve);failSave=true;
+  $('#order-form [name=quantity]').value='161';submit('#order-form');await wait(()=>$('.save-state')?.dataset.state==='saving');
+  try{
+   Date.now=()=>realNow()+95000;w.document.dispatchEvent(new w.Event('visibilitychange'));
+   assert.match($('#app').textContent,/Confirming your previous decision/);assert.equal($('#order-form'),null);assert.match($('#app').textContent,/151 units/);
+   release();await wait(()=>$('#order-form [name=cap]'));assert.match($('#notice').textContent,/deadline.*not accepted/);assert.doesNotMatch($('#notice').textContent,/edits are still here|may revise/);assert.match($('.save-state').textContent,/151 units/);
+  }finally{release();saveGate=null;failSave=false;Date.now=realNow;w.dispatchEvent(new w.Event('pageshow'));}
+  assert.equal($('#order-form [name=quantity]').value,'151');
+ });
+ await t.test('a delayed successful acknowledgement cannot overwrite a newer confirmed save',async()=>{
+  const realNow=Date.now;let release;ackGate=new Promise(resolve=>release=resolve);
+  $('#order-form [name=quantity]').value='155';submit('#order-form');await wait(()=>$('.save-state')?.dataset.state==='saving');
+  await api.saveOrder(code,0,{variety:4,quantity:163,cap:0});
+  try{
+   Date.now=()=>realNow()+95000;w.document.dispatchEvent(new w.Event('visibilitychange'));assert.match($('#app').textContent,/Confirming your previous decision/);
+   release();await wait(()=>$('#order-form [name=cap]'));assert.match($('#notice').textContent,/accepted.*before its deadline.*locked/);assert.match($('.save-state').textContent,/163 units/);
+  }finally{release();ackGate=null;Date.now=realNow;w.dispatchEvent(new w.Event('pageshow'));}
+  assert.equal($('#order-form [name=quantity]').value,'163');
  });
  let resolveProfile;slowProfile=new Promise(resolve=>{resolveProfile=resolve;});click('#my-profile');
  // Signing out from another tab can arrive while the profile request is pending.

@@ -16,7 +16,7 @@ test('five-field registration, verification gate, profile edits and security con
  submit('#auth-form');await wait(()=>$('#verified')&&$('#notice').textContent.includes('Account created'));
  assert.equal($('#join'),null);assert.equal($('#password').value,'');assert.equal((await api.getProfile()).universityId,'U123');
  click('#verified');await wait(()=>$('#notice').textContent.includes('not verified yet'));assert.equal($('#join'),null);
- click('#resend');await wait(()=>$('#notice').textContent.includes('Verification email sent'));
+ click('#resend');await wait(()=>$('#verification-status').textContent.includes('Verification email sent'));
  await api.saveProfile({platformRegistration:{email:'ada@example.test',industry:'Education',age:'30'}});
  click('#my-profile');await wait(()=>$('#profile-form'));assert.match(w.document.body.textContent,/Education/);
  $('#profile-form [name=firstName]').value='Updated';submit('#profile-form');await wait(()=>$('#notice').textContent==='Profile saved.');assert.equal((await api.getProfile()).platformRegistration.industry,'Education');
@@ -26,5 +26,5 @@ test('five-field registration, verification gate, profile edits and security con
  click('#profile-home');await wait(()=>$('#join'));assert.equal($('#join [name=name]').value,'Updated Lovelace');
  click('.brand');await wait(()=>$('#join'));click('#out');await wait(()=>$('#open-login'));
  click('#open-login');click('[data-auth=reset]');assert.equal($('#first-name').required,false);assert.equal($('#password').required,false);
- $('#email').value='ada@example.test';submit('#auth-form');await wait(()=>$('#auth-error').textContent.includes('check its inbox'));
+ $('#email').value='ada@example.test';submit('#auth-form');await wait(()=>$('#auth-status').textContent.includes('check its inbox'));
 });

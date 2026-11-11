@@ -57,7 +57,7 @@ export async function saveTeams(code,assignments,teamNames){
   tx.update(ref,{assignments,teamNames});
  });
 }
-export async function readMarketOrders(code,captains,rounds){return Object.fromEntries(await Promise.all(captains.map(async uid=>[uid,Object.fromEntries(await Promise.all(rounds.map(async r=>{const d=await getDocFromServer(doc(db,'sessions',code,'participants',uid,'orders',String(r)));return [r,d.exists()?d.data():null];})))])));}
+export async function readMarketOrders(code,captains,rounds){return Object.fromEntries(await Promise.all(captains.map(async uid=>[uid,Object.fromEntries(await Promise.all(rounds.map(async r=>{const d=await getDocFromServer(doc(db,'sessions',code,'participants',uid,'orders',String(r)));if(d.metadata.hasPendingWrites)throw Object.assign(new Error('Waiting for the server to confirm a decision.'),{code:'unavailable'});return [r,d.exists()?d.data():null];})))])));}
 export const closeSession=code=>updateDoc(doc(db,'sessions',code),{status:'closed',closedAt:serverTimestamp()});
 export async function joinSession(code,name){
  const uid=currentUser().uid,email=currentUser().email,sessionRef=doc(db,'sessions',code),participantRef=doc(db,'sessions',code,'participants',uid);
@@ -76,7 +76,7 @@ export async function joinSession(code,name){
 }
 export const watchOrders=(code,uid,fn,error,status)=>onSnapshot(collection(db,'sessions',code,'participants',uid,'orders'),{includeMetadataChanges:true},s=>{const fresh=!s.metadata.hasPendingWrites&&!s.metadata.fromCache;status?.(fresh);if(fresh)fn(Object.fromEntries(s.docs.map(d=>[d.id,d.data()])));},error);
 export const watchParticipants=(code,fn,error)=>onSnapshot(collection(db,'sessions',code,'participants'),{includeMetadataChanges:true},s=>{if(!s.metadata.fromCache&&!s.metadata.hasPendingWrites)fn(s.docs.map(d=>({uid:d.id,...d.data()})));},error);
-export const saveOrder=(code,index,order)=>setDoc(doc(db,'sessions',code,'participants',currentUser().uid,'orders',String(index)),{...order,savedAt:serverTimestamp()});
+export const saveOrder=(code,index,order,phase='plan')=>setDoc(doc(db,'sessions',code,'participants',currentUser().uid,'orders',String(index)),{...order,phase,savedAt:serverTimestamp()});
 export async function readOrders(code,uid){return Object.fromEntries((await getDocs(collection(db,'sessions',code,'participants',uid,'orders'))).docs.map(d=>[d.id,d.data()]));}
 
 export const readParticipants=async code=>(await getDocs(collection(db,'sessions',code,'participants'))).docs.map(d=>({uid:d.id,...d.data()}));

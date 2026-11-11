@@ -8,7 +8,7 @@ const config={demandMean:480,demandSd:96,forecastSd:.2,rebound:.2,price:40,initi
 const db=(uid,email=uid+'@example.test',verified=true)=>env.authenticatedContext(uid,{email,email_verified:verified}).firestore();
 const admin=()=>db('admin','kstouras@gmail.com');
 const path=(uid='alice',r='0')=>`sessions/ABCDEFGH/participants/${uid}/orders/${r}`;
-const order=(more={})=>({variety:4,quantity:80,cap:0,savedAt:serverTimestamp(),...more});
+const order=(more={})=>({variety:4,quantity:80,cap:0,phase:'plan',savedAt:serverTimestamp(),...more});
 async function seed(elapsed=null,extra={}){await env.withSecurityRulesDisabled(async c=>{const d=c.firestore();await setDoc(doc(d,'instructors/teacher@example.test'),{createdAt:Timestamp.now()});await setDoc(doc(d,'sessions/ABCDEFGH'),{name:'QA',owner:'teacher',config,seed:42,status:elapsed===null?'lobby':'running',createdAt:Timestamp.now(),startedAt:elapsed===null?null:Timestamp.fromMillis(Date.now()-elapsed*1000),closedAt:null,...extra});for(const uid of ['alice','bob'])await setDoc(doc(d,`sessions/ABCDEFGH/participants/${uid}`),{name:uid,email:uid+'@example.test',joinedAt:Timestamp.now()});});}
 before(async()=>{env=await initializeTestEnvironment({projectId:'demo-fashion-futures',firestore:{host:'127.0.0.1',port:8180,rules:fs.readFileSync('firestore.rules','utf8')}});});
 beforeEach(async()=>{await env.clearFirestore();});
@@ -20,7 +20,7 @@ test('only admin grants instructors and edits defaults; unverified admin denied'
 test('session creation validates role, ownership and config',async()=>{await seed();const s={name:'Test',owner:'teacher',config,seed:10,status:'lobby',createdAt:serverTimestamp(),startedAt:null,closedAt:null};await assertSucceeds(setDoc(doc(db('teacher'),'sessions/BCDEFGHJ'),s));await assertFails(setDoc(doc(db('alice'),'sessions/CDEFGHJK'),{...s,owner:'alice'}));await assertFails(setDoc(doc(db('teacher'),'sessions/CDEFGHJK'),{...s,config:{...config,demandSd:-2}}));});
 test('session owner controls start; settings and timestamp cannot be forged',async()=>{await seed();await assertFails(updateDoc(doc(db('alice'),'sessions/ABCDEFGH'),{status:'running',startedAt:serverTimestamp()}));await assertSucceeds(updateDoc(doc(db('teacher'),'sessions/ABCDEFGH'),{status:'running',startedAt:serverTimestamp()}));await assertFails(updateDoc(doc(db('teacher'),'sessions/ABCDEFGH'),{config:{...config,rebound:1}}));await assertFails(updateDoc(doc(db('teacher'),'sessions/ABCDEFGH'),{startedAt:serverTimestamp()}));});
 test('own in-window initial order allowed; forged totals, decimals and another uid denied',async()=>{await seed(20);const d=db('alice');await assertSucceeds(setDoc(doc(d,path()),order()));await assertFails(setDoc(doc(d,path()),order({profit:999999})));await assertFails(setDoc(doc(d,path()),order({quantity:4.5})));await assertFails(setDoc(doc(d,path()),order({variety:8})));await assertFails(setDoc(doc(d,path('bob')),order()));});
-test('replenishment can change only cap; missing plan uses locked defaults',async()=>{await seed(20);const d=db('alice');await assertSucceeds(setDoc(doc(d,path()),order({quantity:70})));await seed(110);await assertSucceeds(setDoc(doc(d,path()),order({quantity:70,cap:60})));await assertFails(setDoc(doc(d,path()),order({quantity:100,cap:60})));await assertSucceeds(setDoc(doc(db('bob'),path('bob')),order({cap:50})));await assertFails(setDoc(doc(db('bob'),path('bob')),order({quantity:90,cap:50})));});
+test('replenishment can change only cap; missing plan uses locked defaults',async()=>{await seed(20);const d=db('alice');await assertSucceeds(setDoc(doc(d,path()),order({quantity:70})));await seed(110);await assertSucceeds(setDoc(doc(d,path()),order({quantity:70,cap:60,phase:'respond'})));await assertFails(setDoc(doc(d,path()),order({quantity:100,cap:60,phase:'respond'})));await assertSucceeds(setDoc(doc(db('bob'),path('bob')),order({cap:50,phase:'respond'})));await assertFails(setDoc(doc(db('bob'),path('bob')),order({quantity:90,cap:50,phase:'respond'})));});
 test('closed, expired, future and traditional-response decisions rejected',async()=>{await seed(200);await assertFails(setDoc(doc(db('alice'),path()),order()));await assertFails(setDoc(doc(db('alice'),path('alice','2')),order()));await assertSucceeds(setDoc(doc(db('alice'),path('alice','1')),order()));await assertFails(setDoc(doc(db('alice'),path('alice','1')),order({cap:1})));await seed(1090);await assertFails(setDoc(doc(db('alice'),path('alice','3')),order({variety:8})));await seed(20,{status:'closed',closedAt:Timestamp.now()});await assertFails(setDoc(doc(db('alice'),path()),order()));});
 test('instructors cannot read another instructor roster; admin can',async()=>{await seed();await env.withSecurityRulesDisabled(c=>setDoc(doc(c.firestore(),'instructors/other@example.test'),{createdAt:Timestamp.now()}));await assertSucceeds(getDocs(collection(db('teacher'),'sessions/ABCDEFGH/participants')));await assertFails(getDocs(collection(db('other'),'sessions/ABCDEFGH/participants')));await assertSucceeds(getDocs(collection(admin(),'sessions/ABCDEFGH/participants')));});
 
@@ -88,4 +88,46 @@ test('deletion is limited to closed sessions and their owning instructor or plat
  for(const actor of [db('alice'),db('other'),db('teacher','teacher@example.test',false)])for(const p of [path(),'sessions/ABCDEFGH/participants/alice','profiles/alice/sessions/ABCDEFGH','sessions/ABCDEFGH'])await assertFails(deleteDoc(doc(actor,p)));
  const d=db('teacher'),batch=writeBatch(d);for(const p of [path(),'profiles/alice/sessions/ABCDEFGH','sessions/ABCDEFGH/participants/alice'])batch.delete(doc(d,p));await assertSucceeds(batch.commit());await assertSucceeds(deleteDoc(doc(d,'sessions/ABCDEFGH')));
  await seed(50,{status:'closed',closedAt:Timestamp.now()});await assertSucceeds(deleteDoc(doc(admin(),'sessions/ABCDEFGH')));
+});
+
+
+test('a delayed initial save cannot reset a replenishment decision, including default quantities',async()=>{
+ const team={mode:'team',assignments:{alice:'alice',bob:'alice'},teamNames:{alice:'A'}},captain=db('alice'),mate=db('bob');
+ await seed(20,team);await assertSucceeds(setDoc(doc(captain,path()),order()));
+ await seed(110,team);await assertSucceeds(setDoc(doc(captain,path()),order({phase:'respond',cap:55})));
+ await assertFails(setDoc(doc(captain,path()),order()));
+ const legacy=order();delete legacy.phase;await assertFails(setDoc(doc(captain,path()),legacy));
+ assertEqual((await getDoc(doc(mate,path()))).data().cap,55);
+ await assertSucceeds(setDoc(doc(captain,path()),order({phase:'respond',cap:0})));
+ await seed(181,team);await assertFails(setDoc(doc(captain,path()),order({phase:'respond',cap:99})));
+ assertEqual((await getDoc(doc(mate,path()))).data().cap,0);
+});
+
+test('every initial and replenishment deadline rejects expired and mismatched phases',async()=>{
+ const windows=[['0',0,90,180],['1',180,420,420],['2',420,540,660],['3',660,810,960]];
+ for(const [r,start,split,end] of windows){
+  await seed(start+10);const ref=doc(db('alice'),path('alice',r));await assertSucceeds(setDoc(ref,order({quantity:91})));
+  await assertFails(setDoc(ref,order({quantity:91,phase:'respond'})));
+  await seed(split+1);await assertFails(setDoc(ref,order({quantity:91})));
+  if(split<end){await assertSucceeds(setDoc(ref,order({quantity:91,phase:'respond',cap:42})));await seed(end+1);await assertFails(setDoc(ref,order({quantity:91,phase:'respond',cap:90})));assertEqual((await getDoc(ref)).data().cap,42);}
+  else assertEqual((await getDoc(ref)).data().quantity,91);
+ }
+});
+
+test('offline captain writes arriving after lock are rejected and teammates retain the confirmed order',async()=>{
+ const {disableNetwork,enableNetwork,onSnapshot}=require('firebase/firestore');
+ const team={mode:'team',assignments:{alice:'alice',bob:'alice'},teamNames:{alice:'A'}},captain=db('alice'),mate=db('bob'),ref=doc(captain,path());
+ const wait=async fn=>{for(let i=0;i<200;i++){if(fn())return;await new Promise(r=>setTimeout(r,25));}throw Error('Timed out waiting for teammate');};
+ await seed(20,team);await assertSucceeds(setDoc(ref,order({quantity:120})));
+ let seen=[];const stop=onSnapshot(doc(mate,path()),{includeMetadataChanges:true},snap=>{if(!snap.metadata.fromCache&&!snap.metadata.hasPendingWrites&&snap.exists())seen.push(snap.data());});
+ try{
+  await wait(()=>seen.length);await disableNetwork(captain);
+  const rejected=assertFails(setDoc(ref,order({quantity:170})));
+  await seed(110,team);await enableNetwork(captain);await rejected;
+  assertEqual((await getDoc(doc(mate,path()))).data().quantity,120);assertEqual(seen.some(o=>o.quantity===170),false);
+  await assertSucceeds(setDoc(ref,order({quantity:120,phase:'respond',cap:35})));await wait(()=>seen.some(o=>o.cap===35));
+  await disableNetwork(captain);const lateResponse=assertFails(setDoc(ref,order({quantity:120,phase:'respond',cap:100})));
+  await seed(181,team);await enableNetwork(captain);await lateResponse;
+  const locked=(await getDoc(doc(mate,path()))).data();assertEqual(locked.quantity,120);assertEqual(locked.cap,35);assertEqual(seen.some(o=>o.cap===100),false);
+ }finally{await enableNetwork(captain);stop();}
 });
