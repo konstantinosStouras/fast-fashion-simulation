@@ -39,10 +39,10 @@ header:has(#account) #theme-toggle{width:38px;min-width:38px;min-height:38px;hei
 .session-created{margin:0}
 .studio-session-card .button-row{gap:8px;margin-top:20px}
 .studio-session-card .button-row button{flex:0 1 auto;padding:12px 14px;font-size:13px;min-height:46px;border-radius:12px}
-.studio-session-card [data-session]{background:var(--primary);border-color:var(--primary);color:var(--on-primary)}
-.studio-session-card [data-session]:hover:not(:disabled){background:var(--primary-hover);border-color:var(--primary-hover)}
-button.export-button{background:var(--positive);border-color:var(--positive);color:#fff}
-button.export-button:hover:not(:disabled){background:#1b633d;border-color:#1b633d;color:#fff}
+.studio-session-card [data-session]{background:var(--positive);border-color:var(--positive);color:#fff}
+.studio-session-card [data-session]:hover:not(:disabled){background:#1b633d;border-color:#1b633d;color:#fff}
+button.export-button{background:#245da3;border-color:#245da3;color:#fff}
+button.export-button:hover:not(:disabled){background:#194980;border-color:#194980;color:#fff}
 button.danger{color:var(--danger);border-color:var(--danger)}
 button.danger:hover:not(:disabled){background:var(--danger);border-color:var(--danger);color:var(--paper)}
 #card-export-status:not(:empty){padding:14px 0;font-size:13px;overflow-wrap:anywhere}
@@ -74,3 +74,4 @@ button.danger:hover:not(:disabled){background:var(--danger);border-color:var(--d
  .session-identity{gap:10px}
  #theme-toggle{font-size:12px}
 }
+.studio-session-card button.secondary[data-card-link], .studio-session-card button.secondary[data-card-link]:hover:not(:disabled){background:transparent;border-color:var(--positive);color:var(--positive)}

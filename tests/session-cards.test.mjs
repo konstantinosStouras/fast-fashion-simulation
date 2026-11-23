@@ -19,8 +19,8 @@ test('session cards show counts, export directly, rehearse privately, close and 
  t.after(async()=>{await api.logout();await new Promise(r=>setTimeout(r,20));w.close();URL.createObjectURL=created;URL.revokeObjectURL=revoke;});
  await api.loginGoogle();await import('../main.js?session-cards');await wait(()=>$('[data-participant-count="ACTIVEAA"]')?.textContent==='1 participant');
  const labels=id=>Array.from($(id).querySelectorAll('button'),b=>b.textContent.trim());
- assert.deepEqual(labels('#active-sessions'),['Open','Copy link','↓ Export data','🧪 Test round','Close session','Delete']);
- assert.deepEqual(labels('#past-sessions'),['Open','↓ Export data','🧪 Test round','Delete']);
+ assert.deepEqual(labels('#active-sessions'),['Open','Copy link','↓ Export data','Test','Close','Delete']);
+ assert.deepEqual(labels('#past-sessions'),['Open','↓ Export data','Test','Delete']);
  assert.match($('#past-sessions').textContent,/Completed.*1 participant/s);
  assert.doesNotMatch($('#app').textContent,/Preview as student/);
  $('[data-card-export="PASTAAAA"]').click();await wait(()=>download);
