@@ -1,5 +1,5 @@
 import {DEFAULT_ORDER, validOrder, validateConfig} from './model.js';
-import {sharedMarket} from './market.js';
+import {sharedMarket} from './market.js?v=home-practice-1';
 
 const maxUnits = 200;
 const units = value => Math.min(maxUnits, Math.max(0, Math.round(value)));

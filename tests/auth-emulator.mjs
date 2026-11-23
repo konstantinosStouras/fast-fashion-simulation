@@ -64,7 +64,14 @@ test('real backend registration stores profile and sends a working verification 
  await t.test('start uses joined members of the numbered team roster and deletion clears previously prepared opponents',async()=>{
   const config=(await import('../model.js')).DEFAULT_CONFIG;
   const aiOpponent={provider:'openai',model:'test-model',practice:false,main:true};
-  const code=await api.createSession('Numbered team roster',config,'team',undefined,aiOpponent);
+  const defaults=db=>doc(db,'studioTeamDefaults',uid);
+  await env.withSecurityRulesDisabled(c=>setDoc(defaults(c.firestore()),{teamComposition:{savedFirst:'1',savedSecond:'1'}}));
+  const code=await api.createSession('Numbered team roster',config,'team',undefined,aiOpponent,1);
+  const created=(await getDoc(doc(getFirestore(app),'sessions',code))).data();
+  assert.equal(created.teamSize,1);
+  assert.deepEqual(created.teamComposition,{savedFirst:'1'});
+  assert.deepEqual((await getDoc(defaults(getFirestore(app)))).data().teamComposition,{savedFirst:'1',savedSecond:'1'});
+  await env.withSecurityRulesDisabled(c=>setDoc(defaults(c.firestore()),{teamComposition:{}}));
   await api.joinSession(code,'Captain');
   const room=db=>doc(db,'sessions',code);
   const strategy=db=>doc(db,'sessions',code,'participants',uid,'aiOpponents','main');

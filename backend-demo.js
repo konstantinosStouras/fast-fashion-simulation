@@ -1,13 +1,14 @@
 import {decisionOwner,validateTeams} from './competition.js';
 import {legacyPhaseOffset,nextPhaseOffset,sessionProgress} from './functions/session-progress.js';
-import {makeTeamOpponents,teamMatchup} from './market.js';
+import {makeTeamOpponents,teamMatchup} from './market.js?v=home-practice-1';
 // Test harness, selected only on loopback hosts with ?demo. Never real authentication.
 import {platformHandoff} from './profile.js';
 import {loginEmailAddress,assertAccountEmail,ADMIN_ACCOUNT_EMAIL} from './auth-identity.js';
 import {validateConfig,DEFAULT_CONFIG,phaseAt} from './model.js';
 import {rehearsalAiOrders} from './ai-rehearsal.js';
-import {assignJoiningTeam,DEFAULT_TEAM_SIZE,getTeamComposition,materializeTeams,validTeamSize} from './functions/teams.js';
+import {assignJoiningTeam,defaultTeamComposition,DEFAULT_TEAM_SIZE,getTeamComposition,materializeTeams,validTeamSize} from './functions/teams.js';
 import {summarizeUserClassroom} from './functions/user-classrooms.js';
+import {planRegisteredUserRemoval,protectedRegisteredUser,validDeletionBatch} from './functions/registered-user-classroom.js';
 import {requireSessionCode,sessionCodeTaken} from './session-code.js';
 const KEY='ff:demo:v1';let user=null;const authListeners=new Set(),listeners=new Set();
 function load(){
@@ -27,8 +28,14 @@ addEventListener('storage',e=>{if(e.key===KEY)listeners.forEach(fn=>fn());});
 export const currentUser=()=>user;
 export const observeAuth=fn=>{authListeners.add(fn);queueMicrotask(()=>fn(user));return ()=>authListeners.delete(fn);};
 async function login(email,emailVerified=true){
- user={uid:email==='kstouras@gmail.com'?'demo-admin':'demo-'+email,email,emailVerified,displayName:email==='kstouras@gmail.com'?'Demo instructor':'Demo participant'};
  const d=load(),now=new Date().toISOString();
+ let uid=d.demoAccountIds?.[email] || (email==='kstouras@gmail.com'?'demo-admin':'demo-'+email);
+ if(d.deletedAccounts?.[uid]){
+  d.demoAccountIds??={};
+  uid=crypto.randomUUID();
+  d.demoAccountIds[email]=uid;
+ }
+ user={uid,email,emailVerified,displayName:email==='kstouras@gmail.com'?'Demo instructor':'Demo participant'};
  d.accountActivity??={};
  const activity=d.accountActivity[user.uid]??={registeredAt:d.registered?.[user.uid]||d.verifiedAccounts?.[user.uid]?null:now};
  activity.lastSignInAt=now;
@@ -110,8 +117,11 @@ export async function createSession(name,config,mode='individual',requestedCode,
   if(Object.hasOwn(d.sessions,code))throw sessionCodeTaken(code);
  }
  d.sessions[code]={code,name,config,mode,assignments:{},teamNames:{},seed:Math.floor(Math.random()*1000001),owner:user.uid,status:'lobby',createdAt:Date.now(),startedAt:null,closedAt:null};
- if(mode==='team')Object.assign(d.sessions[code],{teamPractice:true,teamSize,rosterVersion:0});
- else if(aiOpponent?.practice||aiOpponent?.main)d.sessions[code].aiOpponent={...aiOpponent};
+ if(mode==='team'){
+  Object.assign(d.sessions[code],{teamPractice:true,teamSize,rosterVersion:0});
+  const defaults=defaultTeamComposition(d.studioTeamDefaults?.[user.uid],teamSize);
+  if(Object.keys(defaults).length)d.sessions[code].teamComposition=defaults;
+ }else if(aiOpponent?.practice||aiOpponent?.main)d.sessions[code].aiOpponent={...aiOpponent};
  write(d);
  return code;
 }
@@ -121,15 +131,70 @@ export async function listTeamUsers(pageToken){
  await requireStudio();
  const d=load(),accounts={...d.verifiedAccounts,...d.registered};
  const people=Object.values(d.people).flatMap(roster=>Object.values(roster));
- for(const p of people)accounts[p.uid]??=p.email;
+ for(const p of people)if(!d.deletedAccounts?.[p.uid])accounts[p.uid]??=p.email;
+ const platformOwner=await role()==='admin';
+ const playedRooms=Object.values(d.sessions).filter(room=>!room.deletedAt && (room.status==='running'||room.startedAt!=null) && (platformOwner||room.owner===user.uid));
  const users=Object.entries(accounts).map(([uid,email])=>{
   const profile=d.profiles?.[uid];
   const name=[profile?.firstName,profile?.lastName].filter(Boolean).join(' ')||people.find(p=>p.uid===uid)?.name||email;
   const activity=d.accountActivity?.[uid];
-  return {uid,email,name,studentId:profile?.universityId||null,registeredAt:activity?.registeredAt||null,lastSignInAt:activity?.lastSignInAt||null};
+  const playedSessionCodes=playedRooms.filter(room=>d.people[room.code]?.[uid] && (room.mode!=='solo'||room.owner===uid)).map(room=>room.code).sort();
+  const deletionProtected=protectedRegisteredUser({uid,email},user.uid);
+  return {uid,email,name,studentId:profile?.universityId||null,registeredAt:activity?.registeredAt||null,lastSignInAt:activity?.lastSignInAt||null,playedSessionCodes,deletionProtected};
  }).sort((a,b)=>a.uid.localeCompare(b.uid));
  const start=Number(pageToken)||0,end=start+100;
  return {users:users.slice(start,end),nextPageToken:end<users.length?String(end):null};
+}
+
+export async function deleteRegisteredUsers(uids) {
+ if(await role()!=='admin')throw Error('Only the platform owner can delete registered users.');
+ if(!validDeletionBatch(uids))throw Error('Choose between one and ten distinct registered users.');
+ const data=load(), ownerUid=user.uid;
+ const accounts={...data.verifiedAccounts,...data.registered};
+ for(const roster of Object.values(data.people))for(const person of Object.values(roster))
+  if(!data.deletedAccounts?.[person.uid])accounts[person.uid]??=person.email;
+ const protectedUids=uids.filter(uid=>protectedRegisteredUser({uid,email:accounts[uid]},ownerUid));
+ const deletedUids=uids.filter(uid=>!protectedUids.includes(uid));
+ const deleting=new Set(deletedUids.filter(uid=>Object.hasOwn(accounts,uid)));
+ for(const room of Object.values(data.sessions)) {
+  const code=room.code;
+  for(const uid of deleting) {
+   const plan=planRegisteredUserRemoval(room,uid,ownerUid,deleting);
+   if(plan.deleteSession) {
+    delete data.sessions[code];delete data.people[code];delete data.orders[code];
+    if(data.aiOrders)delete data.aiOrders[code];
+    break;
+   }
+   Object.assign(room,plan.updates);
+   const member=data.people[code]?.[uid];
+   if(!member)continue;
+   if(room.status==='lobby')room.rosterVersion=(room.rosterVersion||0)+1;
+   if(plan.keepTeamResult) {
+    data.people[code][uid]={uid,name:'Deleted user',email:'',...(member.joinedAt?{joinedAt:member.joinedAt}:{})};
+    continue;
+   }
+   for(const decisions of [data.orders[code],data.aiOrders?.[code]]) {
+    if(!decisions)continue;
+    if(room.status==='running' && plan.replacementCaptain) {
+     if(decisions[uid])decisions[plan.replacementCaptain]=decisions[uid];
+     else delete decisions[plan.replacementCaptain];
+    }
+    delete decisions[uid];
+   }
+   delete data.people[code][uid];
+  }
+ }
+ data.deletedAccounts??={};
+ for(const uid of deleting) {
+  data.deletedAccounts[uid]=true;
+  data.instructors=data.instructors.filter(email=>email!==accounts[uid]);
+  if(data.demoAccountIds)delete data.demoAccountIds[accounts[uid]];
+  for(const records of [data.registered,data.verifiedAccounts,data.profiles,data.aiSettings,data.accountActivity,data.studioTeamDefaults])
+   if(records)delete records[uid];
+  for(const roster of Object.values(data.studioTeamDefaults||{}))delete roster[uid];
+ }
+ if(deleting.size)write(data);
+ return {deletedUids,protectedUids};
 }
 export async function getUserClassrooms(uid){
  await requireStudio();
@@ -141,17 +206,35 @@ export async function getUserClassrooms(uid){
   .filter(Boolean);
  return {sessions};
 }
-export async function saveTeamComposition(code,changes){
- await requireStudio();
- const d=load(),s=d.sessions[code];
- if(!s||s.status!=='lobby'||s.mode!=='team'||s.owner!==user.uid&&await role()!=='admin')throw Error('Choose a waiting team classroom that you manage.');
- const composition=s.teamComposition!=null?{...s.teamComposition}:s.teamSize==null?getTeamComposition(s):{};
+function applyTeamChanges(composition,changes,d,maxSize=20){
  for(const [uid,n] of Object.entries(changes)){
+  if(n!==null && (d.deletedAccounts?.[uid]||!(d.registered?.[uid] || d.verifiedAccounts?.[uid] || Object.values(d.people).some(roster=>roster[uid]))))throw Error('A selected account no longer exists. Refresh the directory.');
   if(n===null)delete composition[uid];else if(typeof n==='string' && /^([1-9]\d?|100)$/.test(n))composition[uid]=n;else throw Error('Choose a team from 1 to 100.');
  }
  const counts=new Map();
  for(const n of Object.values(composition))counts.set(n,(counts.get(n)||0)+1);
- if(Object.keys(composition).length>500||[...counts.values()].some(n=>n>(s.teamSize??20)))throw Error('Keep each team at or below its configured size.');
+ if(Object.keys(composition).length>500||[...counts.values()].some(n=>n>maxSize))throw Error('Keep each team at or below its configured size and the classroom within 500 users.');
+ return composition;
+}
+export async function getDefaultTeamComposition(){
+ await requireStudio();
+ return {teamComposition:load().studioTeamDefaults?.[user.uid] || {}};
+}
+export async function saveDefaultTeamComposition(changes){
+ await requireStudio();
+ const d=load();
+ d.studioTeamDefaults??={};
+ const teamComposition=applyTeamChanges({...d.studioTeamDefaults[user.uid]},changes,d);
+ d.studioTeamDefaults[user.uid]=teamComposition;
+ write(d);
+ return {teamComposition};
+}
+export async function saveTeamComposition(code,changes){
+ await requireStudio();
+ const d=load(),s=d.sessions[code];
+ if(!s||s.status!=='lobby'||s.mode!=='team'||s.owner!==user.uid&&await role()!=='admin')throw Error('Choose a waiting team classroom that you manage.');
+ const planned=s.teamComposition!=null?{...s.teamComposition}:s.teamSize==null?getTeamComposition(s):{};
+ const composition=applyTeamChanges(planned,changes,d,s.teamSize??20);
  s.teamComposition=composition;
  const teams=materializeTeams(Object.values(d.people[code]||{}),s);
  Object.assign(s,teams);write(d);return {teamComposition:composition,...teams};

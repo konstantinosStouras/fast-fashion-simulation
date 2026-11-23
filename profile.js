@@ -1,5 +1,5 @@
 import {sessionProgress} from './functions/session-progress.js?v=home-practice-1';
-import {competitorResult} from './market.js?v=ai-opponents-1';
+import {competitorResult} from './market.js?v=home-practice-1';
 import {ROUNDS} from './model.js';
 export const PLATFORM_FIELDS=['name','email','studentId','age','gender','nationality','country','levelOfStudy','workExperience','occupation','industry','englishFluency','createdAt','updatedAt'];
 export const profileComplete=p=>!!(p?.firstName?.trim()&&p?.lastName?.trim()&&p?.universityId?.trim());

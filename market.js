@@ -1,7 +1,7 @@
 // Shared-market competition: customers choose a team/style, then switch if it stocks out.
 // Fixed prices; every additional style adds choice weight. Demand exists only once.
 import {DEFAULT_ORDER,ROUNDS,demandFor,resultFor,signalFor,validOrder} from './model.js';
-export {makeTeamOpponents} from './functions/teams.js';
+export {makeTeamOpponents} from './functions/teams.js?v=home-practice-1';
 function randomFor(seed){return ()=>{seed=(Math.imul(1664525,seed)+1013904223)>>>0;return seed/4294967296;};}
 function choose(items,u){const total=items.reduce((n,p)=>n+p.weight,0);let value=u*total;return items.find(p=>(value-=p.weight)<0)||items.at(-1);}
 export function sharedMarket(seed,index,teamOrders,config){
@@ -53,6 +53,7 @@ export function teamMatchups(session){
 const cache=new Map();
 export function aiActive(session,index){
  if(!Number.isInteger(index)||index<0||index>=ROUNDS.length)return false;
+ if(session.mode==='team'&&session.teamPractice===true)return false;
  return session.aiOpponent?.[ROUNDS[index].scored?'main':'practice']===true;
 }
 
@@ -99,7 +100,8 @@ export function teamRound(session,index,allOrders,captain){
  const orders=Object.fromEntries(groups.flat().map(uid=>[uid,allOrders[uid]?.[index]||DEFAULT_ORDER]));
  const paired=usesPairedMarkets(session);
  const {seed,config}=session;
- const key=JSON.stringify([seed,index,config,paired,groups,orders]);
+ const identities=session.marketIdentities||{};
+ const key=JSON.stringify([seed,index,config,paired,groups,orders,identities]);
  if(cache.has(key))return cache.get(key);
 
  const round={teams:{},demand:0,sales:0,lostSales:0};
@@ -111,9 +113,9 @@ export function teamRound(session,index,allOrders,captain){
    round.demand+=result.demand;
    round.sales+=result.sales;
   }else{
-   const marketOrders=Object.fromEntries(group.map(uid=>[uid,orders[uid]]));
+   const marketOrders=Object.fromEntries(group.map(uid=>[identities[uid]||uid,orders[uid]]));
    const market=sharedMarket(seed,index,marketOrders,config);
-   Object.assign(round.teams,market.teams);
+   for(const uid of group)round.teams[uid]=market.teams[identities[uid]||uid];
    round.demand+=market.demand;
    round.sales+=market.sales;
   }

@@ -1,7 +1,7 @@
 import {sessionProgress,hasHomeTeamPractice} from './functions/session-progress.js?v=home-practice-1';
 import {sessionCodeFromUrl} from './auth-flow.js?v=session-codes-1';
 import {normalizeSessionCode,SESSION_CODE_PATTERN} from './session-code.js';
-import {makeTeamOpponents,teamMatchup,aiActive,competitorResult,usesPairedMarkets} from './market.js?v=ai-opponents-1';
+import {makeTeamOpponents,teamMatchup,aiActive,competitorResult,usesPairedMarkets} from './market.js?v=home-practice-1';
 import {rehearsalAiOrders} from './ai-rehearsal.js';
 import {mountTeamPractice,clearTeamPractice} from './team-practice-ui.js';
 import {decisionOwner,groupTeams,validateTeams,leaderboard} from './competition.js?v=home-practice-1';
@@ -175,7 +175,7 @@ async function showProfile(returnCode=null){
   if(returnCode){const entry=[...document.querySelectorAll('[data-history]')].find(b=>b.dataset.history===returnCode);entry?.focus({preventScroll:true});entry?.closest('tr')?.scrollIntoView?.({block:'center',behavior:'auto'});}
  }catch{version===viewVersion&&$('profile-history')&&($('profile-history').textContent='Could not load your history. Reopen My activity & statistics to retry.');}
 }
-function settingsFields(c,controls=false){return `<div class="settings-grid">${SETTINGS.map(([key,label,value,min,max,step,description])=>`<div><label>${label}<input name="${key}" type="number" min="${min}" max="${max}" step="${step}" required value="${c[key]}"><span class="field-description">${description}</span></label>${controls?`<div class="assumption-actions" role="group" aria-label="${label} actions"><button type="button" data-setting="${key}" data-op="save">Save</button><button type="button" data-setting="${key}" data-op="default" ${role==="admin"?"":"disabled"}>Make this the default</button><button type="button" data-setting="${key}" data-op="restore">Restore built-in default</button></div>`:""}</div>`).join('')}</div>`;}
+function settingsFields(c,controls=false){return `<div class="settings-grid">${SETTINGS.map(([key,label,value,min,max,step,description])=>`<div><label>${label}<input name="${key}" type="number" min="${min}" max="${max}" step="${step}" required value="${c[key]}"><span class="field-description">${description}</span></label>${controls?`<div class="assumption-actions" role="group" aria-label="${label} actions"><button type="button" data-setting="${key}" data-op="save">Save</button><button type="button" data-setting="${key}" data-op="default" ${role==="admin"?"":"disabled"}>Make this the default</button><button type="button" data-setting="${key}" data-op="restore">Restore built-in default</button></div><p class="assumption-status" role="status" aria-atomic="true"></p>`:""}</div>`).join('')}</div>`;}
 function readConfig(form){const d=new FormData(form),c=Object.fromEntries(SETTINGS.map(([k])=>[k,Number(d.get(k))]));if(!validateConfig(c))throw new Error('Check the settings. Salvage must not exceed either production cost or selling price.');return c;}
 function sessionCard(s){
  const status=sessionState(s),past=status==='Completed'||status==='Closed',date=s.createdAt?.toMillis(),code=esc(s.code);
@@ -201,7 +201,7 @@ async function showStaffTeams(draft=null,code=null){
  $('app').innerHTML='<h1 class="sr-only">Users &amp; Teams</h1><div id="studio-team-directory"></div>';
  showStudioNavigation('teams',draft);
  const panel=$('studio-team-directory');
- void showTeamsPanel(panel,api,role==='admin',code,roomCode=>action(()=>openSession(roomCode,true))).catch(error=>{if(panel.isConnected)failure(error);});
+ void showTeamsPanel(panel,api,role==='admin',code,roomCode=>action(()=>openSession(roomCode,true)),confirmAction).catch(error=>{if(panel.isConnected)failure(error);});
 }
 async function showStaff(draft=null){clean();staffView=true;setViewAddress('','staff');const version=viewVersion;const [sessions,defaults]=await Promise.all([api.listSessions(role==='admin'),api.getDefaults()]);if(version!==viewVersion)return;
  $('app').innerHTML=`<h1 class="sr-only">Admin</h1><div class="studio-layout"><aside class="studio-options" aria-label="Session setup and admin options"><section class="panel"><p class="eyebrow">01 / DESIGN YOUR SESSION</p><h2>Create a classroom.</h2><form id="create"><label>Session name<input name="name" maxlength="80" required placeholder="Executive MBA · November"></label><label for="classroom-code">Session code</label><input id="classroom-code" name="code" type="text" class="code-input" required minlength="3" maxlength="12" pattern="${SESSION_CODE_PATTERN}" aria-describedby="classroom-code-help classroom-code-status" autocomplete="off" autocapitalize="characters" spellcheck="false"><p id="classroom-code-help" class="hint">Choose a city below or type your own code using 3–12 letters or numbers.</p><div id="city-suggestions" role="group" aria-label="Suggested city codes"></div><p id="classroom-code-status" class="hint" role="status">Checking available cities…</p><label>Play mode<select name="mode" aria-describedby="play-mode-help"><option value="individual">Individual play</option><option value="team">Team competition</option></select><span class="field-description" id="play-mode-help"></span></label><label id="classroom-team-size-field" hidden>Students per team<input name="teamSize" type="number" inputmode="numeric" min="1" max="20" step="1" value="3" required disabled><span class="field-description">Students join teams automatically with the classroom code. If the class does not divide evenly, the last team can be smaller.</span></label>${aiPhaseFields()}<p id="create-ai-model" class="hint" aria-live="polite">Loading the selected AI model…</p><details class="settings"><summary>Market & business assumptions</summary>${settingsFields(defaults,true)}</details><p class="hint">Market assumptions lock when you create the classroom.</p><button>Create session ↗</button><button type="button" id="preview-settings" class="secondary">Test round</button><p class="hint">Rehearse practice and all three seasons at your own pace. Your decisions stay in this tab.<span id="ai-rehearsal-help" hidden> Test round uses a simulated rival. Start a classroom for the selected AI model.</span></p></form></section></aside><div class="studio-sessions" aria-label="Classroom sessions"><section class="panel" aria-labelledby="active-heading"><div class="heading"><h2 id="active-heading">Active sessions</h2><span class="pill" id="active-count"></span></div><p class="hint">Open a waiting or running class to manage participants, follow decisions and export results.</p><div id="card-export-status" role="status" aria-live="polite"></div><button type="button" class="small secondary danger" id="active-delete-all" aria-label="Delete all active sessions" hidden>Delete all</button><div id="active-sessions"></div></section><section class="panel" aria-labelledby="past-heading"><div class="heading"><h2 id="past-heading">Past sessions</h2><span class="pill" id="past-count"></span></div><p class="hint">Review completed or closed classes, export their results, or rehearse with the same assumptions.</p><button type="button" class="small secondary danger" id="past-delete-all" aria-label="Delete all past sessions" hidden>Delete all</button><div id="past-sessions"></div></section></div></div>`;
@@ -212,22 +212,42 @@ async function showStaff(draft=null){clean();staffView=true;setViewAddress('','s
   const saved=document.defaultView.sessionStorage.getItem(storageKey(key));
   if(saved!==null)createForm.elements[key].value=saved;
  }
+ createForm.addEventListener('input',event=>{
+  const status=event.target.closest('.settings-grid > div')?.querySelector('.assumption-status');
+  if(status)status.textContent='';
+ });
  createForm.addEventListener('click',event=>{
   const button=event.target.closest('button[data-setting]');
-  if(!button)return;
+  if(!button || working)return;
   const {setting,op}=button.dataset;
   const input=createForm.elements[setting];
-  if(op==='restore')input.value=DEFAULT_CONFIG[setting];
-  if(!input.reportValidity())return;
-  const value=Number(input.value);
+  const status=button.parentElement.nextElementSibling;
+  const value=op==='restore'?DEFAULT_CONFIG[setting]:Number(input.value);
+  if(op!=='restore' && !input.reportValidity()){
+   status.textContent=input.validationMessage;
+   return;
+  }
   action(async()=>{
-   if(op==='default'){
-    await api.saveDefaultField(setting,value);
-    document.defaultView.sessionStorage.removeItem(storageKey(setting));
-    note('Default saved for future sessions.');
-   }else{
-    document.defaultView.sessionStorage.setItem(storageKey(setting),String(value));
-    note(op==='restore'?'Built-in value restored for this setup.':'Value saved for this setup.');
+   const label=button.textContent;
+   const readOnly=input.readOnly;
+   input.readOnly=true;
+   button.textContent=op==='restore'?'Restoring…':'Saving…';
+   status.textContent=button.textContent;
+   try{
+    if(op==='default'){
+     await api.saveDefaultField(setting,value);
+     document.defaultView.sessionStorage.removeItem(storageKey(setting));
+     status.textContent=value+' saved as the default for future sessions.';
+    }else{
+     document.defaultView.sessionStorage.setItem(storageKey(setting),String(value));
+     if(op==='restore')input.value=value;
+     status.textContent=op==='restore'?'Built-in value restored to '+value+' for this setup.':value+' saved for this setup.';
+    }
+   }catch(error){
+    status.textContent='Could not '+(op==='restore'?'restore':'save')+' this setting. '+(error.message||'Please try again.');
+   }finally{
+    input.readOnly=readOnly;
+    button.textContent=label;
    }
   });
  });

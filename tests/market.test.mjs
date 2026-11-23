@@ -106,6 +106,14 @@ test('activating only practice changes that phase and unavailable AI plans canno
  assert.throws(()=>competitorResult(s,0,orders,'two'),/AI opponent decision/);
 });
 
+test('new team classrooms use their human pairing even with stale provider settings',()=>{
+ const room={mode:'team',status:'running',teamPractice:true,teamNames:{a:'A',b:'B'},teamOpponents:{a:'b',b:'a'},
+  seed:24,config:c,aiOpponent:{practice:true,main:true}};
+ const orders={a:{1:stocked},b:{1:empty}};
+ assert.deepEqual([0,1,2,3].map(i=>aiActive(room,i)),[false,false,false,false]);
+ assert.deepEqual(competitorResult(room,1,orders,'a'),competitorResult({...room,aiOpponent:null},1,orders,'a'));
+});
+
 test('individual profile history scores only completed main rounds with the saved personal opponent',()=>{
  const s={mode:'individual',seed:24,config:c,decisionUid:'student',orders:{1:stocked,2:empty},
   aiOpponent:{practice:false,main:true},aiOrders:{student:{1:stocked}},startedAt:{toMillis:()=>0},closedAt:{toMillis:()=>425000}};

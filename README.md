@@ -38,9 +38,13 @@ Admin entrance: https://www.stouras.com/fast-fashion-simulation/admin/ — Googl
 
 In solo play, the student starts from the signed-in welcome page and advances each phase when ready. Each new game receives a random seed and appears in profile history. In classrooms, the instructor starts and advances the scored simulation for everyone. Advancing locks the preceding phase’s decisions.
 
-**Users & Teams** opens with the registered-user directory. Search by name, email or student ID. Open a person’s entry to see their classrooms, participation status, team and opponent in each phase. Instructors see participation within the classrooms they manage. The platform owner can review participation across classrooms.
+**Users & Teams** lists each registered user and the session codes of the classrooms they joined that went on to start. Search by name, email or student ID. Open a person’s entry to see waiting assignments, participation status, team and opponent in each phase. Instructors see participation within the classrooms they manage. The platform owner can review participation across classrooms.
 
 Choose **Students per team** when you create a team classroom. The default is three and the supported range is 1–20. Students who join with the classroom code are assigned to teams automatically. For example, seven students at the default size form groups of three, three and one. In the waiting classroom you can review the roster, reshuffle joined students or adjust membership, captains and team names. **Users & Teams** also lets you choose a numbered team for a registered student before they join.
+
+Default team assignments can also be saved in **Users & Teams** before a classroom exists. A new team classroom copies these preferences at creation. Students without a preference join the next available group. Select a waiting classroom to edit only that classroom’s assignments.
+
+The platform owner can delete one registered account or all eligible accounts. Bulk deletion covers the full directory, including accounts outside the current search. A confirmation identifies the account or the total before deletion. The owner’s two administrator sign-ins are protected. Deleting an account removes its login and profile. Existing opponents and teammates keep their shared results.
 
 While the classroom is waiting, every joined student can practice at home against the built-in AI. Each student chooses opening stock and replenishment, sees both businesses’ results, and can start another round in a fresh market. Practice is private to the student’s tab and unscored. The built-in opponent runs locally without a provider key.
 

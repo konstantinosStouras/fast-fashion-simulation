@@ -175,8 +175,8 @@ test('directory searches by student ID, shows live matchups and loads scoped cla
  t.after(()=>w.close());
  const $=selector=>panel.querySelector(selector);
  const people=[
-  {uid:'one',name:'A. First',email:'a@demo.test',studentId:'S-210',registeredAt:'2026-05-10T12:00:00Z',lastSignInAt:'2026-05-11T10:00:00Z'},
-  {uid:'two',name:'B. Second',email:'b@demo.test',studentId:'S-211'}
+  {uid:'one',name:'A. First',email:'a@demo.test',studentId:'S-210',registeredAt:'2026-05-10T12:00:00Z',lastSignInAt:'2026-05-11T10:00:00Z',playedSessionCodes:['LIVE','PAST']},
+  {uid:'two',name:'B. Second',email:'b@demo.test',studentId:'S-211',playedSessionCodes:[]}
  ];
  const live={code:'LIVE',name:'Trading class',mode:'team',status:'running',phaseOffset:0,startedAt:Date.now()-1000,assignments:{one:'one',two:'two'},teamNames:{one:'Amber',two:'Blue'},teamOpponents:{one:'two',two:'one'},aiOpponent:{provider:'openai',model:'example',main:true}};
  const pending={code:'WAIT',name:'Next class',mode:'team',status:'lobby',teamComposition:{one:'4'}};
@@ -197,6 +197,10 @@ test('directory searches by student ID, shows live matchups and loads scoped cla
  await showTeamsPanel(panel,api,false,null,code=>{opened=code;});
  assert.equal($('#directory-title').textContent,'Registered users');
  assert.equal($('#directory-count').textContent,'2 registered users');assert.equal(calls,0);
+ assert.deepEqual([...panel.querySelectorAll('.played-session-codes code')].map(code=>code.textContent),['LIVE','PAST']);
+ assert.equal($('.played-session-empty').textContent,'No sessions played');
+ assert.equal($('#delete-all-users'),null);
+ assert.equal($('[data-delete-user]'),null);
  assert.match($('.directory-highlight').textContent,/Trading class.*In progress.*Amber.*Practice.*Blue/);
  $('#team-user-search').value='s-210';$('#team-user-search').dispatchEvent(new w.Event('input'));
  assert.equal(panel.querySelectorAll('.user-entry').length,1);assert.match($('.user-entry').textContent,/A. First.*Student ID · S-210/s);
@@ -227,4 +231,74 @@ test('collapsed rows include active individual and solo sessions without reading
  assert.match(second.textContent,/SELF.*In progress.*Main phase.*Individual play/s);
  assert.doesNotMatch(panel.textContent,/OLD|UNAVAILABLE/);
  assert.ok(second.querySelector('[data-user-details]'));
+});
+
+test('instructor can save default teams without a waiting classroom and edit classroom overrides separately', async t => {
+ const dom=new JSDOM('<main></main>'), w=dom.window, panel=w.document.querySelector('main'), $=selector=>panel.querySelector(selector);
+ t.after(()=>w.close());
+ const roster={one:'1'}, saves=[];
+ const rooms=[];
+ const api={
+  listTeamUsers:async()=>({users:[{uid:'one',name:'First',playedSessionCodes:[]}]}),
+  listSessions:async()=>rooms,
+  getDefaultTeamComposition:async()=>({teamComposition:{...roster}}),
+  saveDefaultTeamComposition:async values=>{saves.push(values);Object.assign(roster,values);return {teamComposition:{...roster}};},
+  saveTeamComposition:async()=>assert.fail('A classroom override was never submitted')
+ };
+ await showTeamsPanel(panel,api,false);
+ const choose=value=>{const input=$('[data-team-user="one"]');assert.equal(input.disabled,false);input.value=value;input.dispatchEvent(new w.Event('change',{bubbles:true}));};
+ assert.equal($('#team-classroom').selectedOptions[0].textContent,'Default teams · new classrooms');
+ assert.equal($('[data-team-user="one"]').value,'1');
+ choose('7');$('#save-team-directory').click();
+ await waitFor(()=>$('#team-directory-status').textContent.includes('Default teams saved'));
+ assert.deepEqual(saves,[{one:'7'}]);
+ rooms.push({code:'ROME',name:'Spring',mode:'team',status:'lobby',teamComposition:{one:'3'}});
+ $('#directory-refresh').click();await waitFor(()=>$('#team-classroom').options.length===2 && !$('#directory-refresh').disabled);
+ assert.equal($('#team-classroom').value,'');assert.equal($('[data-team-user="one"]').value,'7');
+ choose('8');
+ const selectScope=value=>{$('#team-classroom').value=value;$('#team-classroom').dispatchEvent(new w.Event('change'));};
+ selectScope('ROME');assert.equal($('[data-team-user="one"]').value,'3');choose('9');
+ selectScope('');assert.equal($('[data-team-user="one"]').value,'8');
+ selectScope('ROME');assert.equal($('[data-team-user="one"]').value,'9');
+});
+
+test('owner can cancel deletion, delete one user, and delete the full directory across a filter and pagination', async t => {
+ const dom=new JSDOM('<main></main>'), w=dom.window, panel=w.document.querySelector('main'), $=selector=>panel.querySelector(selector);
+ t.after(()=>w.close());
+ const users=new Map(Array.from({length:28},(_,i)=>['uid'+i,{uid:'uid'+i,name:'Person '+i,email:'person'+i+'@demo.test',playedSessionCodes:i===1?['ROME','BERLIN']:[],deletionProtected:i===0}]));
+ const deletedBatches=[], confirmations=[];
+ let confirm=false, injectError=false;
+ const api={
+  listSessions:async()=>[],
+  getDefaultTeamComposition:async()=>({teamComposition:{}}),
+  listTeamUsers:async token=>{const people=[...users.values()];return token?{users:people.slice(20)}:{users:people.slice(0,20),nextPageToken:people.length>20?'next':undefined};},
+  deleteRegisteredUsers:async uids=>{
+   assert.ok(uids.length<=10);assert.ok(!uids.includes('uid0'));
+   deletedBatches.push(uids);
+   if(injectError && deletedBatches.length===3) {users.delete(uids[0]);throw Error('Connection interrupted');}
+   for(const uid of uids)users.delete(uid);
+   return {deletedUids:uids,protectedUids:[]};
+  }
+ };
+ await showTeamsPanel(panel,api,true,null,null,async message=>{confirmations.push(message);return confirm;});
+ assert.equal($('[data-delete-user="uid0"]'),null);
+ assert.match(panel.querySelector('.user-entry').textContent,/Protected account/);
+ assert.deepEqual([...panel.querySelectorAll('.played-session-codes code')].map(el=>el.textContent),['ROME','BERLIN']);
+ $('[data-delete-user="uid1"]').click();
+ await waitFor(()=>!$('#delete-all-users').disabled);
+ assert.match(confirmations[0],/Person 1.*person1@demo.test/);
+ assert.deepEqual(deletedBatches,[]);
+ confirm=true;$('[data-delete-user="uid1"]').click();
+ await waitFor(()=>$('#directory-delete-status').textContent==='1 registered user deleted.');
+ assert.deepEqual(deletedBatches,[['uid1']]);
+ const search=$('#team-user-search');search.value='person25@demo.test';search.dispatchEvent(new w.Event('input'));
+ assert.equal(panel.querySelectorAll('.user-entry').length,1);
+ injectError=true;$('#delete-all-users').click();
+ await waitFor(()=>$('#directory-delete-status').textContent.includes('11 of 26 deleted'));
+ assert.match(confirmations.at(-1),/all 26 eligible registered users across the full directory/);
+ assert.equal(search.value,'person25@demo.test');
+ injectError=false;$('#delete-all-users').click();
+ await waitFor(()=>$('#directory-delete-status').textContent==='15 registered users deleted.');
+ assert.deepEqual([...users.keys()],['uid0']);assert.equal($('#delete-all-users').disabled,true);
+ assert.equal($('#directory-count').textContent,'1 registered user');
 });

@@ -1,8 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {assignJoiningTeam, getTeamComposition, materializeTeams, validateTeams} from '../functions/teams.js';
+import {assignJoiningTeam, defaultTeamComposition, getTeamComposition, materializeTeams, validateTeams} from '../functions/teams.js';
 
 const people = ids => ids.map(uid => ({uid}));
+
+test('inherited studio preferences reserve at most the selected team size and overflow students still join', () => {
+  const saved={e:'1',c:'1',d:'2',a:'1',b:'1'};
+  const trimmed=defaultTeamComposition(saved,2);
+  assert.deepEqual(trimmed,{a:'1',b:'1',d:'2'});
+  assert.deepEqual(defaultTeamComposition(Object.fromEntries(Object.entries(saved).reverse()),2),trimmed);
+  assert.deepEqual(defaultTeamComposition(saved,4),saved);
+  assert.deepEqual(defaultTeamComposition(null,3),{});
+  const room={teamComposition:trimmed,teamSize:2};
+  for(const uid of ['e','c','b','d','a'])Object.assign(room,assignJoiningTeam(room,uid));
+  assert.ok(validateTeams(people(Object.keys(saved)),room.assignments,room.teamNames,2));
+  assert.equal(room.assignments.a,room.assignments.b);
+  assert.notEqual(room.assignments.a,room.assignments.c);
+});
 
 test('code joins fill teams to the saved size, retain the captain and make a smaller final team', () => {
   const ids = ['f','c','g','a','e','d','b'];

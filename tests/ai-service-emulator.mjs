@@ -49,6 +49,21 @@ test('keys and models remain private to each verified instructor', async () => {
   await assert.rejects(api.saveAiSettings(call(admin,{provider:'openai',model:'unlisted-model'})),{code:'invalid-argument'});
 });
 
+test('instructors can assign default teams before creating a classroom', async () => {
+  const api = aiService(options), first='default-first-'+run, second='default-second-'+run;
+  for (const uid of [first,second]) await auth.createUser({uid,email:uid+'@example.test'});
+  const save = (actor,changes) => api.saveDefaultTeamComposition(call(actor,{changes}));
+  const blank = {uid:first,token:{email:first+'@example.test',email_verified:true}};
+  await assert.rejects(save(blank,{[first]:'8'}),{code:'permission-denied'});
+  await assert.rejects(save(admin,{['missing-'+run]:'5'}),{code:'failed-precondition'});
+  await Promise.all([save(admin,{[first]:'1'}),save(admin,{[second]:'1'})]);
+  assert.deepEqual((await db.doc('studioTeamDefaults/'+admin.uid).get()).data().teamComposition,{[first]:'1',[second]:'1'});
+  assert.deepEqual((await save(other,{[first]:'2'})).teamComposition,{[first]:'2'});
+  await db.doc('deletedAccounts/'+first).set({deletedAt:Timestamp.now()});
+  await assert.rejects(save(admin,{[first]:'3'}),{code:'failed-precondition'});
+  assert.deepEqual((await save(admin,{[first]:null})).teamComposition,{[second]:'1'});
+});
+
 test('only one in-flight request owns a competitor and all enabled phases must be ready before start', async () => {
   const ref = await classroom();
   for (const uid of ['p1','p2']) await ref.collection('participants').doc(uid).set({joinedAt:Timestamp.now()});
@@ -117,6 +132,7 @@ test('directory and team editing use registered accounts, joined roster and owne
   } while (!person && pageToken);
   const metadata = (await auth.getUser(students[0])).metadata;
   assert.deepEqual(person,{uid:students[0], name:'Student One', email:students[0]+'@example.test', studentId:'private-id',
+    playedSessionCodes:[],deletionProtected:false,
     registeredAt:new Date(metadata.creationTime).toISOString(),
     lastSignInAt:metadata.lastSignInTime ? new Date(metadata.lastSignInTime).toISOString() : null});
   const changes = {[students[0]]:'2',[students[1]]:'2',[students[2]]:'7'};
@@ -138,6 +154,9 @@ test('verified concurrent team joins fill the selected size once and retain name
   const join = (uid, verified=true) => api.joinTeamClassroom(call(
     {uid,token:{email:uid+'@example.test',email_verified:verified}}, {code:ref.id,name:'Student '+uid}));
   await assert.rejects(join('stranger',false),{code:'permission-denied'});
+  const removed = 'revoked' + run;
+  await db.doc('deletedAccounts/' + removed).set({revoked:true});
+  await assert.rejects(join(removed),{code:'permission-denied'});
   const ids=['one','two','three','four','five','six'].map(name=>name+run);
   await Promise.all([...ids,ids[0]].map(uid=>join(uid)));
   const s=(await ref.get()).data();
@@ -175,8 +194,8 @@ test('user classroom lookups recover real joins, waiting assignments and scoped 
     aiOpponent:{provider:'openai',model:'model-one',practice:true,main:false}},true,true);
   const planned = await room({teamComposition:{[uid]:'7'}},false);
   const legacy = await room({mode:'individual',status:'running',phaseOffset:960,startedAt:Timestamp.fromMillis(100000)},true);
-  const otherRoom = await room({owner:other.uid, mode:'individual', status:'closed'},true,true);
-  const solo = await room({owner:uid, mode:'solo',status:'closed'},true,true);
+  const otherRoom = await room({owner:other.uid, mode:'individual', status:'closed',startedAt:Timestamp.fromMillis(1)},true,true);
+  const solo = await room({owner:uid, mode:'solo',status:'closed',startedAt:Timestamp.fromMillis(1)},true,true);
   const stale = await room({mode:'individual',status:'closed'},false,true);
   const removed = await room({deletedAt:Timestamp.now()},true,true);
   const absent = await room({teamComposition:{[uid]:'4'},status:'closed'},false);
@@ -188,7 +207,7 @@ test('user classroom lookups recover real joins, waiting assignments and scoped 
     archive.set(db.collection('sessions').doc('B' + run + String(i).padStart(3,'0')), {owner:admin.uid,mode:'individual',status:'closed'});
   }
   const historical = db.collection('sessions').doc('Z' + run);
-  archive.set(historical, {owner:admin.uid, name:'Past cohort', mode:'individual', status:'closed', createdAt:Timestamp.fromMillis(1)});
+  archive.set(historical, {owner:admin.uid, name:'Past cohort', mode:'individual', status:'closed', startedAt:Timestamp.fromMillis(2), createdAt:Timestamp.fromMillis(1)});
   archive.set(historical.collection('participants').doc(uid), {email,joinedAt:Timestamp.now()});
   await archive.commit();
   await auth.updateUser(uid,{email: 'new-' + email});
@@ -218,4 +237,21 @@ test('user classroom lookups recover real joins, waiting assignments and scoped 
   assert.deepEqual(ownSolo.map(s=>s.code),[instructorSolo.id]);
   assert.deepEqual((await api.getUserClassrooms(call(other,{uid:admin.uid}))).sessions,[]);
   for (const excluded of [stale,removed,absent,reusedEmail]) assert(!all.has(excluded.id));
+  const directoryRow = async account => {
+    let pageToken;
+    do {
+      const page = await api.listTeamUsers(call(account, {pageToken}));
+      const row = page.users.find(user => user.uid === uid);
+      if (row) return row;
+      pageToken = page.nextPageToken;
+    } while (pageToken);
+    assert.fail('registered user missing from the directory');
+  };
+  // Only an actual member of a started session has a played code. Joined
+  // lobbies, cancelled classes and preassignments still appear in the details.
+  await room({mode:'individual',status:'closed',startedAt:null},true,true);
+  await room({mode:'individual',status:'lobby'},true,true);
+  assert.deepEqual((await directoryRow(admin)).playedSessionCodes, [running.id,legacy.id,historical.id].sort());
+  assert.deepEqual((await directoryRow(other)).playedSessionCodes, [otherRoom.id]);
+  assert.deepEqual((await directoryRow(studio)).playedSessionCodes, [running.id,legacy.id,historical.id,otherRoom.id,solo.id].sort());
 });

@@ -20,6 +20,21 @@ export function makeTeamOpponents(teamNames, random) {
 export const DEFAULT_TEAM_SIZE = 3;
 export const validTeamSize = size => Number.isInteger(size) && size >= 1 && size <= 20;
 
+// Studio preferences may have been saved for a larger team size. Reserve
+// places within this classroom's limit; everyone else is grouped on arrival.
+export function defaultTeamComposition(savedComposition, teamSize) {
+  if (!validTeamSize(teamSize)) throw Error('Team size must be 1–20.');
+  const counts = Array(101).fill(0);
+  const entries = [];
+  for (const uid of Object.keys(savedComposition || {}).sort()) {
+    const number = savedComposition[uid];
+    if (!/^(?:[1-9]\d?|100)$/.test(number) || counts[number] >= teamSize) continue;
+    counts[number]++;
+    entries.push([uid, number]);
+  }
+  return Object.fromEntries(entries);
+}
+
 // Numbered directory assignments must also refer to classrooms with custom team names.
 function teamNumbers(teamNames = {}) {
   const teams = Object.keys(teamNames).sort();
