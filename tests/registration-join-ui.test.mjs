@@ -36,7 +36,7 @@ test('registration verification gate, formatted session IDs and live team assign
  assert.ok($('.team-matchup').textContent.includes(rival?room.teamNames[rival]:'Individual play'));
  assert.equal(Boolean($('.competition-instructions')),Boolean(rival));
  assert.equal(Boolean($('#leaderboard')),Boolean(rival));
- click('#demo-forward');await wait(()=>$('#order-form [name=cap]'));
+ await api.advancePhase(code,90);await wait(()=>$('#order-form [name=cap]'));
  const {competitorResult}=await import('../market.js');
  const expected=competitorResult(room,0,{},'c').signals;
  const sales=[...w.document.querySelectorAll('.layout section:nth-child(2) .panel:first-child tbody tr')].map(row=>parseInt(row.cells[1].textContent,10));

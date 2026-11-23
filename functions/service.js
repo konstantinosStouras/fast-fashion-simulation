@@ -229,7 +229,7 @@ export function aiService({db, auth, encryptionSecret, discover = discoverModels
     }
     const rooms = db.collection('sessions');
     const teamNumber = new FieldPath('teamComposition', uid), assigned = new FieldPath('assignments', uid);
-    const fields = ['name', 'mode', 'status', 'createdAt', 'startedAt', 'closedAt',
+    const fields = ['name', 'mode', 'status', 'createdAt', 'startedAt', 'closedAt', 'phaseOffset',
       'teamNames', 'teamOpponents', 'aiOpponent', assigned, teamNumber];
     const managed = account.isOwner ? rooms : rooms.where('owner', '==', account.uid);
     const pageSize = 100;

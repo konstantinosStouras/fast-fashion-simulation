@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {JSDOM} from 'jsdom';
 
-test('instructor rehearsal follows every student deadline without writing classroom records',async t=>{
+test('instructor rehearsal advances only on request without writing classroom records',async t=>{
  const dom=new JSDOM(readFileSync('index.html','utf8'),{url:'http://localhost:8791/?demo',pretendToBeVisual:true});
  const w=dom.window;
  for(const k of ['document','location','localStorage','sessionStorage','FormData'])globalThis[k]=w[k];
@@ -30,7 +30,8 @@ test('instructor rehearsal follows every student deadline without writing classr
  Date.now=()=>now;
  t.after(()=>{Date.now=realNow;});
  const advanceTo=async(seconds,condition)=>{
-  now=startedAt+seconds*1000;
+  now=startedAt+(seconds+10000)*1000;
+  click('#next-phase');
   await wait(condition);
  };
  click('#preview-settings');await wait(()=>$('#preview-exit')&&$('#order-form'));
@@ -46,7 +47,9 @@ test('instructor rehearsal follows every student deadline without writing classr
    submit('#order-form');await wait(()=>$('.save-state')?.textContent.includes('cap 60'));
  };
  await saveInitial(90);
- await advanceTo(89,()=>$('#clock')?.textContent==='0:01');
+ now+=86400000;
+ await new Promise(r=>setTimeout(r,550));
+ assert.equal($('#clock'),null);
  assert.equal($('#order-form').elements.quantity.value,'90');
  await saveRestock(90);
  for(const [seconds,title,quantity] of [[180,'Order ahead',80],[420,'Respond to demand',70],[660,'Expand the collection',60]]){
@@ -56,9 +59,9 @@ test('instructor rehearsal follows every student deadline without writing classr
    if(seconds===420)await saveRestock(540);
    if(seconds===660)await saveRestock(810);
  }
- await advanceTo(960,()=>$('#season-results')&&$('#clock')?.textContent==='2:00');
+ await advanceTo(960,()=>$('#season-results')&&!$('#clock'));
  assert.equal($('#order-form'),null);assert.match(w.document.body.textContent,/Practice is excluded/);
- await advanceTo(1080,()=>$('#season-results')&&!$('#clock'));
+
  assert.equal(w.localStorage.getItem('ff:demo:v1'),before,'preview must not create any database-like records');
  assert.equal(w.localStorage.getItem('ff:session:demo-admin'),null,'preview must not replace real student resume state');
  click('#preview-exit');await wait(()=>$('#create'));
@@ -84,7 +87,7 @@ test('instructor rehearsal follows every student deadline without writing classr
  dom.reconfigure({url:rehearsalUrl});
  now+=30000;
  await import('../main.js?preview-test-reloaded');
- await wait(()=>$('#order-form')?.elements.quantity.value==='137'&&$('#clock')?.textContent==='1:00');
+ await wait(()=>$('#order-form')?.elements.quantity.value==='137'&&!$('#clock'));
  assert.equal(w.localStorage.getItem('ff:demo:v1'),liveBefore);
  // Signing out clears preview and students never receive its controls.
  click('#out');await wait(()=>$('#open-login'));assert.equal($('#preview-exit'),null);

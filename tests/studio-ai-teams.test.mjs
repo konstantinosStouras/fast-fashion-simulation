@@ -214,7 +214,7 @@ test('directory searches by student ID, shows live matchups and loads scoped cla
 test('collapsed rows include active individual and solo sessions without reading past or solo rosters', async t => {
  const dom=new JSDOM('<main></main>'), panel=dom.window.document.querySelector('main');
  t.after(()=>dom.window.close());
- const running=(code,mode='individual',startedAt=Date.now()-200000)=>({code,name:code,mode,status:'running',startedAt});
+ const running=(code,mode='individual',startedAt=Date.now()-200000)=>({code,name:code,mode,status:'running',startedAt,phaseOffset:code==='OLD'?960:180});
  const reads=[];
  await showTeamsPanel(panel,{
   listTeamUsers:async()=>({users:[{uid:'one',name:'First'},{uid:'two',name:'Second'}]}),

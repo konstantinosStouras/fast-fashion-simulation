@@ -1,3 +1,4 @@
+import {sessionProgress} from './functions/session-progress.js';
 import {emailActionSettings} from './auth-flow.js?v=session-codes-1';
 import {requireSessionCode,sessionCodeTaken} from './session-code.js';
 import {decisionOwner,validateTeams} from './competition.js?v=directory-roster-1';
@@ -62,7 +63,7 @@ export async function playHistory(){
  return Promise.all(refs.docs.map(async ref=>{
   try{
    const data=await requireSession(ref.id),owner=decisionOwner(data,uid)||uid;
-   const completed=[1,2,3].filter(i=>data.startedAt&&((data.closedAt?.toMillis()??Date.now())-data.startedAt.toMillis())/1000>=ROUNDS[i].end);
+   const completed=[1,2,3].filter(i=>sessionProgress(data)>=ROUNDS[i].end);
    const [orders,teamOrders,aiOrders]=await Promise.all([
     readOrders(ref.id,owner),
     data.mode==='team'?readMarketOrders(ref.id,teamMatchup(data,owner),completed,owner):null,
@@ -161,7 +162,7 @@ export async function startSession(code,onProgress){
   const s=(await tx.get(ref)).data();
   if(s?.status!=='lobby')throw Error('Only a waiting session can start.');
   if(s.aiOpponent?.practice||s.aiOpponent?.main)throw Error('AI settings changed. Start again to prepare the opponents.');
-  const update={status:'running',startedAt:serverTimestamp()};
+  const update={status:'running',phaseOffset:0,startedAt:serverTimestamp()};
   if(s.mode==='team'){
    const people=(await getDocsFromServer(collection(db,'sessions',code,'participants'))).docs.map(d=>({uid:d.id}));
    const teams=materializeTeams(people,s);
@@ -276,3 +277,5 @@ export async function saveDefaultField(key,value){
   tx.set(ref,config);
  });
 }
+
+export async function advancePhase(code,next){await updateDoc(doc(db,'sessions',code),{phaseOffset:next});}

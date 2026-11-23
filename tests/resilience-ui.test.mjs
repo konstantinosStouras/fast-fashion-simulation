@@ -35,24 +35,24 @@ test('slow subscriptions, live updates, cancelled navigation and large classroom
  });
  await t.test('offline recovery preserves drafts and blocks saving until server confirmation',async()=>{
   $('#order-form [name=quantity]').value='151';$('#order-form [name=quantity]').dispatchEvent(new w.Event('input',{bubbles:true}));
-  w.dispatchEvent(new w.Event('offline'));assert.equal($('#save-order').disabled,true);assert.match($('#connection-status').textContent,/Offline.*clock keeps running/);
+  w.dispatchEvent(new w.Event('offline'));assert.equal($('#save-order').disabled,true);assert.match($('#connection-status').textContent,/Offline.*Reconnect/);
   orderStatus(false);w.dispatchEvent(new w.Event('online'));assert.equal($('#save-order').disabled,true);assert.match($('#connection-status').textContent,/Reconnecting/);assert.equal($('#order-form [name=quantity]').value,'151');
   orderStatus(true);assert.equal($('#save-order').disabled,false);assert.equal($('#order-form [name=quantity]').value,'151');
   submit('#order-form');await wait(()=>$('.save-state').textContent.includes('Saved:')&&$('.save-state').textContent.includes('151'));
  });
- await t.test('return after suspension immediately moves past expired deadlines',async()=>{
+ await t.test('return after suspension preserves the current phase',async()=>{
   const realNow=Date.now;Date.now=()=>realNow()+95000;
-  try{w.document.dispatchEvent(new w.Event('visibilitychange'));assert.equal($('#order-form [name=quantity]'),null);assert.ok($('#order-form [name=cap]'));assert.equal($('#order-form [name=cap]').value,'0');}finally{Date.now=realNow;w.dispatchEvent(new w.Event('pageshow'));}
+  try{w.document.dispatchEvent(new w.Event('visibilitychange'));assert.equal($('#order-form [name=quantity]').value,'151');assert.equal($('#order-form [name=cap]'),null);}finally{Date.now=realNow;w.dispatchEvent(new w.Event('pageshow'));}
   assert.equal($('#order-form [name=quantity]').value,'151');
  });
  await t.test('a rejected save crossing the deadline keeps the confirmed decision and explains the rejection',async()=>{
   const realNow=Date.now;let release;saveGate=new Promise(resolve=>release=resolve);failSave=true;
   $('#order-form [name=quantity]').value='161';submit('#order-form');await wait(()=>$('.save-state')?.dataset.state==='saving');
   try{
-   Date.now=()=>realNow()+95000;w.document.dispatchEvent(new w.Event('visibilitychange'));
+   await api.advancePhase(code,90);
    assert.match($('#app').textContent,/Confirming your previous decision/);assert.equal($('#order-form'),null);assert.match($('#app').textContent,/151 units/);
-   release();await wait(()=>$('#order-form [name=cap]'));assert.match($('#notice').textContent,/deadline.*not accepted/);assert.doesNotMatch($('#notice').textContent,/edits are still here|may revise/);assert.match($('.save-state').textContent,/151 units/);
-  }finally{release();saveGate=null;failSave=false;Date.now=realNow;w.dispatchEvent(new w.Event('pageshow'));}
+   release();await wait(()=>$('#order-form [name=cap]'));assert.match($('#notice').textContent,/phase has changed.*not accepted/);assert.doesNotMatch($('#notice').textContent,/edits are still here|may revise/);assert.match($('.save-state').textContent,/151 units/);
+  }finally{release();saveGate=null;failSave=false;await api.advancePhase(code,0);Date.now=realNow;w.dispatchEvent(new w.Event('pageshow'));}
   assert.equal($('#order-form [name=quantity]').value,'151');
  });
  await t.test('a delayed successful acknowledgement cannot overwrite a newer confirmed save',async()=>{
@@ -60,9 +60,9 @@ test('slow subscriptions, live updates, cancelled navigation and large classroom
   $('#order-form [name=quantity]').value='155';submit('#order-form');await wait(()=>$('.save-state')?.dataset.state==='saving');
   await api.saveOrder(code,0,{variety:4,quantity:163,cap:0});
   try{
-   Date.now=()=>realNow()+95000;w.document.dispatchEvent(new w.Event('visibilitychange'));assert.match($('#app').textContent,/Confirming your previous decision/);
-   release();await wait(()=>$('#order-form [name=cap]'));assert.match($('#notice').textContent,/accepted.*before its deadline.*locked/);assert.match($('.save-state').textContent,/163 units/);
-  }finally{release();ackGate=null;Date.now=realNow;w.dispatchEvent(new w.Event('pageshow'));}
+   await api.advancePhase(code,90);assert.match($('#app').textContent,/Confirming your previous decision/);
+   release();await wait(()=>$('#order-form [name=cap]'));assert.match($('#notice').textContent,/accepted.*previous phase.*locked/);assert.match($('.save-state').textContent,/163 units/);
+  }finally{release();ackGate=null;await api.advancePhase(code,0);Date.now=realNow;w.dispatchEvent(new w.Event('pageshow'));}
   assert.equal($('#order-form [name=quantity]').value,'163');
  });
  await t.test('a stale device save is rejected, reloads the winner and never retries automatically',async()=>{

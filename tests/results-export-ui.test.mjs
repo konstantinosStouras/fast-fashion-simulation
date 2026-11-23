@@ -13,7 +13,7 @@ test('completed roster and downloadable CSV agree with saved decisions and survi
  URL.createObjectURL=blob=>{const url='blob:qa-'+blobs.size;blobs.set(url,blob);return url;};URL.revokeObjectURL=url=>revoked.push(url);
  w.HTMLAnchorElement.prototype.click=function(){assert.equal(this.isConnected,true);clicked=this;};
  const code='CSVTEST2',uid='qa-student';
- w.localStorage.setItem('ff:demo:v1',JSON.stringify({instructors:[],sessions:{[code]:{code,name:'CSV test',owner:'demo-admin',mode:'individual',status:'running',startedAt:Date.now()-1081000,createdAt:Date.now()-1200000,seed:65846,config:DEFAULT_CONFIG}},people:{[code]:{[uid]:{uid,name:'QA, "Student"',email:'qa@example.test'}}},orders:{[code]:{[uid]:{0:{variety:4,quantity:100,cap:30},1:{variety:4,quantity:120,cap:0},2:{variety:4,quantity:80,cap:100},3:{variety:8,quantity:60,cap:60}}}}}));
+ w.localStorage.setItem('ff:demo:v1',JSON.stringify({instructors:[],sessions:{[code]:{code,name:'CSV test',owner:'demo-admin',mode:'individual',status:'running',phaseOffset:960,startedAt:Date.now()-1081000,createdAt:Date.now()-1200000,seed:65846,config:DEFAULT_CONFIG}},people:{[code]:{[uid]:{uid,name:'QA, "Student"',email:'qa@example.test'}}},orders:{[code]:{[uid]:{0:{variety:4,quantity:100,cap:30},1:{variety:4,quantity:120,cap:0},2:{variety:4,quantity:80,cap:100},3:{variety:8,quantity:60,cap:60}}}}}));
  const api=await import('../backend-demo.js');
  t.after(async()=>{await api.logout();await new Promise(r=>setTimeout(r,20));w.close();URL.createObjectURL=originalCreate;URL.revokeObjectURL=originalRevoke;});
  await api.loginGoogle();await import('../main.js?results-export-test');await wait(()=>$('[data-session]'));
