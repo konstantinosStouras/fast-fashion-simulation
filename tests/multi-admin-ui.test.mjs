@@ -10,10 +10,11 @@ test('independent admin studios, owner access management and student join links'
  w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
  const $=s=>w.document.querySelector(s),wait=async fn=>{for(let i=0;i<150;i++){await new Promise(r=>setTimeout(r,10));if(fn())return;}throw Error('UI state did not appear');};
  const api=await import('../backend-demo.js');t.after(async()=>{await api.logout();await new Promise(r=>setTimeout(r,20));w.close();});
+ await api.loginEmail('javad@example.test','test-only');await api.logout();
  await api.loginGoogle();const ownerUid=api.currentUser().uid;const original=await api.createSession('Owner class',DEFAULT_CONFIG);
  await import('../main.js?multi-admin-test');await wait(()=>$('#grant'));
  assert.match($('#app').textContent,/PLATFORM OWNER/);assert.match($('#app').textContent,/Administrators/);
- $('#grant input').value='javad@example.test';$('#grant').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));await wait(()=>$('#instructors').textContent.includes('javad@example.test'));
+ await wait(()=>$('[data-grant-account="javad@example.test"]'));$('[data-grant-account="javad@example.test"]').click();await wait(()=>$('#instructors').textContent.includes('javad@example.test'));
  await api.logout();await api.loginEmail('admin@admin.com','test-only');await wait(()=>$('#create'));
  assert.notEqual(api.currentUser().uid,ownerUid);assert.match($('#account').textContent,/admin@admin.com/);assert.equal($('#grant'),null);assert.equal($('#defaults'),null);assert.ok(!$('#active-sessions').textContent.includes('Owner class'));
  const code=await api.createSession('Dedicated class',DEFAULT_CONFIG);$('#staff').click();await wait(()=>$('[data-card-link]'));

@@ -9,7 +9,17 @@ import {loginEmailAddress,assertAccountEmail,ADMIN_ACCOUNT_EMAIL} from './auth-i
 import {ROUNDS,DEFAULT_CONFIG} from './model.js';
 const app=initializeApp(firebaseConfig,'fashion-futures'),auth=getAuth(app),db=getFirestore(app,DATABASE);
 export const currentUser=()=>auth.currentUser;
-export const observeAuth=fn=>onAuthStateChanged(auth,fn);
+function recordVerifiedAccount(user) {
+ if (!user?.emailVerified || !user.email) return;
+ setDoc(doc(db,'verifiedAccounts',user.uid),{email:user.email})
+  .catch(error=>console.warn('Verified account directory update failed.',error.code));
+}
+export const observeAuth=fn=>onAuthStateChanged(auth,user=>{
+ recordVerifiedAccount(user);
+ return fn(user);
+});
+export const watchVerifiedAccounts=(onChange,onError)=>onSnapshot(collection(db,'verifiedAccounts'),
+ snapshot=>onChange(snapshot.docs.map(entry=>entry.data().email)),onError);
 export const loginGoogle=()=>signInWithPopup(auth,new GoogleAuthProvider());
 export const loginEmail=(email,password)=>signInWithEmailAndPassword(auth,loginEmailAddress(email),password);
 const emailSettings=(action='verify',sessionCode='')=>emailActionSettings(globalThis.location?.href||'',action,sessionCode);
@@ -43,7 +53,7 @@ async function requireSession(code){
 export const resetPassword=(email,sessionCode='')=>sendPasswordResetEmail(auth,loginEmailAddress(email),emailSettings('login',sessionCode));
 export const logout=()=>signOut(auth);
 export const verifyEmail=(sessionCode='')=>sendEmailVerification(auth.currentUser,emailSettings('verify',sessionCode));
-export async function refreshUser(){await auth.currentUser.reload();await auth.currentUser.getIdToken(true);return auth.currentUser;}
+export async function refreshUser(){await auth.currentUser.reload();await auth.currentUser.getIdToken(true);recordVerifiedAccount(auth.currentUser);return auth.currentUser;}
 export async function role(){const u=currentUser();if(!u?.emailVerified)return 'student';if(u.email===ADMIN_EMAIL)return 'admin';return (await getDoc(doc(db,'instructors',u.email))).exists()?'instructor':'student';}
 export async function grant(email){await setDoc(doc(db,'instructors',loginEmailAddress(email)),{createdAt:serverTimestamp()});}
 export async function listInstructors(){return (await getDocs(collection(db,'instructors'))).docs.map(d=>d.id);}

@@ -11,10 +11,11 @@ function watch(fn){listeners.add(fn);queueMicrotask(fn);return ()=>listeners.del
 addEventListener('storage',e=>{if(e.key===KEY)listeners.forEach(fn=>fn());});
 export const currentUser=()=>user;
 export const observeAuth=fn=>{authListeners.add(fn);queueMicrotask(()=>fn(user));return ()=>authListeners.delete(fn);};
-async function login(email){user={uid:email==='kstouras@gmail.com'?'demo-admin':'demo-'+email,email,emailVerified:true,displayName:email==='kstouras@gmail.com'?'Demo instructor':'Demo participant'};authListeners.forEach(fn=>fn(user));}
+async function login(email,emailVerified=true){user={uid:email==='kstouras@gmail.com'?'demo-admin':'demo-'+email,email,emailVerified,displayName:email==='kstouras@gmail.com'?'Demo instructor':'Demo participant'};if(emailVerified){const d=load();d.verifiedAccounts??={};d.verifiedAccounts[user.uid]=email;write(d);}authListeners.forEach(fn=>fn(user));}
+export const watchVerifiedAccounts=onChange=>watch(()=>onChange(Object.values(load().verifiedAccounts||{})));
 export const loginGoogle=()=>login('kstouras@gmail.com');
 export const loginEmail=(email,password)=>login(loginEmailAddress(email));
-export async function register(email,password,profile){assertAccountEmail(email);await login(email);user.emailVerified=false;await saveProfile(profile);authListeners.forEach(fn=>fn(user));return {profileSaved:true,verificationSent:true};}
+export async function register(email,password,profile){assertAccountEmail(email);await login(email,false);await saveProfile(profile);authListeners.forEach(fn=>fn(user));return {profileSaved:true,verificationSent:true};}
 export const getProfile=async()=>load().profiles?.[user.uid]||{firstName:'Demo',lastName:'Participant',universityId:'DEMO'};
 export const saveProfile=async profile=>{const d=load();d.profiles??={};d.profiles[user.uid]={...d.profiles[user.uid],...profile};write(d);};
 export async function importPlatformProfile(storage){const p=platformHandoff(storage,user);if(p)await saveProfile({platformRegistration:p});}

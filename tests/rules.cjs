@@ -12,6 +12,20 @@ const order=(more={})=>({variety:4,quantity:80,cap:0,phase:'plan',revision:1,sav
 async function seed(elapsed=null,extra={}){await env.withSecurityRulesDisabled(async c=>{const d=c.firestore();await setDoc(doc(d,'instructors/teacher@example.test'),{createdAt:Timestamp.now()});await setDoc(doc(d,'sessions/ABCDEFGH'),{name:'QA',owner:'teacher',config,seed:42,status:elapsed===null?'lobby':'running',createdAt:Timestamp.now(),startedAt:elapsed===null?null:Timestamp.fromMillis(Date.now()-elapsed*1000),closedAt:null,...extra});for(const uid of ['alice','bob'])await setDoc(doc(d,`sessions/ABCDEFGH/participants/${uid}`),{name:uid,email:uid+'@example.test',joinedAt:Timestamp.now()});});}
 before(async()=>{env=await initializeTestEnvironment({projectId:'demo-fashion-futures',firestore:{host:'127.0.0.1',port:8180,rules:fs.readFileSync('firestore.rules','utf8')}});});
 beforeEach(async()=>{await env.clearFirestore();});
+test('verified accounts publish only their authenticated email, and only the platform owner can browse',async()=>{
+ const student=db('alice'), account=doc(student,'verifiedAccounts/alice');
+ const email='alice@example.test';
+ await assertSucceeds(setDoc(account,{email}));
+ const directory=await assertSucceeds(getDocs(collection(admin(),'verifiedAccounts')));
+ assertEqual(directory.docs[0].data().email,email);
+ await assertFails(setDoc(account,{email:'other@example.test'}));
+ await assertFails(setDoc(account,{email,role:'instructor'}));
+ await assertFails(setDoc(doc(student,'verifiedAccounts/bob'),{email}));
+ await assertFails(setDoc(doc(db('alice',email,false),'verifiedAccounts/alice'),{email}));
+ await assertFails(getDocs(collection(student,'verifiedAccounts')));
+ await seed();
+ await assertFails(getDocs(collection(db('teacher'),'verifiedAccounts')));
+});
 after(async()=>{try{await Promise.all(clients.map(client=>client.terminate()));}finally{await env.cleanup();}});
 test('anonymous and unverified accounts cannot read or join',async()=>{await seed();for(const d of [env.unauthenticatedContext().firestore(),db('alice','alice@example.test',false)]){await assertFails(getDoc(doc(d,'sessions/ABCDEFGH')));await assertFails(setDoc(doc(d,'sessions/ABCDEFGH/participants/charlie'),{name:'X',email:'charlie@example.test',joinedAt:serverTimestamp()}));}});
 test('verified student can join lobby but not after start',async()=>{await seed();const d=db('charlie');await assertSucceeds(setDoc(doc(d,'sessions/ABCDEFGH/participants/charlie'),{name:'Charlie',email:'charlie@example.test',joinedAt:serverTimestamp()}));await seed(10);await assertFails(setDoc(doc(db('new'),'sessions/ABCDEFGH/participants/new'),{name:'New',email:'new@example.test',joinedAt:serverTimestamp()}));});

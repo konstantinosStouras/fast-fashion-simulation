@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {getApp,deleteApp} from 'firebase/app';
 import {getAuth,connectAuthEmulator,GoogleAuthProvider,signInWithCredential,confirmPasswordReset,createUserWithEmailAndPassword,sendEmailVerification,applyActionCode} from 'firebase/auth';
-import {connectFirestoreEmulator,getFirestore} from 'firebase/firestore';
+import {connectFirestoreEmulator,getFirestore,waitForPendingWrites} from 'firebase/firestore';
 import {DEFAULT_CONFIG} from '../model.js';
 import {ADMIN_ACCOUNT_EMAIL} from '../auth-identity.js';
 
@@ -22,8 +22,20 @@ test('separate admin accounts own their classes; students register, join and pla
  const app=getApp('fashion-futures'),auth=getAuth(app);connectAuthEmulator(auth,'http://127.0.0.1:9198',{disableWarnings:true});connectFirestoreEmulator(getFirestore(app),'127.0.0.1',8180);t.after(()=>deleteApp(app));
  const google=email=>GoogleAuthProvider.credential(JSON.stringify({sub:'google-'+email,email,email_verified:true}));
  const codes=async()=> (await fetch('http://127.0.0.1:9198/emulator/v1/projects/demo-fashion-futures/oobCodes').then(r=>r.json())).oobCodes;
+ const target='javad@example.test';
+ await api.register(target,'instructor-test-password',{firstName:'Test',lastName:'Instructor',universityId:'QA'});
+ const invitationCode=(await codes()).find(entry=>entry.email===target && entry.requestType==='VERIFY_EMAIL');
+ await applyActionCode(auth,invitationCode.oobCode);
+ await api.refreshUser();
+ await waitForPendingWrites(getFirestore(app));
+ assert.equal(await api.role(),'student');
+ await api.logout();
  await signInWithCredential(auth,google('kstouras@gmail.com'));const ownerUid=api.currentUser().uid;
- assert.equal(await api.role(),'admin');await api.grant('admin@admin.com');await api.grant('javad@example.test');
+ const accounts=await new Promise((resolve,reject)=>{
+  const stop=api.watchVerifiedAccounts(emails=>{stop();resolve(emails);},reject);
+ });
+ assert.ok(accounts.includes(target));
+ assert.equal(await api.role(),'admin');await api.grant('admin@admin.com');await api.grant(target);
  const ownerClass=await api.createSession('Owner class',DEFAULT_CONFIG);
  await api.resetPassword('kstouras@gmail.com');let reset=(await codes()).find(c=>c.email==='kstouras@gmail.com'&&c.requestType==='PASSWORD_RESET');await confirmPasswordReset(auth,reset.oobCode,'initial-platform-password');await api.logout();
  await createUserWithEmailAndPassword(auth,ADMIN_ACCOUNT_EMAIL,'initial-platform-password');await sendEmailVerification(auth.currentUser);
@@ -38,14 +50,14 @@ test('separate admin accounts own their classes; students register, join and pla
  await confirmPasswordReset(auth,reset.oobCode,'dedicated-new-password');await api.logout();
  await assert.rejects(api.loginEmail('admin@admin.com','initial-platform-password'));await api.loginEmail('admin@admin.com','dedicated-new-password');assert.equal(api.currentUser().uid,dedicatedUid);assert.equal((await api.getProfile()).firstName,'Dedicated');await api.logout();
  await api.loginEmail('kstouras@gmail.com','initial-platform-password');assert.equal(api.currentUser().uid,ownerUid);await api.logout();
- await signInWithCredential(auth,google('javad@example.test'));const javadUid=api.currentUser().uid;assert.notEqual(javadUid,dedicatedUid);assert.equal(await api.role(),'instructor');
+ await api.loginEmail(target,'instructor-test-password');const javadUid=api.currentUser().uid;assert.notEqual(javadUid,dedicatedUid);assert.equal(await api.role(),'instructor');
  const javadClass=await api.createSession('Javad class',DEFAULT_CONFIG);assert.deepEqual((await api.listSessions(false)).map(s=>s.code),[javadClass]);await assert.rejects(api.closeSession(dedicatedClass),{code:'permission-denied'});await api.logout();
  const studentEmail='student-multi-admin@example.test';await api.register(studentEmail,'student-test-password',{firstName:'Test',lastName:'Student',universityId:'QA'});const studentUid=api.currentUser().uid;
  const studentVerify=(await codes()).find(c=>c.email===studentEmail&&c.requestType==='VERIFY_EMAIL');await applyActionCode(auth,studentVerify.oobCode);await api.refreshUser();assert.equal(await api.role(),'student');
  await assert.rejects(api.createSession('Unauthorized class',DEFAULT_CONFIG),{code:'permission-denied'});await api.joinSession(dedicatedClass,'Test Student');await api.logout();
  await api.loginEmail('admin@admin.com','dedicated-new-password');await api.startSession(dedicatedClass);await api.logout();
  await api.loginEmail(studentEmail,'student-test-password');await api.saveOrder(dedicatedClass,0,{variety:4,quantity:80,cap:0});assert.equal((await api.readOrders(dedicatedClass,studentUid))['0'].quantity,80);await api.logout();
- await signInWithCredential(auth,google('javad@example.test'));await assert.rejects(api.readOrders(dedicatedClass,studentUid),{code:'permission-denied'});await api.logout();
+ await api.loginEmail(target,'instructor-test-password');await assert.rejects(api.readOrders(dedicatedClass,studentUid),{code:'permission-denied'});await api.logout();
  await signInWithCredential(auth,google('kstouras@gmail.com'));assert.equal(api.currentUser().uid,ownerUid);assert.equal(await api.role(),'admin');assert.ok((await api.listSessions(true)).some(s=>s.code===dedicatedClass));
- await api.revoke('javad@example.test');await api.logout();await signInWithCredential(auth,google('javad@example.test'));assert.equal(await api.role(),'student');await assert.rejects(api.createSession('Revoked admin class',DEFAULT_CONFIG),{code:'permission-denied'});
+ await api.revoke('javad@example.test');await api.logout();await api.loginEmail(target,'instructor-test-password');assert.equal(await api.role(),'student');await assert.rejects(api.createSession('Revoked admin class',DEFAULT_CONFIG),{code:'permission-denied'});
 });
