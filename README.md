@@ -44,6 +44,8 @@ Choose **Students per team** when you create a team classroom. The default is th
 
 Default team assignments can also be saved in **Users & Teams** before a classroom exists. A new team classroom copies these preferences at creation. Students without a preference join the next available group. Select a waiting classroom to edit only that classroom’s assignments.
 
+Below the directory, select a session code to see each team's members and its opponents for the practice and main phases. Human opponents appear once the session starts and the draw is complete. In an AI-enabled phase, each team faces its own opponent using the classroom’s selected model.
+
 The platform owner can delete one registered account or all eligible accounts. Bulk deletion covers the full directory, including accounts outside the current search. A confirmation identifies the account or the total before deletion. The owner’s two administrator sign-ins are protected. Deleting an account removes its login and profile. Existing opponents and teammates keep their shared results.
 
 While the classroom is waiting, every joined student can practice at home against the built-in AI. Each student chooses opening stock and replenishment, sees both businesses’ results, and can start another round in a fresh market. Practice is private to the student’s tab and unscored. The built-in opponent runs locally without a provider key.

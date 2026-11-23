@@ -7,7 +7,7 @@ import {aiActive,makeTeamOpponents,teamMatchup} from './market.js?v=home-practic
 import {defaultTeamComposition,DEFAULT_TEAM_SIZE,initialEntryRoles,materializeTeams,validTeamSize} from './functions/teams.js?v=home-practice-1';
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js';
 import {getAuth,GoogleAuthProvider,signInWithPopup,signInWithEmailAndPassword,createUserWithEmailAndPassword,sendEmailVerification,sendPasswordResetEmail,signOut,onAuthStateChanged,verifyBeforeUpdateEmail} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js';
-import {getFirestore,doc,collection,getDoc,getDocFromServer,getDocs,getDocsFromServer,setDoc,updateDoc,onSnapshot,serverTimestamp,query,where,runTransaction,increment,writeBatch,deleteDoc,deleteField} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js';
+import {getFirestore,doc,collection,getDoc,getDocFromServer,getDocs,getDocsFromServer,setDoc,updateDoc,onSnapshot,serverTimestamp,query,where,runTransaction,increment,writeBatch,deleteDoc,deleteField,FieldPath} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js';
 import {getFunctions,httpsCallable} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-functions.js';
 import {firebaseConfig,DATABASE,ADMIN_EMAIL} from './firebase-config.js';
 import {platformHandoff} from './profile.js?v=home-practice-1';
@@ -257,9 +257,16 @@ export const watchOrders=(code,uid,fn,error,status)=>onSnapshot(collection(db,'s
 export const watchParticipants=(code,fn,error)=>onSnapshot(collection(db,'sessions',code,'participants'),{includeMetadataChanges:true},s=>{if(!s.metadata.fromCache&&!s.metadata.hasPendingWrites)fn(s.docs.map(d=>({uid:d.id,...d.data()})));},error);
 export async function changeEntryRole(code,requested){
  const ref=doc(db,'sessions',code),uid=currentUser().uid;
+ if(!requested){
+  const person=(await getDocFromServer(doc(ref,'participants',uid))).data();
+  await updateDoc(ref,new FieldPath('entryRequests',uid),person.name);
+  return;
+ }
  await runTransaction(db,async tx=>{
-  const s=(await tx.get(ref)).data(),person=(await tx.get(doc(ref,'participants',uid))).data();
-  tx.update(ref,handoff(s,uid,person.name,requested));
+  const s=(await tx.get(ref)).data(),team=s.assignments?.[uid];
+  const transfer=handoff(s,uid,null,requested);
+  tx.update(ref,new FieldPath('entryRequests',requested),deleteField(),
+   new FieldPath('entryMembers',team),requested,new FieldPath('entryNames',team),transfer.entryNames[team]);
  });
 }
 export async function saveOrder(code,index,order,phase='plan',expectedRevision=0){

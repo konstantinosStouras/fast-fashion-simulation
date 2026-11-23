@@ -60,6 +60,30 @@ header:has(>.studio-nav) #theme-toggle{margin-left:0}
 .team-user-table select{margin:0;min-width:120px}
 .team-user-table td:first-child{overflow-wrap:anywhere}
 .directory-pages{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:16px;font-size:13px}
+.session-teams{margin-top:24px;max-width:1180px;border-radius:12px}
+.session-team-heading{display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap}
+.session-team-heading h2,.session-team-heading label,.session-team-heading select{margin-bottom:0}
+.session-team-heading h2{margin-top:0}
+.session-team-heading label{width:min(100%,360px);min-width:0}
+#session-teams-status:empty{display:none}
+.session-team-table{width:100%;margin-top:20px}
+.session-team-table :is(th,td){vertical-align:top;text-align:start;overflow-wrap:anywhere}
+.session-team-table th[scope=row]{text-transform:none;font:inherit;font-weight:600;letter-spacing:normal}
+.session-team-members{list-style:none;margin:0;padding:0}
+.session-team-members li{line-height:1.5;text-align:start}
+.session-team-members li+li{margin-top:5px}
+.session-team-members small{color:var(--muted);font-size:12px}
+.session-team-unassigned h3{margin:22px 0 8px}
+@media(max-width:700px){
+ .session-teams{padding:18px 12px}
+ .session-team-heading label{width:100%}
+ .session-teams .table-wrap .session-team-table{min-width:0}
+ .session-team-table,.session-team-table tbody,.session-team-table tr,.session-team-table th[scope=row],.session-team-table td{display:block}
+ .session-team-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+ .session-team-table tr{border-top:1px solid var(--line);padding:10px 0}
+ .session-team-table :is(th[scope=row],td){border:0;padding:4px}
+ .session-team-table td::before{content:attr(data-label);display:block;font-size:12px;color:var(--muted)}
+}
 @media(max-width:700px){.ai-settings-layout{grid-template-columns:minmax(0,1fr);gap:0}.studio-nav button{flex:1;padding:10px 8px}.team-directory{padding:18px 12px}.team-user-table td{padding:10px 5px}}
 @media(max-width:640px){
  .directory-filters{grid-template-columns:1fr;gap:0}

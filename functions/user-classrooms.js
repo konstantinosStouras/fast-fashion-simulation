@@ -12,6 +12,24 @@ export function classroomStatus(session) {
   return {status: 'running', currentPhase: seconds >= 180 ? 'main' : 'practice'};
 }
 
+export function classroomOpponent(session, phase, team, captain) {
+  const waiting = session.status === 'lobby';
+  if (phase === 'practice' && hasHomeTeamPractice(session)) return 'AI practice opponent';
+  if (session.mode === 'team' && !team) return waiting ? 'Awaiting team assignment' : 'Unassigned';
+  if (!hasHomeTeamPractice(session) && session.aiOpponent?.[phase]) {
+    const {provider, model} = session.aiOpponent;
+    return ['AI opponent', labNames[provider] || provider, model].filter(Boolean).join(' · ');
+  }
+  if (session.mode !== 'team') return 'Individual play';
+  if (waiting) return 'Awaiting draw';
+  if (session.teamOpponents == null)
+    return Object.keys(session.teamNames || {}).length > 1 ? 'Classroom market' : 'Individual play';
+  const rival = session.teamOpponents[captain];
+  if (rival === null) return session.oddTeamAi ? 'AI opponent' : 'Bye · individual play';
+  if (rival === undefined) return 'Opponent unavailable';
+  return session.teamNames?.[rival] || 'Opponent unavailable';
+}
+
 export function summarizeUserClassroom(session, uid, joined) {
   const mode = session.mode || 'individual';
   const waiting = session.status === 'lobby';
@@ -26,22 +44,9 @@ export function summarizeUserClassroom(session, uid, joined) {
   const rival = session.teamOpponents?.[captain];
   const hasHumanRival = mode === 'team' && !!namedTeam && (session.teamOpponents == null
     ? Object.keys(session.teamNames || {}).length > 1 : rival != null && Object.hasOwn(session.teamNames || {}, rival));
-  function opponent(phase) {
-    if (phase === 'practice' && hasHomeTeamPractice(session)) return 'AI practice opponent';
-    if (mode === 'team' && !team) return waiting ? 'Awaiting team assignment' : 'Unassigned';
-    if (!hasHomeTeamPractice(session) && session.aiOpponent?.[phase]) {
-      const {provider, model} = session.aiOpponent;
-      return ['AI opponent', labNames[provider] || provider, model].filter(Boolean).join(' · ');
-    }
-    if (mode !== 'team') return 'Individual play';
-    if (waiting) return 'Awaiting draw';
-    if (session.teamOpponents == null) return hasHumanRival ? 'Classroom market' : 'Individual play';
-    if (rival === null) return 'Bye · individual play';
-    if (rival === undefined) return 'Opponent unavailable';
-    return session.teamNames[rival] || 'Opponent unavailable';
-  }
   const {status, currentPhase} = classroomStatus(session);
-  const practiceOpponent = opponent('practice'), mainOpponent = opponent('main');
+  const practiceOpponent = classroomOpponent(session, 'practice', team, captain);
+  const mainOpponent = classroomOpponent(session, 'main', team, captain);
   const activePhase = currentPhase === 'practice' || currentPhase === 'main';
   const matchup = currentPhase === 'practice' ? practiceOpponent : mainOpponent;
   const hasRival = (mode !== 'team' || team != null) && (session.aiOpponent?.[currentPhase] || hasHumanRival || (currentPhase==='main' && rival===null && session.oddTeamAi));
