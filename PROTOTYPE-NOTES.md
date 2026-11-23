@@ -12,7 +12,7 @@ Initial quantities are one integer per style, from 0 to 200. The last season all
 - Style shares: heterogeneous positive weights, normal around 1 with SD 0.4 and minimum 0.1, normalised to the aggregate total.
 - Eight styles redistribute the base market, then add the configured consumption response (default 20%). They do not automatically double demand.
 - Forecast relative error: normal, SD 20%, forecasts floored at zero. Half of demand arrives before the response decision.
-- Price €40; initial unit cost €12; replenishment €16; development €150/style; salvage €5/unit.
+- Price $40; initial unit cost $12; replenishment $16; development $150/style; salvage $5/unit.
 - Footprint: 5 kg CO2e/produced unit plus 1 kg/leftover unit. No automatic emissions premium for speed.
 - Identical seeded underlying demand across the three scored seasons supports comparison. Practice uses a separate draw. Participants should not treat the repeated demand as a forecasting exam.
 - Profit is the business score. Leftovers and absolute footprint are separate outcomes; there is no arbitrary weighted sustainability score.

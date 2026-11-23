@@ -12,11 +12,11 @@ export const SETTINGS=[
  ['demandSd','Demand standard deviation',96,0,1000,1,'Season-level uncertainty. Demand is a normal draw, rounded and floored at zero. Default SD is 20% of the mean.'],
  ['forecastSd','Forecast error SD',0.2,0,0.8,0.05,'Relative error in the mid-season forecast: 0.20 means 20% standard deviation. Zero gives a perfect forecast.'],
  ['rebound','Extra consumption with 8 styles',0.2,0,1,0.05,'0 = purchases only shift between styles/teams. In solo play, 0.20 adds 20% demand with eight styles. In team play, market growth is this rate × the fraction of teams offering eight styles.'],
- ['price','Selling price (€)',40,1,500,1,'Revenue per sold item. Fixed across all styles and seasons.'],
- ['initialCost','Initial unit cost (€)',12,0,500,1,'Cost for every unit ordered before demand is observed.'],
- ['refillCost','Replenishment unit cost (€)',16,0,500,1,'Cost per extra unit ordered after early sales. Usually higher than initial cost.'],
- ['styleCost','Development cost per style (€)',150,0,5000,10,'Charged once per style each season. Extra variety is not free.'],
- ['salvage','Leftover salvage value (€)',5,0,500,1,'Revenue recovered per unsold item. Must not exceed either production cost or the selling price.'],
+ ['price','Selling price ($)',40,1,500,1,'Revenue per sold item. Fixed across all styles and seasons.'],
+ ['initialCost','Initial unit cost ($)',12,0,500,1,'Cost for every unit ordered before demand is observed.'],
+ ['refillCost','Replenishment unit cost ($)',16,0,500,1,'Cost per extra unit ordered after early sales. Usually higher than initial cost.'],
+ ['styleCost','Development cost per style ($)',150,0,5000,10,'Charged once per style each season. Extra variety is not free.'],
+ ['salvage','Leftover salvage value ($)',5,0,500,1,'Revenue recovered per unsold item. Must not exceed either production cost or the selling price.'],
  ['unitCarbon','Production footprint (kg CO₂e)',5,0,100,0.1,'Illustrative footprint per unit produced, including replenishment.'],
  ['leftoverCarbon','Extra leftover footprint (kg CO₂e)',1,0,100,0.1,'Additional handling/end-of-season footprint for each unsold item.']
 ];

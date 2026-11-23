@@ -40,5 +40,5 @@ test('closed team scores use one final server snapshot despite pending saves and
  await api.logout();await wait(()=>$('#open-login'));
  const early=JSON.parse(w.localStorage.getItem('ff:demo:v1'));early.sessions[code].startedAt=Date.now()-10000;early.sessions[code].closedAt=null;early.sessions[code].status='running';w.localStorage.setItem('ff:demo:v1',JSON.stringify(early));
  await api.loginEmail('captain@example.test');await wait(()=>$('#order-form'));await api.closeSession(code);await wait(()=>$('.result-stats'));
- assert.equal($('#order-form'),null);assert.equal($('.competition-instructions'),null);assert.equal($('.result-stats strong').textContent,'€0');assert.match($('#notice').textContent,/closed this session/);assert.match($('#season-results').textContent,/No seasons were completed/);
+ assert.equal($('#order-form'),null);assert.equal($('.competition-instructions'),null);assert.equal($('.result-stats strong').textContent,'$0');assert.match($('#notice').textContent,/closed this session/);assert.match($('#season-results').textContent,/No seasons were completed/);
 });
