@@ -754,7 +754,7 @@ function renderCompetition(){
   : aiNow?aiPhaseDescription(session):opponent
   ? (waiting?'Current opponent':'Session opponent')+' · '+esc(session.teamNames[opponent])
   : individual?'Individual play · Your team has its own market.':'';
- const heading=waiting?'TEAM WAITING ROOM':final?'TEAM RESULTS':individual?'YOUR TEAM':'TEAM COMPETITION';
+ const heading=waiting?'TEAM WAITING ROOM':final?'TEAM RESULTS':individual?'INDIVIDUAL PLAY':'TEAM COMPETITION';
  banner.innerHTML='<p class="eyebrow">'+heading+'</p>'+(waiting?'<p class="session-context">'+esc(session.name)+' · Session code '+esc(session.code)+'</p>':'')+'<h2>'+esc(name)+'</h2>'+(matchup?'<p class="team-matchup">'+matchup+'</p>':'');
  if(waiting){
   const role=captain?(captain===user.uid?'You are the team captain. You will save decisions for this team.':'You are a teammate. Your captain submits the shared decisions. You can follow updates and discuss together.'):assignedNumber?'Your team assignment is saved. The classroom will confirm the captain when play starts.':'You have joined the session. Your instructor assigns teams. Your team will appear here automatically.';
