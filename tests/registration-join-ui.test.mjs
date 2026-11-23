@@ -27,18 +27,18 @@ test('registration verification gate, formatted session IDs and live team assign
  await host.loginGoogle();
  const deliver=()=>w.dispatchEvent(new w.StorageEvent('storage',{key:'ff:demo:v1'}));
  const assign=async (assignments,names)=>{await host.saveTeams(code,assignments,names);deliver();};
- const uid=api.currentUser().uid;await assign({a:'a',b:'b',c:'b',[uid]:'a'},{a:'North team',b:'South team'});await wait(()=>$('.team-banner h2').textContent==='North team');assert.match($('.team-role').textContent,/You are a teammate/);
+ const uid=api.currentUser().uid;await assign({a:'a',b:'b',c:'b',[uid]:'a'},{a:'North team',b:'South team'});await wait(()=>$('.team-banner h2').textContent==='North team');assert.match($('.team-role').textContent,/One teammate will be drawn/);
  assert.match($('.team-matchup').textContent,/drawn at random/);
  await assign({a:'a',b:'b',c:'b',[uid]:'b'},{a:'North team',b:'South team'});await wait(()=>$('.team-banner h2').textContent==='South team');
  assert.match($('.team-matchup').textContent,/drawn at random/);
  await assign({a:'a',b:'b',c:'c',[uid]:'c'},{a:'North team',b:'South team',c:'West team'});
  await wait(()=>$('.team-banner h2').textContent==='West team');
  assert.match($('.team-matchup').textContent,/drawn at random/);
- await host.startSession(code);deliver();await wait(()=>$('#order-form'));assert.equal($('#order-form [name=quantity]').disabled,true);assert.equal($('#save-order').hidden,true);assert.equal($('.team-banner h2').textContent,'West team');
+ await host.startSession(code);deliver();await wait(()=>$('#order-form'));const analyst=JSON.parse(w.localStorage.getItem('ff:demo:v1')).sessions[code].entryMembers.c!==uid;assert.equal($('#order-form [name=quantity]').disabled,analyst);assert.equal($('#save-order').hidden,analyst);assert.equal($('.team-banner h2').textContent,'West team');
  const room=JSON.parse(w.localStorage.getItem('ff:demo:v1')).sessions[code];
  const rival=room.teamOpponents.c;
- assert.ok($('.team-matchup').textContent.includes(rival?room.teamNames[rival]:'Individual play'));
- assert.equal(Boolean($('#leaderboard')),Boolean(rival));
+ assert.ok($('.team-matchup').textContent.includes(rival?room.teamNames[rival]:'AI opponent'));
+ assert.equal(Boolean($('#leaderboard')),true);
  assert.equal(room.phaseOffset,180);
  assert.match($('#app h1').textContent,/Order ahead/);
  for(const offset of [420,540]){

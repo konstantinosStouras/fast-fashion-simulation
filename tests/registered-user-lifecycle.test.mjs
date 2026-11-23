@@ -40,6 +40,9 @@ test('default teams seed new classrooms, played codes follow participation, and 
  assert.deepEqual((await list()).find(person=>person.uid===ids[a]).playedSessionCodes,[room]);
  assert.equal(data().sessions[room].teamOpponents[ids[a]],ids[r]);
  await api.loginEmail(email(a));
+ if(data().sessions[room].entryMembers[ids[a]]!==ids[a]){
+  await api.changeEntryRole(room);await api.loginEmail(email(z));await api.changeEntryRole(room,ids[a]);await api.loginEmail(email(a));
+ }
  const plan={variety:4,quantity:60,cap:0};
  await api.saveOrder(room,1,plan);
  await api.loginGoogle();await api.advancePhase(room,420);

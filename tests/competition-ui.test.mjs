@@ -21,29 +21,28 @@ test('solo start, team setup, captain saves, teammate read-only view and period 
  data=JSON.parse(w.localStorage.getItem('ff:demo:v1'));const code=Object.values(data.sessions).find(s=>s.mode==='team').code;
  const entrants=await import('../backend-demo.js?team-entrants');
  for(const name of ['alice','bob','charlie','dana']){
-  if(name==='dana'){
-   await wait(()=>w.document.querySelectorAll('[data-team-member]').length===3);
-   $('[data-team-name]').value='North draft';
-  }
   await entrants.loginEmail(name+'@example.test');await entrants.joinSession(code,name);
   w.dispatchEvent(new w.StorageEvent('storage',{key:'ff:demo:v1'}));
  }
  await wait(()=>w.document.querySelectorAll('[data-team-member]').length===4);
  assert.equal($('#team-size').textContent,'3');
- assert.equal($('[data-team-name="demo-alice@example.test"]').value,'North draft');
  const membership=Array.from(w.document.querySelectorAll('[aria-label="Joined team members"] li'),el=>el.textContent);
  assert.ok(membership.some(line=>line.includes('Team 1 · 3 students')));
  assert.ok(membership.some(line=>line.includes('Team 2 · 1 student')));
- assert.equal($('[data-team-member="demo-bob@example.test"]').value,'demo-alice@example.test');
- assert.equal($('[data-team-member="demo-dana@example.test"]').value,'demo-dana@example.test');
  const assignments=Object.fromEntries(['alice','bob','charlie','dana'].map(n=>['demo-'+n+'@example.test','demo-'+(['alice','bob'].includes(n)?'alice':'charlie')+'@example.test']));for(const el of w.document.querySelectorAll('[data-team-member]')){el.value=assignments[el.dataset.teamMember];el.dispatchEvent(new w.Event('change',{bubbles:true}));assert.match(w.document.getElementById(el.getAttribute('aria-describedby')).textContent,new RegExp('Captain: '+(el.value.includes('alice')?'alice':'charlie')));}
  submit('#team-form');await wait(()=>JSON.stringify(JSON.parse(w.localStorage.getItem('ff:demo:v1')).sessions[code].assignments)===JSON.stringify(assignments));
  await wait(()=>w.document.querySelectorAll('[data-team-name]').length===2);
  for(const el of w.document.querySelectorAll('[data-team-name]')){assert.match(el.getAttribute('aria-label'),/Team name for captain/);el.value=el.dataset.teamName.includes('alice')?'Team A':'Team B';}
  submit('#team-names');await wait(()=>JSON.parse(w.localStorage.getItem('ff:demo:v1')).sessions[code].teamNames['demo-alice@example.test']==='Team A');
- await api.startSession(code);await wait(()=>$('#leaderboard'));assert.equal($('#team-setup'),null);
+ await api.startSession(code);
+ const alice='demo-alice@example.test';
+ if(JSON.parse(w.localStorage.getItem('ff:demo:v1')).sessions[code].entryMembers[alice]!==alice){
+  await entrants.loginEmail('alice@example.test');await entrants.changeEntryRole(code);
+  await entrants.loginEmail('bob@example.test');await entrants.changeEntryRole(code,alice);
+ }
+ await wait(()=>$('#leaderboard'));assert.equal($('#team-setup'),null);
  await api.logout();await wait(()=>$('#open-login'));w.localStorage.removeItem('ff:session:demo-alice@example.test');w.sessionStorage.removeItem('ff:session:demo-alice@example.test');w.history.replaceState({},'', '/?demo');await api.loginEmail('alice@example.test');await wait(()=>$('#join'));$('#join [name=code]').value=code;submit('#join');await wait(()=>$('#order-form'));assert.equal($('#save-order').disabled,false);$('#order-form [name=quantity]').value='93';submit('#order-form');await wait(()=>$('.save-state').textContent.includes('93'));
- await api.logout();await wait(()=>$('#open-login'));await api.loginEmail('bob@example.test');await wait(()=>$('#join'));$('#join [name=code]').value=code;submit('#join');await wait(()=>$('#order-form'));assert.equal($('#save-order').disabled,true);assert.equal($('#order-form [name=quantity]').value,'93');assert.match($('.team-banner').textContent,/captain submits/);
+ await api.logout();await wait(()=>$('#open-login'));await api.loginEmail('bob@example.test');await wait(()=>$('#join'));$('#join [name=code]').value=code;submit('#join');await wait(()=>$('#order-form'));assert.equal($('#save-order').disabled,true);assert.equal($('#order-form [name=quantity]').value,'93');assert.match($('.team-banner').textContent,/alice enters decisions/i);
  const host=await import('../backend-demo.js?competition-host');
  await host.loginGoogle();
  const advance=async offset=>{await host.advancePhase(code,offset);w.dispatchEvent(new w.StorageEvent('storage',{key:'ff:demo:v1'}));};

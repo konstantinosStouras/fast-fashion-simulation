@@ -49,8 +49,8 @@ test('students join teams of the configured size, rehearse independently and ent
  }
  await enterLobby();
  const initial=data();
- assert.equal($('.team-banner h2').textContent,'Team 2');
- assert.deepEqual(initial.sessions[code].assignments,{[captain]:captain,[rival]:captain,[teammate]:teammate});
+ assert.equal($('.team-banner h2').textContent,initial.sessions[code].teamNames[initial.sessions[code].assignments[teammate]]);
+ assert.equal(Object.keys(initial.sessions[code].teamNames).length,2);
  $('[data-practice-start]').click();
  $('[data-practice-order] input').value='58';
  submit('[data-practice-order]');
@@ -93,6 +93,6 @@ test('students join teams of the configured size, rehearse independently and ent
  await wait(()=>$('#order-form') && !$('#team-practice'));
  assert.match($('h1').textContent,/Order ahead/);
  assert.match($('.team-banner').textContent,/South/);
- assert.equal($('#order-form [name=quantity]').disabled,true);
+ assert.equal($('#order-form [name=quantity]').disabled,data().sessions[code].entryMembers[captain]!==teammate);
  assert.deepEqual(data().orders,initial.orders);
 });

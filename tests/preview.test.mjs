@@ -16,8 +16,8 @@ test('instructor rehearsal advances only on request without writing classroom re
  await import('../main.js?preview-test');await wait(()=>$('#open-login'));
  click('#open-login');click('#google');await wait(()=>$('#staff'));click('#staff');await wait(()=>$('#create'));
  const mode=$('#create [name=mode]');
- assert.equal(mode.selectedOptions[0].textContent,'Individual play');
- assert.match($('#play-mode-help').textContent,/their own market/);
+ assert.equal(mode.selectedOptions[0].textContent,'Team competition');
+ assert.match($('#play-mode-help').textContent,/human opponent/);
  mode.value='team';mode.dispatchEvent(new w.Event('change'));
  assert.equal($('#classroom-team-size-field').hidden,false);
  assert.equal($('#create [name=teamSize]').valueAsNumber,3);
@@ -26,7 +26,7 @@ test('instructor rehearsal advances only on request without writing classroom re
  $('#create [name=teamSize]').value='2';
  assert.match($('#play-mode-help').textContent,/practice against AI as often as they like before class/);
  assert.match($('#play-mode-help').textContent,/human opponent for all three seasons/);
- assert.match($('#play-mode-help').textContent,/unpaired team uses individual play/);
+ assert.match($('#play-mode-help').textContent,/unpaired team faces its own AI opponent/);
  assert.equal($('#create .ai-phase-fields').hidden,true);
  click('#preview-settings');await wait(()=>$('#team-practice')&&$('#preview-main'));
  click('[data-practice-start]');await wait(()=>$('[data-practice-order]'));
@@ -90,7 +90,7 @@ test('instructor rehearsal advances only on request without writing classroom re
  assert.equal(w.localStorage.getItem('ff:session:demo-admin'),null,'preview must not replace real student resume state');
  click('#preview-exit');await wait(()=>$('#create'));
  // Preview an already-running classroom and verify its status, timing and records are unchanged.
- $('#create [name=name]').value='Live class';
+ $('#create [name=mode]').value='individual';$('#create [name=mode]').dispatchEvent(new w.Event('change'));$('#create [name=name]').value='Live class';
  const createdName=$('#create [name=name]').value;
  const createdCard=()=>Array.from(document.querySelectorAll('.studio-session-card')).find(card=>card.querySelector('h4').textContent===createdName);
  submit('#create');

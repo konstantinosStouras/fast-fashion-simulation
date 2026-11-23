@@ -97,6 +97,15 @@ export function assignJoiningTeam(session, uid) {
   if (!/^(?:[1-9]\d?|100)$/.test(number)) throw Error('Choose a team number from 1 to 100.');
   if (seats[number] > maxMembers) throw Error('This team supports up to ' + maxMembers + ' members. Review the team assignments.');
   const captain = captains.get(number) || uid;
+  if(session.randomTeams && !session.membershipEdited && !Object.hasOwn(planned,uid)){
+    // Insert the newcomer into a uniformly drawn unlocked seat. The displaced
+    // member takes the new seat, preserving capacities and reserved places.
+    const composition={...getTeamComposition(session),[uid]:number};
+    const movable=Object.keys({...assignments,[uid]:captain}).filter(id=>!Object.hasOwn(planned,id));
+    const other=movable[randomIndex(movable.length)];
+    [composition[uid],composition[other]]=[composition[other],composition[uid]];
+    return materializeTeams(movable.concat(Object.keys(assignments).filter(id=>Object.hasOwn(planned,id))).map(id=>({uid:id})),{...session,teamComposition:composition});
+  }
   return {
     assignments: {...assignments, [uid]: captain},
     teamNames: captain === uid ? {...teamNames, [uid]: 'Team ' + number} : teamNames
@@ -145,6 +154,17 @@ export function materializeTeams(people, session) {
     students.forEach(uid => assignments.push([uid, captain]));
   }
   return {assignments: Object.fromEntries(assignments), teamNames: Object.fromEntries(teamNames)};
+}
+
+export function initialEntryRoles(teams,people){
+  const entryMembers={},entryNames={};
+  for(const team of Object.keys(teams.teamNames)){
+    const members=people.filter(person=>teams.assignments[person.uid]===team);
+    const editor=members[randomIndex(members.length)];
+    entryMembers[team]=editor.uid;
+    entryNames[team]=editor.name;
+  }
+  return {entryMembers,entryNames};
 }
 
 export function validateTeams(people, assignments, teamNames, maxSize = 20) {

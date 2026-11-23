@@ -342,3 +342,17 @@ test('deletion marker requires closed owner authorization and cannot be forged o
  await assertSucceeds(deleteDoc(room));
  assertEqual((await getDoc(doc(db('bob'),'sessions/ABCDEFGH'))).exists(),false);
 });
+test('approved handoff moves write access to the analyst and preserves the shared order',async()=>{
+ await seed(180,{mode:'team',assignments:{alice:'alice',bob:'alice'},teamNames:{alice:'North'}});
+ const alice=db('alice'),bob=db('bob');
+ const session='sessions/ABCDEFGH';
+ await assertSucceeds(setDoc(doc(alice,path('alice','1')),order()));
+ await assertFails(setDoc(doc(bob,path('alice','1')),order({revision:2})));
+ await assertSucceeds(updateDoc(doc(bob,session),{entryRequests:{bob:'bob'}}));
+ const transfer={entryMembers:{alice:'bob'},entryNames:{alice:'bob'},entryRequests:{}};
+ await assertFails(updateDoc(doc(bob,session),transfer));
+ await assertSucceeds(updateDoc(doc(alice,session),transfer));
+ await assertFails(setDoc(doc(alice,path('alice','1')),order({revision:2})));
+ await assertSucceeds(setDoc(doc(bob,path('alice','1')),order({revision:2,quantity:99})));
+ await assertFails(setDoc(doc(bob,path('bob','1')),order()));
+});

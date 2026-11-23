@@ -44,7 +44,7 @@ export function summarizeUserClassroom(session, uid, joined) {
   const practiceOpponent = opponent('practice'), mainOpponent = opponent('main');
   const activePhase = currentPhase === 'practice' || currentPhase === 'main';
   const matchup = currentPhase === 'practice' ? practiceOpponent : mainOpponent;
-  const hasRival = (mode !== 'team' || team != null) && (session.aiOpponent?.[currentPhase] || hasHumanRival);
+  const hasRival = (mode !== 'team' || team != null) && (session.aiOpponent?.[currentPhase] || hasHumanRival || (currentPhase==='main' && rival===null && session.oddTeamAi));
   return {code: session.code, name: session.name, mode, status, joined, team, practiceOpponent,
     mainOpponent, currentPhase, activeOpponent: joined && activePhase && hasRival ? matchup : null};
 }

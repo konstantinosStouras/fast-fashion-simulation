@@ -29,12 +29,14 @@ export function usesPairedMarkets(session){
  return session.mode==='team' && (session.teamOpponents!=null || session.status==='lobby');
 }
 
+const computerId=team=>'ai/'+team;
+export const isComputerTeam=id=>typeof id==='string'&&id.startsWith('ai/');
 export function teamMatchup(session,captain){
  const names=session.teamNames||{};
  if(!Object.hasOwn(names,captain))return [];
  if(!usesPairedMarkets(session))return Object.keys(names).sort();
  const opponents=session.teamOpponents||{};
- return opponents[captain]==null?[captain]:[captain,opponents[captain]];
+ return opponents[captain]==null?(session.oddTeamAi?[captain,computerId(captain)]:[captain]):[captain,opponents[captain]];
 }
 
 export function teamMatchups(session){
@@ -44,7 +46,7 @@ export function teamMatchups(session){
  const groups=[];
  for(const captain of captains){
   const rival=opponents[captain];
-  if(rival==null)groups.push([captain]);
+  if(rival==null)groups.push(teamMatchup(session,captain));
   else if(captain<rival)groups.push([captain,rival]);
  }
  return groups;
@@ -97,7 +99,15 @@ export function teamRound(session,index,allOrders,captain){
   return round;
  }
  const groups=captain===undefined?teamMatchups(session):[teamMatchup(session,captain).sort()].filter(group=>group.length);
- const orders=Object.fromEntries(groups.flat().map(uid=>[uid,allOrders[uid]?.[index]||DEFAULT_ORDER]));
+ const orders=Object.fromEntries(groups.flat().map(uid=>{
+  if(!isComputerTeam(uid))return [uid,allOrders[uid]?.[index]||DEFAULT_ORDER];
+  // The rival plans for a share of classroom demand using its own
+  // session-seeded forecast and replenishment policy.
+  const draw=randomFor(session.seed+index*7919);
+  const variety=index===3&&draw()>0.5?8:4;
+  const quantity=Math.min(200,Math.max(0,Math.round(session.config.demandMean/(4+variety)*(0.75+draw()*0.45))));
+  return [uid,{variety,quantity,cap:ROUNDS[index].quick?Math.min(200,Math.ceil(quantity*(0.3+draw()*0.5))):0}];
+ }));
  const paired=usesPairedMarkets(session);
  const {seed,config}=session;
  const identities=session.marketIdentities||{};

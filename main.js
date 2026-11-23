@@ -1,3 +1,4 @@
+import {entryMember} from './team-roles.js';
 import {sessionProgress,hasHomeTeamPractice} from './functions/session-progress.js?v=home-practice-1';
 import {sessionCodeFromUrl} from './auth-flow.js?v=session-codes-1';
 import {normalizeSessionCode,SESSION_CODE_PATTERN} from './session-code.js';
@@ -55,7 +56,7 @@ function updateConnection(){
  if(session.status==='closed'&&(!connected||!sessionFresh)){finalTeamOrders=null;marketReady='';marketLoading='';$('app').innerHTML='<section class="panel" id="session-rechecking"><h1>Reconnect to check this session.</h1><p>Results are hidden until the server confirms this session is still available. Your instructor may have deleted it.</p></section>';}
  connectionBanner.dataset.state=!connected?'waiting':finalConfirmed?'ready':savePending?'saving':waiting?'waiting':'ready';
  connectionBanner.textContent='Session '+session.code+' · '+(!connected?(session.status==='closed'?'Offline. This session is closed. Reconnect to confirm final scores.':'Offline. Reconnect to receive team updates and save.'):finalConfirmed?(session.mode==='team'?'Session closed · final team scores confirmed. Later saves cannot change them.':'Session closed · final scores confirmed.'):savePending?'Save pending. Keep this page open until confirmation.':waiting?'Reconnecting… waiting for the latest session and saved decisions.':session.status==='lobby'?'Connected · waiting for your instructor.':'Connected · saved decisions are up to date.');
- const button=$('save-order');if(button)button.disabled=waiting||savePending||(session.mode==='team'&&decisionOwner(session,user.uid)!==user.uid);
+ const button=$('save-order');if(button)button.disabled=waiting||savePending||(session.mode==='team'&&entryMember(session,decisionOwner(session,user.uid))!==user.uid);
 }
 function resumeVisibleGame(){
  connected=pageWindow.navigator.onLine!==false;
@@ -204,7 +205,7 @@ async function showStaffTeams(draft=null,code=null){
  void showTeamsPanel(panel,api,role==='admin',code,roomCode=>action(()=>openSession(roomCode,true)),confirmAction).catch(error=>{if(panel.isConnected)failure(error);});
 }
 async function showStaff(draft=null){clean();staffView=true;setViewAddress('','staff');const version=viewVersion;const [sessions,defaults]=await Promise.all([api.listSessions(role==='admin'),api.getDefaults()]);if(version!==viewVersion)return;
- $('app').innerHTML=`<h1 class="sr-only">Admin</h1><div class="studio-layout"><aside class="studio-options" aria-label="Session setup and admin options"><section class="panel"><p class="eyebrow">01 / DESIGN YOUR SESSION</p><h2>Create a classroom.</h2><form id="create"><label>Session name<input name="name" maxlength="80" required placeholder="Executive MBA · November"></label><label for="classroom-code">Session code</label><input id="classroom-code" name="code" type="text" class="code-input" required minlength="3" maxlength="12" pattern="${SESSION_CODE_PATTERN}" aria-describedby="classroom-code-help classroom-code-status" autocomplete="off" autocapitalize="characters" spellcheck="false"><p id="classroom-code-help" class="hint">Choose a city below or type your own code using 3–12 letters or numbers.</p><div id="city-suggestions" role="group" aria-label="Suggested city codes"></div><p id="classroom-code-status" class="hint" role="status">Checking available cities…</p><label>Play mode<select name="mode" aria-describedby="play-mode-help"><option value="individual">Individual play</option><option value="team">Team competition</option></select><span class="field-description" id="play-mode-help"></span></label><label id="classroom-team-size-field" hidden>Students per team<input name="teamSize" type="number" inputmode="numeric" min="1" max="20" step="1" value="3" required disabled><span class="field-description">Students join teams automatically with the classroom code. If the class does not divide evenly, the last team can be smaller.</span></label>${aiPhaseFields()}<p id="create-ai-model" class="hint" aria-live="polite">Loading the selected AI model…</p><details class="settings"><summary>Market & business assumptions</summary>${settingsFields(defaults,true)}</details><p class="hint">Market assumptions lock when you create the classroom.</p><button>Create session ↗</button><button type="button" id="preview-settings" class="secondary">Test round</button><p class="hint">Rehearse practice and all three seasons at your own pace. Your decisions stay in this tab.<span id="ai-rehearsal-help" hidden> Test round uses a simulated rival. Start a classroom for the selected AI model.</span></p></form></section></aside><div class="studio-sessions" aria-label="Classroom sessions"><section class="panel" aria-labelledby="active-heading"><div class="heading"><h2 id="active-heading">Active sessions</h2><span class="pill" id="active-count"></span></div><p class="hint">Open a waiting or running class to manage participants, follow decisions and export results.</p><div id="card-export-status" role="status" aria-live="polite"></div><button type="button" class="small secondary danger" id="active-delete-all" aria-label="Delete all active sessions" hidden>Delete all</button><div id="active-sessions"></div></section><section class="panel" aria-labelledby="past-heading"><div class="heading"><h2 id="past-heading">Past sessions</h2><span class="pill" id="past-count"></span></div><p class="hint">Review completed or closed classes, export their results, or rehearse with the same assumptions.</p><button type="button" class="small secondary danger" id="past-delete-all" aria-label="Delete all past sessions" hidden>Delete all</button><div id="past-sessions"></div></section></div></div>`;
+ $('app').innerHTML=`<h1 class="sr-only">Admin</h1><div class="studio-layout"><aside class="studio-options" aria-label="Session setup and admin options"><section class="panel"><p class="eyebrow">01 / DESIGN YOUR SESSION</p><h2>Create a classroom.</h2><form id="create"><label>Session name<input name="name" maxlength="80" required placeholder="Executive MBA · November"></label><label for="classroom-code">Session code</label><input id="classroom-code" name="code" type="text" class="code-input" required minlength="3" maxlength="12" pattern="${SESSION_CODE_PATTERN}" aria-describedby="classroom-code-help classroom-code-status" autocomplete="off" autocapitalize="characters" spellcheck="false"><p id="classroom-code-help" class="hint">Choose a city below or type your own code using 3–12 letters or numbers.</p><div id="city-suggestions" role="group" aria-label="Suggested city codes"></div><p id="classroom-code-status" class="hint" role="status">Checking available cities…</p><label>Play mode<select name="mode" aria-describedby="play-mode-help"><option value="individual">Individual play</option><option value="team" selected>Team competition</option></select><span class="field-description" id="play-mode-help"></span></label><label id="classroom-team-size-field" hidden>Students per team<input name="teamSize" type="number" inputmode="numeric" min="1" max="20" step="1" value="3" required disabled><span class="field-description">Students join teams automatically with the classroom code. If the class does not divide evenly, the last team can be smaller.</span></label>${aiPhaseFields()}<p id="create-ai-model" class="hint" aria-live="polite">Loading the selected AI model…</p><details class="settings"><summary>Market & business assumptions</summary>${settingsFields(defaults,true)}</details><p class="hint">Market assumptions lock when you create the classroom.</p><button>Create session ↗</button><button type="button" id="preview-settings" class="secondary">Test round</button><p class="hint">Rehearse practice and all three seasons at your own pace. Your decisions stay in this tab.<span id="ai-rehearsal-help" hidden> Test round uses a simulated rival. Start a classroom for the selected AI model.</span></p></form></section></aside><div class="studio-sessions" aria-label="Classroom sessions"><section class="panel" aria-labelledby="active-heading"><div class="heading"><h2 id="active-heading">Active sessions</h2><span class="pill" id="active-count"></span></div><p class="hint">Open a waiting or running class to manage participants, follow decisions and export results.</p><div id="card-export-status" role="status" aria-live="polite"></div><button type="button" class="small secondary danger" id="active-delete-all" aria-label="Delete all active sessions" hidden>Delete all</button><div id="active-sessions"></div></section><section class="panel" aria-labelledby="past-heading"><div class="heading"><h2 id="past-heading">Past sessions</h2><span class="pill" id="past-count"></span></div><p class="hint">Review completed or closed classes, export their results, or rehearse with the same assumptions.</p><button type="button" class="small secondary danger" id="past-delete-all" aria-label="Delete all past sessions" hidden>Delete all</button><div id="past-sessions"></div></section></div></div>`;
  showStudioNavigation('admin');
  const createForm=$('create'), mode=createForm.elements.mode;
  const storageKey=key=>'ffo:setup:'+user.uid+':'+key;
@@ -277,7 +278,7 @@ async function showStaff(draft=null){clean();staffView=true;setViewAddress('','s
   $('create-ai-model').hidden=team;
   $('ai-rehearsal-help').hidden=team||!(createForm.elements.aiPractice.checked||createForm.elements.aiMain.checked);
   $('play-mode-help').textContent=team
-   ? 'Share the classroom code so students can practice against AI as often as they like before class. When you start the scored competition, teams draw a human opponent for all three seasons. An unpaired team uses individual play.'
+   ? 'Share the classroom code so students can practice against AI as often as they like before class. When you start the scored competition, teams draw a human opponent for all three seasons. An unpaired team faces its own AI opponent.'
    : 'Each participant manages a collection in their own market. You advance the classroom when students are ready.';
  };
  mode.addEventListener('change',updateModeHelp);
@@ -475,7 +476,7 @@ async function openSession(code,staff,review=false,focusEntry=false){
  subscriptions.push(api.watchSession(code,s=>{
   if(version!==viewVersion)return;
   if(!s||s.deletedAt){sessionUnavailable(code,!!s?.deletedAt||session?.code===code);return;}
-  const signature=x=>JSON.stringify([x.code,x.name,x.status,x.phaseOffset,x.mode,x.config,x.seed,x.assignments,x.teamNames,x.teamOpponents,x.aiOpponent,x.teamComposition,x.startedAt?.toMillis(),x.closedAt?.toMillis()]);
+  const signature=x=>JSON.stringify([x.code,x.name,x.status,x.phaseOffset,x.mode,x.config,x.seed,x.assignments,x.teamNames,x.entryMembers,x.entryNames,x.entryRequests,x.teamOpponents,x.aiOpponent,x.teamComposition,x.startedAt?.toMillis(),x.closedAt?.toMillis()]);
   const unchanged=session&&signature(session)===signature(s),justClosed=s.status==='closed'&&session?.status!=='closed';session={...s,aiOrders:session?.aiOrders};if(justClosed&&!staff)note('Your instructor closed this session. Decisions are locked; only completed seasons count.');updateConnection();if(unchanged){if($('session-rechecking')&&sessionFresh&&connected)renderSession();return;}
   if(!staff){const uid=decisionOwner(s,user.uid);if(uid!==currentOrderUid){
    orderUnsub?.();orders={};ordersReady=false;currentOrderUid=uid;
@@ -483,7 +484,7 @@ async function openSession(code,staff,review=false,focusEntry=false){
     if(version!==viewVersion||uid!==currentOrderUid)return;
     const index=phase().index,local=localDecisionWrites.get(index);
     const ownUpdate=local&&['variety','quantity','cap','phase','revision'].every(key=>local[key]===o[index]?.[key]);
-    const changedElsewhere=ordersReady&&!savePending&&!ownUpdate&&decisionOwner(session,user.uid)===user.uid&&JSON.stringify(orders[index]||null)!==JSON.stringify(o[index]||null);
+    const changedElsewhere=ordersReady&&!savePending&&!ownUpdate&&entryMember(session,decisionOwner(session,user.uid))===user.uid&&JSON.stringify(orders[index]||null)!==JSON.stringify(o[index]||null);
     for(const [round,write]of localDecisionWrites)if((o[round]?.revision??0)>=write.revision)localDecisionWrites.delete(round);
     orders=o;ordersReady=true;ordersFresh=true;if(session)renderSession();
     if(changedElsewhere&&$('order-form')){note('A decision was updated on another device. The latest saved values are loaded. Review them before editing.');decisionStatus('Updated on another device. '+savedDecisionText(index));}
@@ -548,7 +549,7 @@ function savedDecisionText(index){const saved=orders[index];return saved?'✓ Sa
 function decisionPhaseMatches(index,kind){return session?.status==='running'&&phase().index===index&&phase().kind===kind;}
 async function saveDecision(index,kind,order,expectedRevision){
  if(!studentPreview&&(!connected||!sessionFresh||!ordersFresh))throw Error('Reconnect and wait for saved decisions before saving.');
- if(session.mode==='team'&&decisionOwner(session,user.uid)!==user.uid)throw Error('Only your team captain can save decisions.');
+ if(session.mode==='team'&&entryMember(session,decisionOwner(session,user.uid))!==user.uid)throw Error('Only the data-entry member can save decisions.');
  if(studentPreview){orders[index]={...order,phase:kind,revision:expectedRevision+1};persistRehearsal();renderSession();note('Decision saved in this tab.');return;}
  const version=viewVersion,code=session.code;
  localDecisionWrites.set(index,{...order,phase:kind,revision:expectedRevision+1});
@@ -577,7 +578,7 @@ async function saveDecision(index,kind,order,expectedRevision){
 function decisionStatus(message,state='saved'){const el=document.querySelector('.save-state');if(el){el.textContent=message;el.dataset.state=state;}}
 function updateDecisionDraftState(){
  if(savePending){decisionStatus('Saving… wait for confirmation.','saving');return;}
- const form=$('order-form');if(!form||!session||(session.mode==='team'&&decisionOwner(session,user.uid)!==user.uid))return;
+ const form=$('order-form');if(!form||!session||(session.mode==='team'&&entryMember(session,decisionOwner(session,user.uid))!==user.uid))return;
  const p=phase(),saved=orders[p.index]||DEFAULT_ORDER;
  const changed=p.kind==='plan'?Number(form.elements.quantity.value)!==saved.quantity||Number(form.elements.variety.value)!==saved.variety:form.elements.cap&&Number(form.elements.cap.value)!==saved.cap;
  const blank=[...form.querySelectorAll('input[type=number]')].some(el=>el.value==='');
@@ -596,7 +597,7 @@ function renderSession(){
  }
  if((session.status!=='closed'||session.mode!=='team')&&!staffView&&!studentPreview&&currentOrderUid&&!ordersReady){$('app').innerHTML='<section class="panel"><h1>Loading your saved decisions…</h1><p>Please wait before making your next decision.</p></section>';return;}
  if(loadTeamMarket())return;
- const orderKey=JSON.stringify([session.code,currentOrderUid,phase().index,phase().kind,session.status,orders[phase().index]||DEFAULT_ORDER]);
+ const orderKey=JSON.stringify([session.code,currentOrderUid,entryMember(session,currentOrderUid),phase().index,phase().kind,session.status,orders[phase().index]||DEFAULT_ORDER]);
  const draft=orderKey===renderedOrderKey&&$('order-form')?Array.from($('order-form').elements).filter(el=>el.name).map(el=>[el.name,el.value]):[];
  captureTeamDraft();
  const previous=phaseKey,focused=document.activeElement?.id;
@@ -626,7 +627,7 @@ function renderSession(){
 function staffSessionAi(room){
  if(hasHomeTeamPractice(room))return '<p class="hint" id="room-ai-summary">'+(room.status==='lobby'
   ? 'Students can join now and practice against AI as often as they like. Start the scored competition when your class is ready for the team draw.'
-  : 'Teams keep the same opponent across the three scored seasons. An unpaired team uses individual play.')+'</p>';
+  : 'Teams keep the same opponent across the three scored seasons. An unpaired team faces its own AI opponent.')+'</p>';
  const opponent=room.aiOpponent, labels=[];
  if(opponent?.practice)labels.push('practice');
  if(opponent?.main)labels.push('main phase');
@@ -738,7 +739,7 @@ function exportResults(source=session,people=roster,savedOrders=teamResultOrders
     if(r.opponent){
      const aiOrder=source.aiOrders[uid][index];
      row.push('AI competition','AI opponent',source.aiOpponent.provider,source.aiOpponent.model,aiOrder.variety,aiOrder.quantity,aiOrder.cap,r.opponent.profit,r.opponent.sales,r.marketDemand);
-    }else if(paired)row.push(opponent?'Team competition':'Individual play',opponent?source.teamNames[opponent]:'');
+    }else if(paired)row.push(opponent?.startsWith('ai/')?'AI competition':opponent?'Team competition':'Individual play',opponent?(source.teamNames[opponent]||'AI opponent'):'');
     rows.push(row);
    }
   }
@@ -804,8 +805,8 @@ function renderTeamSetup(){
  if(!panel){panel=document.createElement('section');panel.id='team-setup';panel.className='panel';$('roster').closest('section').before(panel);}
  panel.dataset.signature=signature;
  const shown=roster.slice(teamEditor.page*25,(teamEditor.page+1)*25);
- const drawNotice='Human opponents are drawn at random when the classroom starts. With an odd number of teams, one team receives a bye and plays its own market.';
- panel.innerHTML='<h2>Team membership</h2>'+groupingHelp+rosterSummary+'<p>'+drawNotice+' Each captain saves the team’s scored decisions.</p><button type="button" class="secondary" id="group-teams" '+(roster.length?'':'disabled')+'>Reshuffle joined students</button><p class="hint">You can adjust members, captains and team names before starting the competition.</p><form id="team-form">'+(roster.length?shown.map((p,i)=>'<label>'+esc(p.name)+'<select aria-label="Assign team for '+esc(p.name)+'" aria-describedby="team-assignment-'+i+'" data-team-member="'+esc(p.uid)+'"><option value="">Unassigned</option>'+roster.map(c=>'<option value="'+esc(c.uid)+'" '+(teamEditor.assignments[p.uid]===c.uid?'selected':'')+'>'+esc(c.name)+' (captain)</option>').join('')+'</select><span id="team-assignment-'+i+'" class="team-assignment-summary">'+esc(teamAssignmentDescription(teamEditor.assignments[p.uid]))+'</span></label>').join('')+'<button class="secondary">Save membership</button>':'<p>Participants will appear here after joining.</p>')+'</form>'+(pages>1?'<div class="button-row"><button id="team-prev" class="secondary" '+(teamEditor.page===0?'disabled':'')+'>Previous participants</button><span>Page '+(teamEditor.page+1)+' of '+pages+'</span><button id="team-next" class="secondary" '+(teamEditor.page===pages-1?'disabled':'')+'>Next participants</button></div><p class="hint">Edits on every page are saved together with Save membership.</p>':'')+'<form id="team-names">'+Object.entries(teamEditor.names).map(([uid,name])=>'<label>Team name<input aria-label="Team name for captain '+esc(teamCaptainName(uid))+'" data-team-name="'+esc(uid)+'" maxlength="60" required value="'+esc(name)+'"><span class="team-captain">Captain: '+esc(teamCaptainName(uid))+' · '+'Opponent drawn at start'+'</span></label>').join('')+(Object.keys(teamEditor.names).length?'<button class="secondary">Save team names</button>':'')+'</form>';
+ const drawNotice='Human opponents are drawn at random when the classroom starts. With an odd number of teams, the unpaired team faces its own AI opponent.';
+ panel.innerHTML='<h2>Team membership</h2>'+groupingHelp+rosterSummary+'<p>'+drawNotice+' One randomly selected teammate enters decisions. Analysts can request the role during play.</p><button type="button" class="secondary" id="group-teams" '+(roster.length?'':'disabled')+'>Reshuffle joined students</button><p class="hint">You can adjust members, captains and team names before starting the competition.</p><form id="team-form">'+(roster.length?shown.map((p,i)=>'<label>'+esc(p.name)+'<select aria-label="Assign team for '+esc(p.name)+'" aria-describedby="team-assignment-'+i+'" data-team-member="'+esc(p.uid)+'"><option value="">Unassigned</option>'+roster.map(c=>'<option value="'+esc(c.uid)+'" '+(teamEditor.assignments[p.uid]===c.uid?'selected':'')+'>'+esc(c.name)+' (captain)</option>').join('')+'</select><span id="team-assignment-'+i+'" class="team-assignment-summary">'+esc(teamAssignmentDescription(teamEditor.assignments[p.uid]))+'</span></label>').join('')+'<button class="secondary">Save membership</button>':'<p>Participants will appear here after joining.</p>')+'</form>'+(pages>1?'<div class="button-row"><button id="team-prev" class="secondary" '+(teamEditor.page===0?'disabled':'')+'>Previous participants</button><span>Page '+(teamEditor.page+1)+' of '+pages+'</span><button id="team-next" class="secondary" '+(teamEditor.page===pages-1?'disabled':'')+'>Next participants</button></div><p class="hint">Edits on every page are saved together with Save membership.</p>':'')+'<form id="team-names">'+Object.entries(teamEditor.names).map(([uid,name])=>'<label>Team name<input aria-label="Team name for captain '+esc(teamCaptainName(uid))+'" data-team-name="'+esc(uid)+'" maxlength="60" required value="'+esc(name)+'"><span class="team-captain">Captain: '+esc(teamCaptainName(uid))+' · '+'Opponent drawn at start'+'</span></label>').join('')+(Object.keys(teamEditor.names).length?'<button class="secondary">Save team names</button>':'')+'</form>';
  document.querySelectorAll('[data-team-member]').forEach(el=>el.addEventListener('change',()=>{$(el.getAttribute('aria-describedby')).textContent=teamAssignmentDescription(el.value);}));
  $('group-teams').onclick=()=>action(async()=>{const groups=groupTeams(roster,size);await api.saveTeams(session.code,groups.assignments,groups.teamNames);note('Joined students reshuffled into teams.');});
  for(const [id,delta] of [['team-prev',-1],['team-next',1]])$(id)?.addEventListener('click',()=>{captureTeamDraft();teamEditor.page+=delta;renderTeamSetup();});
@@ -840,23 +841,34 @@ function renderCompetition(){
  const banner=document.createElement('section');banner.className='panel team-banner';
  const matchup=waiting?'Human opponents are drawn at random when the instructor starts the scored competition.'
   : aiNow?aiPhaseDescription(session):opponent
-  ? (waiting?'Current opponent':'Session opponent')+' · '+esc(session.teamNames[opponent])
+  ? (waiting?'Current opponent':'Session opponent')+' · '+esc(session.teamNames[opponent]||'AI opponent')
   : individual?'Individual play · Your team has its own market.':'';
  const heading=waiting?'TEAM WAITING ROOM':final?'TEAM RESULTS':individual?'INDIVIDUAL PLAY':'TEAM COMPETITION';
  banner.innerHTML='<p class="eyebrow">'+heading+'</p>'+(waiting?'<p class="session-context">'+esc(session.name)+' · Session code '+esc(session.code)+'</p>':'')+'<h2>'+esc(name)+'</h2>'+(matchup?'<p class="team-matchup">'+matchup+'</p>':'');
  if(waiting){
-  const role=captain?(captain===user.uid?'You are the team captain. You will save decisions for this team.':'You are a teammate. Your captain submits the shared decisions. You can follow updates and discuss together.'):assignedNumber?'Your team assignment is saved. The classroom will confirm the captain when play starts.':'You can practice while your team membership loads.';
+  const role=captain?('One teammate will be drawn to enter decisions when play starts. Everyone else starts as a data analyst.'):assignedNumber?'Your team assignment is saved. The classroom will confirm the captain when play starts.':'You can practice while your team membership loads.';
   banner.insertAdjacentHTML('beforeend','<p class="team-role" role="status" aria-live="polite">'+role+'</p><p class="hint">Membership and opponents lock when the session starts. Ask your instructor if your team assignment needs to change.</p>');
   if(captain)banner.insertAdjacentHTML('beforeend','<details><summary>How team competition works</summary>'+competitionInstructions()+'</details>');
  }else if(final){
   banner.insertAdjacentHTML('beforeend','<p>These are your team’s shared results. Only completed scored seasons count. Practice is excluded.</p>');
  }else if(captain){
-  const role=captain===user.uid?'You are the captain. Discuss with your team, then save one shared decision.':'Your captain submits the shared decision. Saved changes appear here automatically.';
+  const editor=entryMember(session,captain);
+  const role=editor===user.uid?'Data entry · You enter decisions for your team.':'Data analyst · '+esc(session.entryNames?.[captain]||'Your teammate')+' enters decisions for your team.';
+  const requests=session.entryRequests||{};
+  if(editor!==user.uid){
+   const button=document.createElement('button');button.className='secondary';button.disabled=Object.hasOwn(requests,user.uid);
+   button.textContent=button.disabled?'Data entry requested':'Request data entry';
+   button.onclick=()=>action(()=>api.changeEntryRole(session.code));banner.append(button);
+  }else for(const [uid,name] of Object.entries(requests)){
+   if(session.assignments[uid]!==captain)continue;
+   const button=document.createElement('button');button.className='secondary';button.textContent='Pass data entry to '+name;
+   button.onclick=()=>action(()=>api.changeEntryRole(session.code,uid));banner.append(button);
+  }
   banner.insertAdjacentHTML('beforeend','<p>'+role+'</p>');
   if((aiNow||!individual)&&phase().index===(hasHomeTeamPractice(session)?1:0)&&phase().kind==='plan')banner.insertAdjacentHTML('beforeend',competitionInstructions());
  }
  $('app').prepend(banner);
- if($('order-form')){const readOnly=captain!==user.uid;$('order-form').insertAdjacentHTML('beforebegin','<p class="decision-role">'+(readOnly?'Team view · Your captain saves decisions. Saved changes appear here automatically.':'Team captain · Save your decisions to share them with your teammates.')+'</p>');if(readOnly){for(const el of $('order-form').elements)el.disabled=true;$('save-order').hidden=true;}}
+ if($('order-form')){const readOnly=entryMember(session,captain)!==user.uid;$('order-form').insertAdjacentHTML('beforebegin','<p class="decision-role">'+(readOnly?'Data analyst · '+esc(session.entryNames?.[captain]||'Your teammate')+' saves decisions. Saved changes appear here automatically.':'Data entry · Save your decisions to share them with your teammates.')+'</p>');if(readOnly){for(const el of $('order-form').elements)el.disabled=true;$('save-order').hidden=true;}}
  renderLeaderboard();
 }
 function renderLeaderboard(){

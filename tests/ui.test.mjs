@@ -11,7 +11,7 @@ test('instructor setup, student code gate, all rounds, saved scoring and sign-ou
  await import('../main.js?ui-test');await wait(()=>$('h1'));assert.match($('h1').textContent,/Speed sells/);assert.equal($('#order-form'),null);
  click('#open-login');assert.equal($('#auth').open,true);click('#google');await wait(()=>$('#staff'));click('#staff');await wait(()=>$('#create'));
  assert.equal($('#create [name=demandMean]').value,'480');assert.equal($('#create [name=demandSd]').value,'96');assert.ok($('.field-description'));
- $('#create [name=name]').value='QA executive class';
+ $('#create [name=mode]').value='individual';$('#create [name=mode]').dispatchEvent(new w.Event('change'));$('#create [name=name]').value='QA executive class';
  const createdName=$('#create [name=name]').value;
  const createdCard=()=>Array.from(document.querySelectorAll('.studio-session-card')).find(card=>card.querySelector('h4').textContent===createdName);
  submit('#create');

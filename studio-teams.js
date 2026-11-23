@@ -57,7 +57,7 @@ export async function showTeamsPanel(panel, api, allClassrooms, requestedCode, o
   <p class="hint" id="team-directory-load" role="status"></p><button type="button" class="secondary" id="team-directory-retry" hidden>Retry loading users</button>
   <div class="button-row"><button id="save-team-directory" type="button">Save team assignments</button><span class="hint" id="team-directory-pending"></span></div>
   <p class="hint" id="team-directory-status" role="status" aria-live="polite"></p>
-  <details class="assignment-notes"><summary>How teams and opponents are assigned</summary><p class="hint">Students join teams automatically using the classroom’s target team size. You can choose a different team for a student before the competition starts. Practice uses the built-in AI. The instructor’s start draws pairs for the three scored seasons. An unpaired team plays its own market.</p></details></section>`;
+  <details class="assignment-notes"><summary>How teams and opponents are assigned</summary><p class="hint">Students join teams automatically using the classroom’s target team size. You can choose a different team for a student before the competition starts. Practice uses the built-in AI. The instructor’s start draws pairs for the three scored seasons. An unpaired team faces its own AI opponent.</p></details></section>`;
  const find = id => panel.querySelector('#'+id);
  const classroom = find('team-classroom'), search = find('team-user-search');
  const body = panel.querySelector('tbody'), feedback = find('team-directory-status'), loadStatus = find('team-directory-load');

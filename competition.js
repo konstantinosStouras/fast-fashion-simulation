@@ -17,8 +17,8 @@ export function leaderboard(s,orders,seconds,captain){
  return matchups.flatMap(matchup=>{
   const ranked=matchup.length>1||!usesPairedMarkets(s);
   const rows=matchup.map(uid=>{
-   const isAi=aiMain&&uid===matchup[1];
-   const sum=key=>markets.reduce((total,market)=>total+(isAi?market[matchup[0]].opponent:market[uid])[key],0);
+   const isAi=uid.startsWith('ai/');
+   const sum=key=>markets.reduce((total,market)=>total+(aiMain&&isAi?market[matchup[0]].opponent:market[uid])[key],0);
    return {uid,name:isAi?'AI opponent':s.teamNames[uid],...(isAi?{isAi:true}:{}),matchup,periods:rounds.length,profit:sum('profit'),leftovers:sum('leftovers'),footprint:sum('footprint'),sales:sum('sales'),switchedIn:sum('switchedIn'),switchedOut:sum('switchedOut')};
   }).sort((a,b)=>b.profit-a.profit||a.name.localeCompare(b.name));
   return rows.map(row=>({...row,rank:ranked?rows.findIndex(r=>Math.abs(r.profit-row.profit)<1e-8)+1:null}));

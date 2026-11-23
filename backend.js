@@ -1,9 +1,10 @@
+import {entryMember,handoff} from './team-roles.js';
 import {hasHomeTeamPractice,nextPhaseOffset,sessionProgress} from './functions/session-progress.js?v=home-practice-1';
 import {emailActionSettings} from './auth-flow.js?v=session-codes-1';
 import {requireSessionCode,sessionCodeTaken} from './session-code.js';
 import {decisionOwner,validateTeams} from './competition.js?v=home-practice-1';
 import {aiActive,makeTeamOpponents,teamMatchup} from './market.js?v=home-practice-1';
-import {defaultTeamComposition,DEFAULT_TEAM_SIZE,materializeTeams,validTeamSize} from './functions/teams.js?v=home-practice-1';
+import {defaultTeamComposition,DEFAULT_TEAM_SIZE,initialEntryRoles,materializeTeams,validTeamSize} from './functions/teams.js?v=home-practice-1';
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js';
 import {getAuth,GoogleAuthProvider,signInWithPopup,signInWithEmailAndPassword,createUserWithEmailAndPassword,sendEmailVerification,sendPasswordResetEmail,signOut,onAuthStateChanged,verifyBeforeUpdateEmail} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js';
 import {getFirestore,doc,collection,getDoc,getDocFromServer,getDocs,getDocsFromServer,setDoc,updateDoc,onSnapshot,serverTimestamp,query,where,runTransaction,increment,writeBatch,deleteDoc,deleteField} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js';
@@ -113,6 +114,7 @@ export async function createSession(name,config,mode='individual',requestedCode,
     seed:crypto.getRandomValues(new Uint32Array(1))[0]%1000001,status:'lobby',createdAt:serverTimestamp(),startedAt:null,closedAt:null};
    if(mode==='team'){
     room.teamPractice=true;
+    room.randomTeams=true;
     room.teamSize=teamSize;
     const defaults=(await tx.get(defaultRosterRef())).data()?.teamComposition;
     const composition=defaultTeamComposition(defaults,teamSize);
@@ -169,11 +171,13 @@ export async function startSession(code,onProgress){
   if(s.mode!=='team'&&(s.aiOpponent?.practice||s.aiOpponent?.main))throw Error('AI settings changed. Start again to prepare the opponents.');
   const update={status:'running',phaseOffset:0,startedAt:serverTimestamp()};
   if(s.mode==='team'){
-   const people=(await getDocsFromServer(collection(db,'sessions',code,'participants'))).docs.map(d=>({uid:d.id}));
+   const people=(await getDocsFromServer(collection(db,'sessions',code,'participants'))).docs.map(d=>({uid:d.id,name:d.data().name}));
    const teams=materializeTeams(people,s);
    if(!validateTeams(people,teams.assignments,teams.teamNames,s.teamSize??20))throw Error('Assign every participant to a team before starting.');
    Object.assign(update,teams);
-   update.teamOpponents=makeTeamOpponents(teams.teamNames);
+   Object.assign(update,initialEntryRoles(update,people));
+  update.oddTeamAi=true;
+  update.teamOpponents=makeTeamOpponents(teams.teamNames);
    update.teamPractice=true;
    update.phaseOffset=ROUNDS[1].start;
    if(s.aiOpponent)update.aiOpponent=deleteField();
@@ -189,12 +193,12 @@ export async function saveTeams(code,assignments,teamNames){
   const people=(await getDocs(collection(db,'sessions',code,'participants'))).docs.map(d=>({uid:d.id}));
   const size=snapshot.data().teamSize??20;
   if(!validateTeams(people,assignments,teamNames,size))throw Error('Assign every participant to a captain and keep each team to '+size+' participants or fewer.');
-  tx.update(ref,{assignments,teamNames});
+  tx.update(ref,{assignments,teamNames,membershipEdited:true});
  });
 }
 export async function readMarketOrders(code,captains,rounds,decisionUid){
  const session=await requireSession(code);
- const result=await Promise.all(captains.map(async uid=>{
+ const result=await Promise.all(captains.filter(uid=>!uid.startsWith('ai/')).map(async uid=>{
   const visible=rounds.filter(index=>(index!==0||!hasHomeTeamPractice(session))&&(!decisionUid||uid===decisionUid||!aiActive(session,index)));
   const orders=await Promise.all(visible.map(async r=>{
    const d=await getDocFromServer(doc(db,'sessions',code,'participants',uid,'orders',String(r)));
@@ -251,9 +255,17 @@ export async function joinSession(code,name){
 }
 export const watchOrders=(code,uid,fn,error,status)=>onSnapshot(collection(db,'sessions',code,'participants',uid,'orders'),{includeMetadataChanges:true},s=>{const fresh=!s.metadata.hasPendingWrites&&!s.metadata.fromCache;status?.(fresh);if(fresh)fn(Object.fromEntries(s.docs.map(d=>[d.id,d.data()])));},error);
 export const watchParticipants=(code,fn,error)=>onSnapshot(collection(db,'sessions',code,'participants'),{includeMetadataChanges:true},s=>{if(!s.metadata.fromCache&&!s.metadata.hasPendingWrites)fn(s.docs.map(d=>({uid:d.id,...d.data()})));},error);
+export async function changeEntryRole(code,requested){
+ const ref=doc(db,'sessions',code),uid=currentUser().uid;
+ await runTransaction(db,async tx=>{
+  const s=(await tx.get(ref)).data(),person=(await tx.get(doc(ref,'participants',uid))).data();
+  tx.update(ref,handoff(s,uid,person.name,requested));
+ });
+}
 export async function saveOrder(code,index,order,phase='plan',expectedRevision=0){
  if(!Number.isSafeInteger(expectedRevision)||expectedRevision<0)throw Error('Reload the saved decision before saving.');
- const ref=doc(db,'sessions',code,'participants',currentUser().uid,'orders',String(index));
+ const s=await requireSession(code);
+ const ref=doc(db,'sessions',code,'participants',decisionOwner(s,currentUser().uid),'orders',String(index));
  try{await setDoc(ref,{...order,phase,revision:expectedRevision+1,savedAt:serverTimestamp()});}
  catch(error){
   if(error.code==='permission-denied'){

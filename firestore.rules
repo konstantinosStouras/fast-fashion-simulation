@@ -10,6 +10,10 @@ service cloud.firestore {
   function canDeleteSession(code) { return instructor() && owner(code) && session(code).status=='closed'; }
   function own(uid) { return verified() && request.auth.uid == uid; }
   function member(code,uid) { return exists(/databases/$(database)/documents/sessions/$(code)/participants/$(uid)); }
+  function canSave(code,uid) {
+   let s=session(code);
+   return s.get('mode','individual')=='team' ? teammate(code,uid) && s.get('entryMembers',{}).get(uid,uid)==request.auth.uid : own(uid);
+  }
   function captain(code,uid) { return session(code).get('mode','individual')!='team' || session(code).assignments.get(uid,'')==uid; }
   function teammate(code,uid) { return verified() && member(code,request.auth.uid) && session(code).get('mode','individual')=='team' && session(code).assignments.get(request.auth.uid,'')==uid; }
   function sharesMarket(s,uid) {
@@ -69,6 +73,25 @@ service cloud.firestore {
    allow create, update: if admin() && email.matches('^[^/ @]+@[^/ @]+[.][^/ @]+$') && request.resource.data.keys().hasOnly(['createdAt']) && request.resource.data.createdAt==request.time;
   }
   match /sessions/{code} {
+   function roleChange(){
+    let s=resource.data;
+    let n=request.resource.data;
+    let uid=request.auth.uid;
+    let team=s.assignments.get(uid,'');
+    let old=s.get('entryMembers',{});
+    let next=n.get('entryMembers',{});
+    let requests=s.get('entryRequests',{});
+    let pending=n.entryRequests;
+    let target=next.get(team,team);
+    let changes=n.diff(s).affectedKeys();
+    return s.status=='running' && teammate(code,team) && ((
+     old.get(team,team)!=uid && changes.hasOnly(['entryRequests']) && pending.diff(requests).affectedKeys().hasOnly([uid])
+     && pending[uid]==get(/databases/$(database)/documents/sessions/$(code)/participants/$(uid)).data.name
+    ) || (old.get(team,team)==uid && target!=uid && s.assignments.get(target,'')==team
+     && changes.hasOnly(['entryMembers','entryNames','entryRequests']) && next.diff(old).affectedKeys().hasOnly([team])
+     && n.entryNames.diff(s.get('entryNames',{})).affectedKeys().hasOnly([team]) && n.entryNames[team]==requests[target]
+     && pending.diff(requests).affectedKeys().hasOnly([target]) && !(target in pending)));
+   }
    function validStart() {
     let next=request.resource.data;
     let keys=next.diff(resource.data).affectedKeys();
@@ -76,7 +99,7 @@ service cloud.firestore {
       && (resource.data.get('mode','individual')=='team'
         ? next.phaseOffset==180 && next.teamPractice==true
           && (keys.hasOnly(['phaseOffset','status','startedAt','teamOpponents','teamPractice','aiOpponent'])
-          || (keys.hasOnly(['phaseOffset','status','startedAt','teamOpponents','teamPractice','aiOpponent','assignments','teamNames'])
+          || (keys.hasOnly(['phaseOffset','status','startedAt','teamOpponents','teamPractice','aiOpponent','assignments','teamNames','entryNames','entryMembers','oddTeamAi'])
             && next.assignments is map && next.assignments.size()<=500 && next.teamNames is map && next.teamNames.size()<=100
             && next.assignments.values().hasOnly(next.teamNames.keys())))
           && next.teamOpponents is map && next.teamNames.size()>0
@@ -101,7 +124,7 @@ service cloud.firestore {
    allow get: if verified();
    allow delete: if canDeleteSession(code);
    allow list: if admin() || (instructor() && resource.data.owner==request.auth.uid);
-   allow create: if verified() && (instructor() || request.resource.data.get('mode','individual')=='solo') && validNewCode() && validInitialRoster() && validAiSettings(request.resource.data) && (request.resource.data.get('mode','individual')=='team' ? request.resource.data.teamSize is int && request.resource.data.teamSize>=1 && request.resource.data.teamSize<=20 : !('teamSize' in request.resource.data)) && (request.resource.data.get('teamPractice',false)==(request.resource.data.get('mode','individual')=='team')) && request.resource.data.keys().hasOnly(['name','owner','config','seed','status','createdAt','startedAt','closedAt','mode','assignments','teamNames','rosterVersion','aiOpponent','teamPractice','teamSize','teamComposition']) && request.resource.data.get('mode','individual') in ['individual','team','solo'] && request.resource.data.get('rosterVersion',0)==0 && request.resource.data.get('assignments',{})=={} && request.resource.data.get('teamNames',{})=={} && request.resource.data.name is string && request.resource.data.name.size()>0 && request.resource.data.name.size()<=80 && request.resource.data.owner==request.auth.uid && configShape(request.resource.data.config) && request.resource.data.seed is int && request.resource.data.seed>=0 && request.resource.data.seed<=1000000 && request.resource.data.status=='lobby' && request.resource.data.createdAt==request.time && request.resource.data.startedAt==null && request.resource.data.closedAt==null;
+   allow create: if verified() && (instructor() || request.resource.data.get('mode','individual')=='solo') && validNewCode() && validInitialRoster() && validAiSettings(request.resource.data) && (request.resource.data.get('mode','individual')=='team' ? request.resource.data.teamSize is int && request.resource.data.teamSize>=1 && request.resource.data.teamSize<=20 : !('teamSize' in request.resource.data)) && (request.resource.data.get('teamPractice',false)==(request.resource.data.get('mode','individual')=='team')) && request.resource.data.keys().hasOnly(['name','owner','config','seed','status','createdAt','startedAt','closedAt','mode','assignments','teamNames','rosterVersion','aiOpponent','teamPractice','teamSize','teamComposition','randomTeams']) && request.resource.data.get('mode','individual') in ['individual','team','solo'] && request.resource.data.get('rosterVersion',0)==0 && request.resource.data.get('assignments',{})=={} && request.resource.data.get('teamNames',{})=={} && request.resource.data.name is string && request.resource.data.name.size()>0 && request.resource.data.name.size()<=80 && request.resource.data.owner==request.auth.uid && configShape(request.resource.data.config) && request.resource.data.seed is int && request.resource.data.seed>=0 && request.resource.data.seed<=1000000 && request.resource.data.status=='lobby' && request.resource.data.createdAt==request.time && request.resource.data.startedAt==null && request.resource.data.closedAt==null;
    // Irreversible deletion marker is limited to the owning instructor of a closed session.
    allow update: if canDeleteSession(code) && resource.data.get('deletedAt',null)==null && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deletedAt']) && request.resource.data.deletedAt==request.time;
    // Joining increments a revision atomically; team assignment/start transactions retry on a concurrent join.
@@ -109,9 +132,10 @@ service cloud.firestore {
    allow update: if owner(code) && resource.data.status=='running' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['phaseOffset'])
      && 'phaseOffset' in resource.data && progress(resource.data)<960 && request.resource.data.phaseOffset == nextPhase(progress(resource.data));
    function nextPhase(p) { return p<90?90:p<180?180:p<420?420:p<540?540:p<660?660:p<810?810:p<960?960:960; }
-   allow update: if owner(code) && ((resource.data.status=='lobby' && !('teamComposition' in resource.data) && resource.data.get('mode','individual')=='team' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['assignments','teamNames']) && request.resource.data.assignments is map && request.resource.data.teamNames is map && request.resource.data.assignments.size()<=500 && request.resource.data.teamNames.size()<=100) || validStart() || (resource.data.status in ['lobby','running'] && request.resource.data.status=='closed' && request.resource.data.closedAt==request.time && (resource.data.status=='lobby' || 'phaseOffset' in resource.data) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','closedAt'])));
+   allow update: if owner(code) && ((resource.data.status=='lobby' && !('teamComposition' in resource.data) && resource.data.get('mode','individual')=='team' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['assignments','teamNames','membershipEdited']) && request.resource.data.assignments is map && request.resource.data.teamNames is map && request.resource.data.assignments.size()<=500 && request.resource.data.teamNames.size()<=100) || validStart() || (resource.data.status in ['lobby','running'] && request.resource.data.status=='closed' && request.resource.data.closedAt==request.time && (resource.data.status=='lobby' || 'phaseOffset' in resource.data) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','closedAt'])));
    allow update: if instructor() && resource.data.owner==request.auth.uid && resource.data.status=='lobby' && resource.data.get('mode','individual')!='solo'
      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['aiOpponent']) && validAiSettings(request.resource.data);
+   allow update: if resource.data.status=='running' && 'entryRequests' in request.resource.data && verified() && roleChange();
    match /participants/{uid} {
     // Release an AI decision after this competitor's initial order locks.
     match /aiRounds/{r} {
@@ -133,8 +157,8 @@ service cloud.firestore {
      allow delete: if canDeleteSession(code);
      allow get: if own(uid) || owner(code) || teammate(code,uid) || lockedTeamRound(code,uid,r);
      allow list: if own(uid) || owner(code) || teammate(code,uid);
-     allow create: if own(uid) && captain(code,uid) && member(code,uid) && r in ['0','1','2','3'] && orderShape(r) && request.resource.data.revision==1 && ((request.resource.data.phase=='plan' && inWindow(code,start(r),split(r)) && request.resource.data.cap==0) || (request.resource.data.phase=='respond' && r!='1' && inWindow(code,split(r),end(r)) && request.resource.data.quantity==80 && request.resource.data.variety==4));
-     allow update: if own(uid) && captain(code,uid) && member(code,uid) && r in ['0','1','2','3'] && orderShape(r) && request.resource.data.revision==resource.data.get('revision',0)+1 && ((request.resource.data.phase=='plan' && inWindow(code,start(r),split(r)) && request.resource.data.cap==0) || (request.resource.data.phase=='respond' && r!='1' && inWindow(code,split(r),end(r)) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['cap','savedAt','phase','revision'])));
+     allow create: if canSave(code,uid) && member(code,uid) && r in ['0','1','2','3'] && orderShape(r) && request.resource.data.revision==1 && ((request.resource.data.phase=='plan' && inWindow(code,start(r),split(r)) && request.resource.data.cap==0) || (request.resource.data.phase=='respond' && r!='1' && inWindow(code,split(r),end(r)) && request.resource.data.quantity==80 && request.resource.data.variety==4));
+     allow update: if canSave(code,uid) && member(code,uid) && r in ['0','1','2','3'] && orderShape(r) && request.resource.data.revision==resource.data.get('revision',0)+1 && ((request.resource.data.phase=='plan' && inWindow(code,start(r),split(r)) && request.resource.data.cap==0) || (request.resource.data.phase=='respond' && r!='1' && inWindow(code,split(r),end(r)) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['cap','savedAt','phase','revision'])));
     }
    }
   }
