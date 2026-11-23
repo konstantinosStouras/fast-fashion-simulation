@@ -36,7 +36,7 @@ test('real backend registration stores profile and sends a working verification 
   new Promise((resolve,reject)=>{const stop=api.watchOrders(team,uid,o=>{if(o[1]?.quantity===101){stop();resolve();}},reject);t.after(stop);}),
   new Promise((resolve,reject)=>{const stop=api.watchParticipants(team,p=>{if(p.some(x=>x.uid===uid)){stop();resolve();}},reject);t.after(stop);})
  ]);
- await t.test('team listeners distinguish offline and pending data, then restore server decisions',async()=>{
+ await t.test('team listeners mark offline data, block unconfirmed saves, and restore server decisions',async()=>{
   const db=getFirestore(app),wait=async fn=>{for(let i=0;i<200;i++){if(fn())return;await new Promise(r=>setTimeout(r,50));}throw Error('Recovery timed out');};
   let fresh=null,sessionFresh=null,latest=null,missingCalls=0;
   const stop=api.watchOrders(team,uid,o=>latest=o,assert.fail,value=>fresh=value),stopSession=api.watchSession(team,()=>{},assert.fail,value=>sessionFresh=value);
@@ -44,9 +44,10 @@ test('real backend registration stores profile and sends a working verification 
   await disableNetwork(db);await wait(()=>fresh===false&&sessionFresh===false);
   const missing=api.watchSession('ZZZZZZZZ',()=>missingCalls++,()=>{},()=>{});
   await assert.rejects(api.readMarketOrders(team,[uid],[1]),'shared market must not silently use cached orders');
-  let acknowledged=false;const pending=api.saveOrder(team,1,{variety:4,quantity:119,cap:0},'plan',1).then(()=>acknowledged=true);
-  await new Promise(r=>setTimeout(r,100));assert.equal(acknowledged,false);assert.equal(latest[1].quantity,101);assert.equal(missingCalls,0,'an uncached offline session is not a deleted session');missing();
-  await enableNetwork(db);await pending;await wait(()=>fresh===true&&sessionFresh===true&&latest[1].quantity===119);
+  await assert.rejects(api.saveOrder(team,1,{variety:4,quantity:119,cap:0},'plan',1),{code:'unavailable'});
+  assert.equal(latest[1].quantity,101);assert.equal(missingCalls,0,'an uncached offline session is not a deleted session');missing();
+  await enableNetwork(db);await wait(()=>fresh===true&&sessionFresh===true);
+  await api.saveOrder(team,1,{variety:4,quantity:119,cap:0},'plan',1);await wait(()=>latest[1].quantity===119);
   await disableNetwork(db);await wait(()=>fresh===false);
   await env.withSecurityRulesDisabled(c=>setDoc(doc(c.firestore(),'sessions',team,'participants',uid,'orders','1'),{variety:4,quantity:127,cap:0,savedAt:serverTimestamp()}));
   await enableNetwork(db);await wait(()=>fresh===true&&latest[1].quantity===127);
@@ -99,14 +100,15 @@ test('real backend registration stores profile and sends a working verification 
    assert.equal((await getDoc(released(db))).exists(),false);
   });
  });
- await t.test('two real backend instances reject an offline stale revision with an actionable conflict',async()=>{
+ await t.test('two real backend instances reject offline saves and stale revisions after reconnect',async()=>{
   const secondSource=source.replace("initializeApp(firebaseConfig,'fashion-futures')","initializeApp(firebaseConfig,'fashion-futures-second-device')");
   const other=await import('data:text/javascript;base64,'+Buffer.from(secondSource).toString('base64')),otherApp=getApp('fashion-futures-second-device'),otherDb=getFirestore(otherApp);
   connectAuthEmulator(getAuth(otherApp),'http://127.0.0.1:9198',{disableWarnings:true});connectFirestoreEmulator(otherDb,'127.0.0.1',8180);t.after(()=>deleteApp(otherApp));await other.loginEmail(email,'emulator-only-password');
   const code=await api.createSession('Two device race QA',(await import('../model.js')).DEFAULT_CONFIG,'team');await api.joinSession(code,'Captain');await api.saveTeams(code,{[uid]:uid},{[uid]:'Team A'});await api.startSession(code);
   await api.saveOrder(code,1,{variety:4,quantity:110,cap:0},'plan',0);assert.equal((await other.readOrders(code,uid))[1].revision,1);
-  await disableNetwork(otherDb);const stale=assert.rejects(other.saveOrder(code,1,{variety:4,quantity:90,cap:0},'plan',1),e=>e.code==='decision-conflict');
-  await api.saveOrder(code,1,{variety:4,quantity:155,cap:0},'plan',1);await enableNetwork(otherDb);await stale;
+  await disableNetwork(otherDb);await assert.rejects(other.saveOrder(code,1,{variety:4,quantity:90,cap:0},'plan',1),{code:'unavailable'});
+  await api.saveOrder(code,1,{variety:4,quantity:155,cap:0},'plan',1);await enableNetwork(otherDb);
+  await assert.rejects(other.saveOrder(code,1,{variety:4,quantity:90,cap:0},'plan',1),{code:'decision-conflict'});
   assert.equal((await other.readOrders(code,uid))[1].quantity,155);assert.equal((await api.readOrders(code,uid))[1].revision,2);
   await other.saveOrder(code,1,{variety:4,quantity:160,cap:0},'plan',2);assert.equal((await api.readOrders(code,uid))[1].quantity,160);
   await other.logout();
