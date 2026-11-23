@@ -11,7 +11,13 @@ test('instructor setup, student code gate, all rounds, saved scoring and sign-ou
  await import('../main.js?ui-test');await wait(()=>$('h1'));assert.match($('h1').textContent,/Speed sells/);assert.equal($('#order-form'),null);
  click('#open-login');assert.equal($('#auth').open,true);click('#google');await wait(()=>$('#staff'));click('#staff');await wait(()=>$('#create'));
  assert.equal($('#create [name=demandMean]').value,'480');assert.equal($('#create [name=demandSd]').value,'96');assert.ok($('.field-description'));
- $('#create [name=name]').value='QA executive class';submit('#create');await wait(()=>$('#start'));
+ $('#create [name=name]').value='QA executive class';
+ const createdName=$('#create [name=name]').value;
+ const createdCard=()=>Array.from(document.querySelectorAll('.studio-session-card')).find(card=>card.querySelector('h4').textContent===createdName);
+ submit('#create');
+ await wait(createdCard);
+ assert.ok($('#create'),'creating a session keeps the admin dashboard open');
+ createdCard().querySelector('[data-session]').click();await wait(()=>$('#start'));
  const data=JSON.parse(w.localStorage.getItem('ff:demo:v1')),code=Object.keys(data.sessions)[0];assert.equal(data.sessions[code].config.demandMean,480);
  click('#out');await wait(()=>$('#open-login'));click('#open-login');$('#email').value='student@example.test';$('#password').value='test-only-123';submit('#auth-form');await wait(()=>$('#join'));assert.equal($('#staff'),null);
  $('#join [name=name]').value='Student';$('#join [name=code]').value='BADCODEX';submit('#join');await wait(()=>$('#notice').textContent.includes('not found'));assert.equal($('#order-form'),null);

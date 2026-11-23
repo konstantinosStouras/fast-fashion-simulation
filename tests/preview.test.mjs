@@ -56,7 +56,13 @@ test('instructor rehearsal follows every student deadline without writing classr
  assert.equal(w.localStorage.getItem('ff:session:demo-admin'),null,'preview must not replace real student resume state');
  click('#preview-exit');await wait(()=>$('#create'));
  // Preview an already-running classroom and verify its status, timing and records are unchanged.
- $('#create [name=name]').value='Live class';submit('#create');await wait(()=>$('#start'));
+ $('#create [name=name]').value='Live class';
+ const createdName=$('#create [name=name]').value;
+ const createdCard=()=>Array.from(document.querySelectorAll('.studio-session-card')).find(card=>card.querySelector('h4').textContent===createdName);
+ submit('#create');
+ await wait(createdCard);
+ assert.ok($('#create'),'creating a session keeps the admin dashboard open');
+ createdCard().querySelector('[data-session]').click();await wait(()=>$('#start'));
  let records=JSON.parse(w.localStorage.getItem('ff:demo:v1')),code=Object.keys(records.sessions)[0];
  await backend.startSession(code);await wait(()=>$('#preview-session')&&!$('#start'));
  const liveBefore=w.localStorage.getItem('ff:demo:v1');

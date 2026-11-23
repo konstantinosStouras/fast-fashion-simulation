@@ -161,7 +161,7 @@ async function showStaff(){clean();staffView=true;const version=viewVersion;cons
  }
  $('preview-settings').onclick=()=>action(async()=>startStudentPreview(readConfig($('create')),{mode:new FormData($('create')).get('mode')}));
  $('join-as-student').onclick=()=>action(showJoinForm);
- $('create').onsubmit=e=>{e.preventDefault();action(async()=>{const code=await api.createSession(new FormData(e.target).get('name').trim(),readConfig(e.target),new FormData(e.target).get('mode'));await openSession(code,true);});};document.querySelectorAll('[data-session]').forEach(b=>b.onclick=()=>action(()=>openSession(b.dataset.session,true)));$('home').onclick=()=>{clean();landing();};
+ $('create').onsubmit=e=>{e.preventDefault();action(async()=>{const code=await api.createSession(new FormData(e.target).get('name').trim(),readConfig(e.target),new FormData(e.target).get('mode'));await showStaff();note('Session '+code+' created.');});};document.querySelectorAll('[data-session]').forEach(b=>b.onclick=()=>action(()=>openSession(b.dataset.session,true)));$('home').onclick=()=>{clean();landing();};
  if(role==='admin'){
   let verifiedEmails=null, grantedEmails=null;
   const renderCandidates=()=>{

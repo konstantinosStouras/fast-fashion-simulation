@@ -11,7 +11,13 @@ test('solo start, team setup, captain saves, teammate read-only view and period 
  const wait=async fn=>{for(let i=0;i<150;i++){await new Promise(r=>setTimeout(r,10));if(fn())return;}throw Error(w.document.body.textContent.slice(-1500));};
  const api=await import('../backend-demo.js');t.after(async()=>{await api.logout();await new Promise(r=>setTimeout(r,20));dom.window.close();});
  await import('../main.js?competition-ui');await wait(()=>$('#open-login'));await api.loginEmail('alice@example.test');await wait(()=>$('#solo-play'));click('#solo-play');await wait(()=>$('#start-solo'));assert.match(w.document.body.textContent,/Before|BEFORE YOU PLAY/);assert.equal($('#clock'),null);click('#start-solo');await wait(()=>$('#order-form'));submit('#order-form');await wait(()=>$('.save-state').textContent.includes('Saved'));let data=JSON.parse(w.localStorage.getItem('ff:demo:v1'));assert.equal(Object.values(data.sessions)[0].mode,'solo');
- await api.logout();await wait(()=>$('#open-login'));await api.loginGoogle();await wait(()=>$('#staff'));click('#staff');await wait(()=>$('#create'));$('#create [name=name]').value='Teams';$('#create [name=mode]').value='team';submit('#create');await wait(()=>$('#team-setup'));
+ await api.logout();await wait(()=>$('#open-login'));await api.loginGoogle();await wait(()=>$('#staff'));click('#staff');await wait(()=>$('#create'));$('#create [name=name]').value='Teams';$('#create [name=mode]').value='team';
+ const createdName=$('#create [name=name]').value;
+ const createdCard=()=>Array.from(document.querySelectorAll('.studio-session-card')).find(card=>card.querySelector('h4').textContent===createdName);
+ submit('#create');
+ await wait(createdCard);
+ assert.ok($('#create'),'creating a session keeps the admin dashboard open');
+ createdCard().querySelector('[data-session]').click();await wait(()=>$('#team-setup'));
  data=JSON.parse(w.localStorage.getItem('ff:demo:v1'));const code=Object.values(data.sessions).find(s=>s.mode==='team').code;
  // Populate the synthetic classroom with registered participants before testing assignment controls.
  data.people[code]=Object.fromEntries(['alice','bob','charlie','dana'].map(n=>['demo-'+n+'@example.test',{uid:'demo-'+n+'@example.test',name:n,email:n+'@example.test'}]));w.localStorage.setItem('ff:demo:v1',JSON.stringify(data));await api.saveDefaults(DEFAULT_CONFIG);await wait(()=>$('[data-team-member]'));assert.equal($('#team-size').value,'3');click('#group-teams');await wait(()=>Object.keys(JSON.parse(w.localStorage.getItem('ff:demo:v1')).sessions[code].teamNames).length===2);

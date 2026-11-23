@@ -106,7 +106,13 @@ test('slow subscriptions, live updates, cancelled navigation and large classroom
  await api.logout();await wait(()=>$('#open-login'));resolveProfile({firstName:'Old',lastName:'User',universityId:'old'});slowProfile=null;await new Promise(r=>setTimeout(r,30));
  await t.test('a delayed profile response cannot restore a signed-out view',()=>{assert.equal($('#profile-form'),null);assert.ok($('#enter'));});
  await api.loginGoogle();await wait(()=>$('#staff'));click('#staff');await wait(()=>$('#create'));
- $('#create [name=name]').value='Large team classroom';$('#create [name=mode]').value='team';submit('#create');await wait(()=>$('#team-setup'));
+ $('#create [name=name]').value='Large team classroom';$('#create [name=mode]').value='team';
+ const createdName=$('#create [name=name]').value;
+ const createdCard=()=>Array.from(document.querySelectorAll('.studio-session-card')).find(card=>card.querySelector('h4').textContent===createdName);
+ submit('#create');
+ await wait(createdCard);
+ assert.ok($('#create'),'creating a session keeps the admin dashboard open');
+ createdCard().querySelector('[data-session]').click();await wait(()=>$('#team-setup'));
  const data=JSON.parse(w.localStorage.getItem('ff:demo:v1')),teamCode=Object.values(data.sessions).find(s=>s.mode==='team').code;
  data.people[teamCode]=Object.fromEntries(Array.from({length:500},(_,i)=>['p'+i,{uid:'p'+i,name:'Person '+i,email:'p'+i+'@example.test'}]));
  holdOrders=true;w.localStorage.setItem('ff:demo:v1',JSON.stringify(data));await api.saveDefaults(DEFAULT_CONFIG);await wait(()=>$('[data-team-member]'));
