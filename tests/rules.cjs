@@ -12,6 +12,35 @@ const order=(more={})=>({variety:4,quantity:80,cap:0,phase:'plan',revision:1,sav
 async function seed(elapsed=null,extra={}){await env.withSecurityRulesDisabled(async c=>{const d=c.firestore();await setDoc(doc(d,'instructors/teacher@example.test'),{createdAt:Timestamp.now()});await setDoc(doc(d,'sessions/ABCDEFGH'),{name:'QA',owner:'teacher',config,seed:42,status:elapsed===null?'lobby':'running',createdAt:Timestamp.now(),startedAt:elapsed===null?null:Timestamp.fromMillis(Date.now()-elapsed*1000),closedAt:null,...extra});for(const uid of ['alice','bob'])await setDoc(doc(d,`sessions/ABCDEFGH/participants/${uid}`),{name:uid,email:uid+'@example.test',joinedAt:Timestamp.now()});});}
 before(async()=>{env=await initializeTestEnvironment({projectId:'demo-fashion-futures',firestore:{host:'127.0.0.1',port:8180,rules:fs.readFileSync('firestore.rules','utf8')}});});
 beforeEach(async()=>{await env.clearFirestore();});
+test('AI phases are configured by the classroom owner and only the trusted service can start them',async()=>{
+ await seed(null,{mode:'individual'});
+ const room=d=>doc(d,'sessions/ABCDEFGH');
+ const aiOpponent={provider:'openai',model:'test-model',practice:true,main:false};
+ await assertFails(updateDoc(room(db('alice')),{aiOpponent}));
+ await assertFails(updateDoc(room(db('teacher')),{aiOpponent:{...aiOpponent,apiKey:'private'}}));
+ await assertFails(updateDoc(room(db('teacher')),{aiOpponent:{...aiOpponent,practice:false}}));
+ await assertSucceeds(updateDoc(room(db('teacher')),{aiOpponent}));
+ await assertFails(updateDoc(room(db('teacher')),{status:'running',startedAt:serverTimestamp()}));
+ await assertFails(setDoc(doc(admin(),'privateAiSettings/admin'),{apiKey:'private'}));
+ await assertFails(getDoc(doc(db('teacher'),'privateAiSettings/teacher')));
+ await assertFails(updateDoc(room(db('teacher')),{teamComposition:{alice:'1'}}));
+});
+test('AI strategies are released by round only to their competitor and teaching staff',async()=>{
+ const options={mode:'team',assignments:{alice:'alice',bob:'bob',mate:'alice'},teamNames:{alice:'A',bob:'B'},teamOpponents:{alice:'bob',bob:'alice'},aiOpponent:{provider:'openai',model:'test',practice:false,main:true}};
+ await seed(430,options);
+ await env.withSecurityRulesDisabled(async c=>{await setDoc(doc(c.firestore(),'sessions/ABCDEFGH/participants/mate'),{joinedAt:Timestamp.now()});});
+ const ai=(d,uid,r)=>doc(d,'sessions/ABCDEFGH/participants/'+uid+'/aiRounds/'+r);
+ await assertSucceeds(getDoc(ai(db('alice'),'alice',1)));
+ await assertSucceeds(getDoc(ai(db('mate'),'alice',1)));
+ await assertFails(getDoc(ai(db('bob'),'alice',1)));
+ await assertFails(getDoc(ai(db('alice'),'alice',2)));
+ await assertFails(getDoc(ai(db('alice'),'alice',0)));
+ await assertFails(getDoc(doc(db('alice'),'sessions/ABCDEFGH/participants/alice/aiOpponents/main')));
+ await assertFails(setDoc(ai(db('teacher'),'alice',1),{order:{quantity:1}}));
+ await assertSucceeds(getDoc(ai(db('teacher'),'alice',2)));
+ await assertFails(getDoc(doc(db('alice'),path('bob','1'))));
+ await assertSucceeds(getDoc(doc(db('alice'),path('bob','0'))));
+});
 test('verified accounts publish only their authenticated email, and only the platform owner can browse',async()=>{
  const student=db('alice'), account=doc(student,'verifiedAccounts/alice');
  const email='alice@example.test';
@@ -76,7 +105,37 @@ test('play-history references require real membership and cannot forge scores',a
 
 test('solo students create and run their own game but cannot invite others or change locked parameters',async()=>{const d=db('alice'),ref=doc(d,'sessions/ABCDEFGH');await assertSucceeds(setDoc(ref,{name:'Solo',owner:'alice',mode:'solo',assignments:{},teamNames:{},config,seed:8,status:'lobby',createdAt:serverTimestamp(),startedAt:null,closedAt:null}));await assertFails(setDoc(doc(db('bob'),'sessions/ABCDEFGH/participants/bob'),{name:'Bob',email:'bob@example.test',joinedAt:serverTimestamp()}));await assertSucceeds(setDoc(doc(d,'sessions/ABCDEFGH/participants/alice'),{name:'Alice',email:'alice@example.test',joinedAt:serverTimestamp()}));await assertSucceeds(updateDoc(ref,{status:'running',startedAt:serverTimestamp()}));await assertSucceeds(setDoc(doc(d,path()),order()));await assertFails(updateDoc(ref,{seed:999}));});
 test('team captain submits, teammates read shared decisions, rivals see only completed scored rounds',async()=>{await seed(20,{mode:'team',assignments:{alice:'alice',bob:'alice',charlie:'charlie'},teamNames:{alice:'Team A',charlie:'Team B'}});await env.withSecurityRulesDisabled(c=>setDoc(doc(c.firestore(),'sessions/ABCDEFGH/participants/charlie'),{name:'Charlie',email:'charlie@example.test',joinedAt:Timestamp.now()}));await assertSucceeds(setDoc(doc(db('alice'),path()),order()));await assertSucceeds(getDocs(collection(db('bob'),'sessions/ABCDEFGH/participants/alice/orders')));await assertFails(setDoc(doc(db('bob'),path('bob')),order()));await assertFails(setDoc(doc(db('bob'),path('alice')),order()));await assertFails(getDoc(doc(db('charlie'),path('alice'))));await assertFails(getDocs(collection(db('charlie'),'sessions/ABCDEFGH/participants/alice/orders')));await seed(430,{mode:'team',assignments:{alice:'alice',bob:'bob'},teamNames:{alice:'Team A',bob:'Team B'}});await assertSucceeds(getDoc(doc(db('bob'),path('alice','1'))));await assertFails(getDoc(doc(db('bob'),path('alice','2'))));await assertFails(getDoc(doc(db('outsider'),path('alice','1'))));await seed(430,{mode:'team',assignments:{alice:'alice',bob:'bob'},teamNames:{alice:'Team A',bob:'Team B'},status:'closed',closedAt:Timestamp.fromMillis(Date.now()-300000)});await assertFails(getDoc(doc(db('bob'),path('alice','1'))));});
-test('only owning instructor assigns teams in lobby; assignments freeze at start',async()=>{await seed(null,{mode:'team',assignments:{},teamNames:{}});const change={assignments:{alice:'alice',bob:'alice'},teamNames:{alice:'Team A'}};await assertFails(updateDoc(doc(db('alice'),'sessions/ABCDEFGH'),change));await assertSucceeds(updateDoc(doc(db('teacher'),'sessions/ABCDEFGH'),change));await assertSucceeds(updateDoc(doc(db('teacher'),'sessions/ABCDEFGH'),{status:'running',startedAt:serverTimestamp()}));await assertFails(updateDoc(doc(db('teacher'),'sessions/ABCDEFGH'),{assignments:{}}));});
+test('only the owning instructor assigns teams in the lobby and locks opponents at start',async()=>{
+ await seed(null,{mode:'team',assignments:{},teamNames:{}});
+ const change={assignments:{alice:'alice',bob:'alice'},teamNames:{alice:'Team A'}};
+ const room=doc(db('teacher'),'sessions/ABCDEFGH'),start={status:'running',startedAt:serverTimestamp()};
+ await assertFails(updateDoc(doc(db('alice'),'sessions/ABCDEFGH'),change));
+ await assertSucceeds(updateDoc(room,change));
+ await assertFails(updateDoc(room,start));
+ await assertFails(updateDoc(room,{...start,teamOpponents:{bob:null}}));
+ await assertSucceeds(updateDoc(room,{...start,teamOpponents:{alice:null}}));
+ await assertFails(updateDoc(room,{assignments:{}}));
+ await assertFails(updateDoc(room,{teamOpponents:{alice:'bob'}}));
+});
+
+test('locked orders can be read within a pair and an unpaired team reads its shared decision',async()=>{
+ const assignments={alice:'alice',bob:'alice',chris:'chris',dana:'dana',eli:'dana'};
+ const teamNames={alice:'A',chris:'C',dana:'D'},teamOpponents={alice:'chris',chris:'alice',dana:null};
+ await seed(null,{mode:'team',assignments,teamNames});
+ const room=doc(db('teacher'),'sessions/ABCDEFGH');
+ await assertSucceeds(updateDoc(room,{status:'running',startedAt:serverTimestamp(),teamOpponents}));
+ await seed(430,{mode:'team',assignments,teamNames,teamOpponents});
+ await env.withSecurityRulesDisabled(async c=>{
+  for(const uid of ['chris','dana','eli'])await setDoc(doc(c.firestore(),'sessions/ABCDEFGH/participants',uid),{joinedAt:Timestamp.now()});
+ });
+ const teammate=db('bob'),rival=db('chris'),unpaired=db('eli');
+ await assertSucceeds(getDoc(doc(teammate,path('chris','1'))));
+ await assertSucceeds(getDoc(doc(rival,path('alice','1'))));
+ await assertFails(getDoc(doc(teammate,path('chris','2'))));
+ await assertFails(getDoc(doc(teammate,path('dana','1'))));
+ await assertFails(getDoc(doc(unpaired,path('alice','1'))));
+ await assertSucceeds(getDocs(collection(unpaired,'sessions/ABCDEFGH/participants/dana/orders')));
+});
 
 test('shared-market reads unlock only when initial orders are locked, without exposing the roster',async()=>{const extra={mode:'team',assignments:{alice:'alice',bob:'bob'},teamNames:{alice:'A',bob:'B'}};await seed(80,extra);await assertFails(getDoc(doc(db('bob'),path('alice','0'))));await seed(100,extra);await assertSucceeds(getDoc(doc(db('bob'),path('alice','0'))));await assertFails(getDocs(collection(db('bob'),'sessions/ABCDEFGH/participants')));await seed(550,extra);await assertSucceeds(getDoc(doc(db('bob'),path('alice','2'))));await assertFails(getDoc(doc(db('bob'),path('alice','3'))));});
 
@@ -98,7 +157,7 @@ test('a student joining during start invalidates the instructor transaction',asy
   attempts++;const s=(await tx.get(ref)).data();const participants=await getDocs(collection(teacher,'sessions/ABCDEFGH/participants'));
   if(participants.docs.some(d=>!s.assignments[d.id]))throw Error('Unassigned participant');
   if(first){first=false;const student=db('charlie'),batch=writeBatch(student);batch.set(doc(student,'sessions/ABCDEFGH/participants/charlie'),{name:'Charlie',email:'charlie@example.test',joinedAt:serverTimestamp()});batch.update(doc(student,'sessions/ABCDEFGH'),{rosterVersion:1});await batch.commit();}
-  tx.update(ref,{status:'running',startedAt:serverTimestamp()});
+  tx.update(ref,{status:'running',startedAt:serverTimestamp(),teamOpponents:{alice:null}});
  });
  await require('node:assert/strict').rejects(started,/Unassigned participant/);assertEqual(attempts>=2,true);assertEqual((await getDoc(ref)).data().status,'lobby');
 });

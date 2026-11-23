@@ -16,11 +16,18 @@ test('independent admin studios, owner access management and student join links'
  const api=await import('../backend-demo.js');t.after(async()=>{await api.logout();await new Promise(r=>setTimeout(r,20));w.close();});
  await api.loginEmail('javad@example.test','test-only');await api.logout();
  await api.loginGoogle();const ownerUid=api.currentUser().uid;const original=await api.createSession('Owner class',DEFAULT_CONFIG,'individual','PARIS');
- await import('../main.js?multi-admin-test');await wait(()=>$('#grant'));
- assert.match($('#app').textContent,/PLATFORM OWNER/);assert.match($('#app').textContent,/Administrators/);
+ await import('../main.js?multi-admin-test');await wait(()=>$('#create'));
+ assert.equal($('#studio-admin').getAttribute('aria-current'),'page');assert.equal($('#grant'),null);assert.equal($('#verified-accounts'),null);
+ assert.equal($('#join-as-student'),null);assert.doesNotMatch($('#app').textContent,/PLATFORM OWNER STUDIO|Let intuition play/);
+ $('#studio-administrators').click();await wait(()=>$('#verified-accounts'));assert.equal($('#create'),null);
+ assert.equal($('#studio-administrators').getAttribute('aria-current'),'page');assert.equal(new URL(w.location).searchParams.get('studio'),'administrators');
+ await api.logout();await wait(()=>$('#open-login'));await api.loginGoogle();await wait(()=>$('#directory-search'));
  await wait(()=>$('[data-grant-account="javad@example.test"]'));$('[data-grant-account="javad@example.test"]').click();await wait(()=>$('#instructors').textContent.includes('javad@example.test'));
+ $('[data-revoke="javad@example.test"]').click();await wait(()=>$('[data-yes]'));$('[data-yes]').click();await wait(()=>$('[data-grant-account="javad@example.test"]'));
+ $('[data-grant-account="javad@example.test"]').click();await wait(()=>$('#instructors').textContent.includes('javad@example.test'));
  await api.logout();await api.loginEmail('admin@admin.com','test-only');await wait(()=>$('#create'));
  assert.notEqual(api.currentUser().uid,ownerUid);assert.match($('#account').textContent,/admin@admin.com/);assert.equal($('#grant'),null);assert.equal($('#defaults'),null);assert.ok(!$('#active-sessions').textContent.includes('Owner class'));
+ assert.equal($('#studio-administrators'),null);assert.equal(new URL(w.location).searchParams.get('studio'),'1');
  const code=await api.createSession('Dedicated class',DEFAULT_CONFIG,'individual','ROME');$('#staff').click();await wait(()=>$('[data-card-link]'));
  assert.match($('#app').textContent,/SESSION CODE/);assert.equal($('[data-card-link]').dataset.cardLink,code);
  $('[data-card-link]').click();
@@ -39,7 +46,7 @@ test('independent admin studios, owner access management and student join links'
  const javadCode=await api.createSession('Javad class',DEFAULT_CONFIG);assert.notEqual(javadCode,original);assert.notEqual(javadCode,code);
  // A verified instructor enters another host's classroom using the student flow.
  const participantUid=api.currentUser().uid;
- $('#join-as-student').click();
+ $('#account-toggle').click();$('#join-session').click();
  await wait(()=>$('#join'));
  $('#join').elements.code.value=original;
  $('#join').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));

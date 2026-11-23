@@ -1,4 +1,8 @@
 // Small interaction helpers shared across browsers and exercised independently.
+export const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({
+ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+}[char]));
+
 export function csvCell(value){
  let text=String(value??'');
  // Guard user-supplied text, while retaining real negative numbers as numbers.

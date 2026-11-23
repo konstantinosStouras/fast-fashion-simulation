@@ -15,6 +15,13 @@ test('instructor rehearsal follows every student deadline without writing classr
  t.after(async()=>{await backend.logout();await new Promise(r=>setTimeout(r,20));dom.window.close();});
  await import('../main.js?preview-test');await wait(()=>$('#open-login'));
  click('#open-login');click('#google');await wait(()=>$('#staff'));click('#staff');await wait(()=>$('#create'));
+ const mode=$('#create [name=mode]');
+ assert.equal(mode.selectedOptions[0].textContent,'Individual play');
+ assert.match($('#play-mode-help').textContent,/their own market/);
+ mode.value='team';mode.dispatchEvent(new w.Event('change'));
+ assert.match($('#play-mode-help').textContent,/same opponent from practice through the final season/);
+ assert.match($('#play-mode-help').textContent,/unpaired team uses individual play/);
+ mode.value='individual';mode.dispatchEvent(new w.Event('change'));
  $('#create [name=demandMean]').value='960';
  const before=w.localStorage.getItem('ff:demo:v1');
  const realNow=Date.now;

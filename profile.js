@@ -1,5 +1,5 @@
-import {teamRound} from './market.js';
-import {ROUNDS,DEFAULT_ORDER,resultFor} from './model.js';
+import {competitorResult} from './market.js?v=ai-opponents-1';
+import {ROUNDS} from './model.js';
 export const PLATFORM_FIELDS=['name','email','studentId','age','gender','nationality','country','levelOfStudy','workExperience','occupation','industry','englishFluency','createdAt','updatedAt'];
 export const profileComplete=p=>!!(p?.firstName?.trim()&&p?.lastName?.trim()&&p?.universityId?.trim());
 export function profileFields(form){
@@ -22,7 +22,8 @@ export function historyStats(sessions,now=Date.now()){
  const rows=sessions.map(s=>{
   const seconds=s.startedAt?((s.closedAt?.toMillis()??now)-s.startedAt.toMillis())/1000:-1;
   const assigned=s.mode!=='team'||Object.hasOwn(s.teamNames||{},s.decisionUid);
-  const rounds=[1,2,3].filter(i=>assigned&&seconds>=ROUNDS[i].end).map(i=>({round:i,...(s.mode==='team'?teamRound(s,i,s.teamOrders||{}).teams[s.decisionUid]:resultFor(s.seed,i,s.orders[i]||DEFAULT_ORDER,s.config))}));
+  const orders=s.mode==='team'?(s.teamOrders||{}):{[s.decisionUid]:s.orders||{}};
+  const rounds=[1,2,3].filter(i=>assigned&&seconds>=ROUNDS[i].end).map(i=>({round:i,...competitorResult(s,i,orders,s.decisionUid)}));
   const sum=k=>rounds.reduce((a,r)=>a+r[k],0);
   return {...s,rounds,profit:sum('profit'),leftovers:sum('leftovers'),footprint:sum('footprint'),finished:rounds.length===3};
  }).sort((a,b)=>(b.createdAt?.toMillis()||0)-(a.createdAt?.toMillis()||0));

@@ -1,8 +1,12 @@
 import {decisionOwner,validateTeams} from './competition.js';
+import {makeTeamOpponents,teamMatchup} from './market.js';
 // Test harness, selected only on loopback hosts with ?demo. Never real authentication.
 import {platformHandoff} from './profile.js';
 import {loginEmailAddress,assertAccountEmail,ADMIN_ACCOUNT_EMAIL} from './auth-identity.js';
-import {DEFAULT_CONFIG} from './model.js';
+import {validateConfig,DEFAULT_CONFIG} from './model.js';
+import {rehearsalAiOrders} from './ai-rehearsal.js';
+import {getTeamComposition,materializeTeams} from './functions/teams.js';
+import {summarizeUserClassroom} from './functions/user-classrooms.js';
 import {requireSessionCode,sessionCodeTaken} from './session-code.js';
 const KEY='ff:demo:v1';let user=null;const authListeners=new Set(),listeners=new Set();
 const load=()=>JSON.parse(localStorage.getItem(KEY)||JSON.stringify({sessions:{},people:{},orders:{},instructors:[ADMIN_ACCOUNT_EMAIL]}));
@@ -12,7 +16,16 @@ function watch(fn){listeners.add(fn);queueMicrotask(fn);return ()=>listeners.del
 addEventListener('storage',e=>{if(e.key===KEY)listeners.forEach(fn=>fn());});
 export const currentUser=()=>user;
 export const observeAuth=fn=>{authListeners.add(fn);queueMicrotask(()=>fn(user));return ()=>authListeners.delete(fn);};
-async function login(email,emailVerified=true){user={uid:email==='kstouras@gmail.com'?'demo-admin':'demo-'+email,email,emailVerified,displayName:email==='kstouras@gmail.com'?'Demo instructor':'Demo participant'};if(emailVerified){const d=load();d.verifiedAccounts??={};d.verifiedAccounts[user.uid]=email;write(d);}authListeners.forEach(fn=>fn(user));}
+async function login(email,emailVerified=true){
+ user={uid:email==='kstouras@gmail.com'?'demo-admin':'demo-'+email,email,emailVerified,displayName:email==='kstouras@gmail.com'?'Demo instructor':'Demo participant'};
+ const d=load(),now=new Date().toISOString();
+ d.accountActivity??={};
+ const activity=d.accountActivity[user.uid]??={registeredAt:d.registered?.[user.uid]||d.verifiedAccounts?.[user.uid]?null:now};
+ activity.lastSignInAt=now;
+ d.registered??={};d.registered[user.uid]=email;
+ if(emailVerified){d.verifiedAccounts??={};d.verifiedAccounts[user.uid]=email;}
+ write(d);authListeners.forEach(fn=>fn(user));
+}
 export const watchVerifiedAccounts=onChange=>watch(()=>onChange(Object.values(load().verifiedAccounts||{})));
 export const loginGoogle=()=>login('kstouras@gmail.com');
 export const loginEmail=(email,password)=>login(loginEmailAddress(email));
@@ -21,7 +34,14 @@ export const getProfile=async()=>load().profiles?.[user.uid]||{firstName:'Demo',
 export const saveProfile=async profile=>{const d=load();d.profiles??={};d.profiles[user.uid]={...d.profiles[user.uid],...profile};write(d);};
 export async function importPlatformProfile(storage){const p=platformHandoff(storage,user);if(p)await saveProfile({platformRegistration:p});}
 export const changeEmail=async email=>{assertAccountEmail(email);};
-export const playHistory=async()=>Object.values(load().sessions).filter(s=>!s.deletedAt&&load().people[s.code]?.[user.uid]).map(s=>({...toSession(s),decisionUid:decisionOwner(s,user.uid),teamOrders:load().orders[s.code]||{},orders:load().orders[s.code]?.[decisionOwner(s,user.uid)]||{}}));
+export async function playHistory(){
+ const data=load();
+ return Object.values(data.sessions).filter(s=>!s.deletedAt&&data.people[s.code]?.[user.uid]).map(s=>{
+  const captain=decisionOwner(s,user.uid),saved=data.orders[s.code]||{};
+  const teamOrders=s.mode==='team'?Object.fromEntries(teamMatchup(s,captain).map(uid=>[uid,saved[uid]||{}])):null;
+  return {...toSession(s),aiOrders:captain?{[captain]:data.aiOrders?.[s.code]?.[captain]||{}}:{},decisionUid:captain,teamOrders,orders:saved[captain]||{}};
+ });
+}
 export const logout=async()=>{user=null;authListeners.forEach(fn=>fn(null));};
 export const verifyEmail=async()=>{};
 export const refreshUser=async()=>user;
@@ -32,11 +52,43 @@ export const revoke=async email=>{const d=load();d.instructors=d.instructors.fil
 export const listInstructors=async()=>load().instructors;
 export const getDefaults=async()=>load().defaults||DEFAULT_CONFIG;
 export const saveDefaults=async config=>{const d=load();d.defaults=config;write(d);};
+const demoProviders=[['openai','OpenAI'],['anthropic','Anthropic'],['google','Google']];
+async function requireStudio(){
+ if(!['admin','instructor'].includes(await role()))throw Error('Sign in as an instructor.');
+}
+export async function getAiSettings(){
+ await requireStudio();
+ const settings=load().aiSettings?.[user.uid]||{};
+ return {provider:settings.provider||null,model:settings.model||null,
+  providers:demoProviders.map(([id,label])=>({id,label,hasKey:!!settings.connected?.[id],
+   models:['standard','fast'].map(tier=>({id:id+'-demo-'+tier,label:'Demo '+tier}))}))};
+}
+export async function saveAiSettings({provider,model,apiKey,removeKey}){
+ const catalogue=await getAiSettings(),entry=catalogue.providers.find(p=>p.id===provider);
+ if(!entry)throw Error('Choose a provider.');
+ const d=load();d.aiSettings??={};
+ const settings=d.aiSettings[user.uid]??={connected:{}};
+ if(removeKey){
+  delete settings.connected[provider];
+  if(settings.provider===provider){delete settings.provider;delete settings.model;}
+ }else{
+  if(apiKey){
+   if(apiKey!=='demo-fixture')throw Error('Use the demo connection button for this rehearsal.');
+   settings.connected[provider]=true;
+   if(!settings.provider){settings.provider=provider;settings.model=entry.models[0].id;}
+  }
+  if(model){
+   if(!settings.connected[provider]||!entry.models.some(m=>m.id===model))throw Error('Connect a demo provider and choose a model.');
+   Object.assign(settings,{provider,model});
+  }
+ }
+ write(d);return getAiSettings();
+}
 const toSession=s=>s?{...s,createdAt:timestamp(s.createdAt),startedAt:timestamp(s.startedAt),closedAt:timestamp(s.closedAt)}:null;
 export async function isSessionCodeAvailable(value){
  return !Object.hasOwn(load().sessions,requireSessionCode(value));
 }
-export async function createSession(name,config,mode='individual',requestedCode){
+export async function createSession(name,config,mode='individual',requestedCode,aiOpponent){
  const d=load();
  let code;
  if(requestedCode===undefined){
@@ -47,12 +99,85 @@ export async function createSession(name,config,mode='individual',requestedCode)
   if(Object.hasOwn(d.sessions,code))throw sessionCodeTaken(code);
  }
  d.sessions[code]={code,name,config,mode,assignments:{},teamNames:{},seed:Math.floor(Math.random()*1000001),owner:user.uid,status:'lobby',createdAt:Date.now(),startedAt:null,closedAt:null};
+ if(aiOpponent?.practice||aiOpponent?.main)d.sessions[code].aiOpponent={...aiOpponent};
  write(d);
  return code;
 }
 export const listSessions=async(isOwner=false)=>Object.values(load().sessions).filter(s=>isOwner||s.owner===user.uid).map(toSession);
 export const watchSession=(code,fn)=>watch(()=>fn(toSession(load().sessions[code])));
-export const startSession=async code=>{const d=load();if(d.sessions[code].mode==='team'&&!validateTeams(Object.values(d.people[code]||{}),d.sessions[code].assignments,d.sessions[code].teamNames))throw Error('Assign every participant to a team before starting.');Object.assign(d.sessions[code],{status:'running',startedAt:Date.now()});write(d);};
+export async function listTeamUsers(pageToken){
+ await requireStudio();
+ const d=load(),accounts={...d.verifiedAccounts,...d.registered};
+ const people=Object.values(d.people).flatMap(roster=>Object.values(roster));
+ for(const p of people)accounts[p.uid]??=p.email;
+ const users=Object.entries(accounts).map(([uid,email])=>{
+  const profile=d.profiles?.[uid];
+  const name=[profile?.firstName,profile?.lastName].filter(Boolean).join(' ')||people.find(p=>p.uid===uid)?.name||email;
+  const activity=d.accountActivity?.[uid];
+  return {uid,email,name,studentId:profile?.universityId||null,registeredAt:activity?.registeredAt||null,lastSignInAt:activity?.lastSignInAt||null};
+ }).sort((a,b)=>a.uid.localeCompare(b.uid));
+ const start=Number(pageToken)||0,end=start+100;
+ return {users:users.slice(start,end),nextPageToken:end<users.length?String(end):null};
+}
+export async function getUserClassrooms(uid){
+ await requireStudio();
+ const d=load(),platformOwner=await role()==='admin';
+ const sessions=Object.values(d.sessions)
+  .filter(room=>platformOwner||room.owner===user.uid)
+  .sort((a,b)=>b.createdAt-a.createdAt)
+  .map(room=>summarizeUserClassroom(room,uid,!!d.people[room.code]?.[uid]))
+  .filter(Boolean);
+ return {sessions};
+}
+export async function saveTeamComposition(code,changes){
+ await requireStudio();
+ const d=load(),s=d.sessions[code];
+ if(!s||s.status!=='lobby'||s.mode!=='team'||s.owner!==user.uid&&await role()!=='admin')throw Error('Choose a waiting team classroom that you manage.');
+ const composition=getTeamComposition(s);
+ for(const [uid,n] of Object.entries(changes)){
+  if(n===null)delete composition[uid];else if(typeof n==='string' && /^([1-9]\d?|100)$/.test(n))composition[uid]=n;else throw Error('Choose a team from 1 to 100.');
+ }
+ const counts=new Map();
+ for(const n of Object.values(composition))counts.set(n,(counts.get(n)||0)+1);
+ if(Object.keys(composition).length>500||[...counts.values()].some(n=>n>20))throw Error('A classroom supports 500 users and 20 per team.');
+ s.teamComposition=composition;
+ const teams=materializeTeams(Object.values(d.people[code]||{}),s);
+ Object.assign(s,teams);write(d);return {teamComposition:composition,...teams};
+}
+export async function saveSessionAiOpponent(code,aiOpponent){
+ await requireStudio();
+ const data=load(),s=data.sessions[code];
+ if(s?.owner!==user.uid||s.status!=='lobby'||s.mode==='solo')throw Error('Only the classroom owner can change opponents before the start.');
+ if(aiOpponent?.practice||aiOpponent?.main)s.aiOpponent={...aiOpponent};else delete s.aiOpponent;
+ write(data);
+}
+export async function startSession(code){
+ const d=load(),s=d.sessions[code];
+ if(s?.status!=='lobby')throw Error('Only a waiting session can start.');
+ if(s.mode==='team'){
+  if(s.teamComposition)Object.assign(s,materializeTeams(Object.values(d.people[code]||{}),s));
+  if(!validateTeams(Object.values(d.people[code]||{}),s.assignments,s.teamNames))throw Error('Assign every participant to a team before starting.');
+  s.teamOpponents=makeTeamOpponents(s.teamNames);
+ }
+ if(s.aiOpponent){
+  await requireStudio();
+  if(!d.aiSettings?.[s.owner]?.connected[s.aiOpponent.provider])throw Error('Connect the classroom owner’s demo provider before starting.');
+  const competitors=s.mode==='team'?Object.keys(s.teamNames):Object.keys(d.people[code]||{});
+  if(!competitors.length)throw Error('Ask participants to join before starting the AI classroom.');
+  d.aiOrders??={};d.aiOrders[code]={};
+  for(const uid of competitors){
+   const orders={};
+   for(const [phase,rounds] of [['practice',[0]],['main',[1,2,3]]]){
+    if(!s.aiOpponent[phase])continue;
+    const plan=rehearsalAiOrders(s.config,crypto.getRandomValues(new Uint32Array(1))[0]);
+    for(const i of rounds)orders[i]=plan[i];
+   }
+   d.aiOrders[code][uid]=orders;
+  }
+ }
+ Object.assign(s,{status:'running',startedAt:Date.now()});
+ write(d);
+}
 export const closeSession=async code=>{const d=load();Object.assign(d.sessions[code],{status:'closed',closedAt:Date.now()});write(d);};
 export async function joinSession(code,name){const d=load();if(!d.sessions[code])throw new Error('Session code not found.');d.people[code]??={};if(!d.people[code][user.uid]){if(d.sessions[code].status!=='lobby')throw new Error('Already started.');d.people[code][user.uid]={uid:user.uid,name,email:user.email};write(d);}}
 export const watchParticipants=(code,fn)=>watch(()=>fn(Object.values(load().people[code]||{})));
@@ -60,8 +185,27 @@ export const watchOrders=(code,uid,fn)=>watch(()=>fn(load().orders[code]?.[uid]|
 export const saveOrder=async(code,index,order,phase='plan',expectedRevision)=>{const d=load();d.orders[code]??={};d.orders[code][user.uid]??={};const revision=d.orders[code][user.uid][index]?.revision??0;if(expectedRevision!==undefined&&expectedRevision!==revision)throw Object.assign(new Error('Another device saved a newer decision. Your save was not applied. Review the latest saved values before editing again.'),{code:'decision-conflict'});d.orders[code][user.uid][index]={...order,phase,revision:revision+1};write(d);};
 
 export const saveTeams=async(code,assignments,teamNames)=>{const d=load();if(d.sessions[code].status!=='lobby'||!validateTeams(Object.values(d.people[code]||{}),assignments,teamNames))throw Error('Invalid teams.');Object.assign(d.sessions[code],{assignments,teamNames});write(d);};
-export const readMarketOrders=async(code,captains,rounds)=>Object.fromEntries(captains.map(uid=>[uid,Object.fromEntries(rounds.map(r=>[r,load().orders[code]?.[uid]?.[r]||null]))]));
+export async function readMarketOrders(code,captains,rounds,decisionUid){
+ const d=load(),config=d.sessions[code]?.aiOpponent;
+ return Object.fromEntries(captains.map(uid=>[uid,Object.fromEntries(rounds.filter(i=>!decisionUid||decisionUid===uid||!config?.[i===0?'practice':'main']).map(i=>[i,d.orders[code]?.[uid]?.[i]||null]))]));
+}
+export async function readAiOrders(code,competitors,config,rounds=[0,1,2,3]){
+ const saved=load().aiOrders?.[code]||{};
+ return Object.fromEntries(competitors.map(uid=>[uid,Object.fromEntries(rounds.filter(i=>config?.[i===0?'practice':'main']).map(i=>{
+  const order=saved[uid]?.[i];
+  if(!order)throw Error('The saved AI decision could not be loaded.');
+  return [i,order];
+ }))]));
+}
 
 export const readParticipants=async code=>Object.values(load().people[code]||{});
 export const readOrders=async(code,uid)=>load().orders[code]?.[uid]||{};
-export const deleteSession=async code=>{const d=load();delete d.sessions[code];delete d.people[code];delete d.orders[code];write(d);};
+export const deleteSession=async code=>{const d=load();delete d.sessions[code];delete d.people[code];delete d.orders[code];if(d.aiOrders)delete d.aiOrders[code];write(d);};
+
+export async function saveDefaultField(key,value){
+ const data=load();
+ const config={...DEFAULT_CONFIG,...data.defaults,[key]:value};
+ if(!validateConfig(config))throw new Error('Check the default costs, selling price and salvage value.');
+ data.defaults=config;
+ write(data);
+}

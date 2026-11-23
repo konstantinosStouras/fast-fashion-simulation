@@ -1,6 +1,7 @@
 // Shared-market competition: customers choose a team/style, then switch if it stocks out.
 // Fixed prices; every additional style adds choice weight. Demand exists only once.
-import {DEFAULT_ORDER,ROUNDS,demandFor,validOrder} from './model.js';
+import {DEFAULT_ORDER,ROUNDS,demandFor,resultFor,signalFor,validOrder} from './model.js';
+export {makeTeamOpponents} from './functions/teams.js';
 function randomFor(seed){return ()=>{seed=(Math.imul(1664525,seed)+1013904223)>>>0;return seed/4294967296;};}
 function choose(items,u){const total=items.reduce((n,p)=>n+p.weight,0);let value=u*total;return items.find(p=>(value-=p.weight)<0)||items.at(-1);}
 export function sharedMarket(seed,index,teamOrders,config){
@@ -21,5 +22,104 @@ export function sharedMarket(seed,index,teamOrders,config){
  const teams={};for(const uid of ids){const own=products.filter(p=>p.uid===uid),sum=k=>own.reduce((n,p)=>n+p[k],0),o=orders[uid],initial=o.variety*o.quantity,sales=sum('earlySales')+sum('lateSales'),replenished=sum('added'),leftovers=sum('stock'),produced=initial+replenished,footprint=produced*config.unitCarbon+leftovers*config.leftoverCarbon;teams[uid]={sales,replenished,leftovers,produced,demand:sum('preferred'),lostSales:sum('preferred')-sum('retained'),switchedIn:sum('switchedIn'),switchedOut:sum('switchedOut'),profit:sales*config.price+leftovers*config.salvage-initial*config.initialCost-replenished*config.refillCost-o.variety*config.styleCost,footprint,perSale:sales?footprint/sales:null,signals:signals[uid]};}
  const sales=Object.values(teams).reduce((n,t)=>n+t.sales,0);return {teams,demand,sales,lostSales:demand-sales};
 }
+
+// Once play starts the saved map is authoritative. Older sessions keep the
+// classroom-wide market their participants actually played.
+export function usesPairedMarkets(session){
+ return session.mode==='team' && (session.teamOpponents!=null || session.status==='lobby');
+}
+
+export function teamMatchup(session,captain){
+ const names=session.teamNames||{};
+ if(!Object.hasOwn(names,captain))return [];
+ if(!usesPairedMarkets(session))return Object.keys(names).sort();
+ const opponents=session.teamOpponents||{};
+ return opponents[captain]==null?[captain]:[captain,opponents[captain]];
+}
+
+export function teamMatchups(session){
+ const names=session.teamNames||{},captains=Object.keys(names).sort();
+ if(!usesPairedMarkets(session))return captains.length?[captains]:[];
+ const opponents=session.teamOpponents||{};
+ const groups=[];
+ for(const captain of captains){
+  const rival=opponents[captain];
+  if(rival==null)groups.push([captain]);
+  else if(captain<rival)groups.push([captain,rival]);
+ }
+ return groups;
+}
+
 const cache=new Map();
-export function teamRound(s,index,allOrders){const orders=Object.fromEntries(Object.keys(s.teamNames||{}).sort().map(uid=>[uid,allOrders[uid]?.[index]||DEFAULT_ORDER]));const key=JSON.stringify([s.seed,index,s.config,orders]);if(!cache.has(key)){if(cache.size>=16)cache.delete(cache.keys().next().value);cache.set(key,sharedMarket(s.seed,index,orders,s.config));}return cache.get(key);}
+export function aiActive(session,index){
+ if(!Number.isInteger(index)||index<0||index>=ROUNDS.length)return false;
+ return session.aiOpponent?.[ROUNDS[index].scored?'main':'practice']===true;
+}
+
+// Keep the same demand draw across the classroom's matchups, as in the human
+// market. Each entrant faces only the strategy generated for that entrant.
+const aiMarketCache=new Map();
+function aiMarket(session,index,order,uid){
+ const opponent=session.aiOrders?.[uid]?.[index];
+ if(!validOrder(opponent,index))throw Error('The saved AI opponent decision is unavailable.');
+ const config={...session.config,rebound:0};
+ const key=JSON.stringify([session.seed,index,config,order.variety,order.quantity,order.cap,opponent.variety,opponent.quantity,opponent.cap]);
+ if(aiMarketCache.has(key))return aiMarketCache.get(key);
+ const market=sharedMarket(session.seed,index,{business:order,opponent},config);
+ if(aiMarketCache.size>=512)aiMarketCache.delete(aiMarketCache.keys().next().value);
+ aiMarketCache.set(key,market);
+ return market;
+}
+
+function aiResult(market){
+ return {...market.teams.business,opponent:market.teams.opponent,marketDemand:market.demand};
+}
+
+export function competitorResult(session,index,allOrders,uid){
+ const order=allOrders[uid]?.[index]||DEFAULT_ORDER;
+ if(aiActive(session,index))return aiResult(aiMarket(session,index,order,uid));
+ if(session.mode==='team')return teamRound(session,index,allOrders,uid).teams[uid];
+ return resultFor(session.seed,index,order,session.config);
+}
+
+export function teamRound(session,index,allOrders,captain){
+ if(aiActive(session,index)){
+  const captains=captain===undefined?Object.keys(session.teamNames||{}):[captain];
+  const round={teams:{},demand:0,sales:0,lostSales:0};
+  for(const uid of captains){
+   const market=aiMarket(session,index,allOrders[uid]?.[index]||DEFAULT_ORDER,uid);
+   round.teams[uid]=aiResult(market);
+   round.demand+=market.demand;
+   round.sales+=market.sales;
+   round.lostSales+=market.lostSales;
+  }
+  return round;
+ }
+ const groups=captain===undefined?teamMatchups(session):[teamMatchup(session,captain).sort()].filter(group=>group.length);
+ const orders=Object.fromEntries(groups.flat().map(uid=>[uid,allOrders[uid]?.[index]||DEFAULT_ORDER]));
+ const paired=usesPairedMarkets(session);
+ const {seed,config}=session;
+ const key=JSON.stringify([seed,index,config,paired,groups,orders]);
+ if(cache.has(key))return cache.get(key);
+
+ const round={teams:{},demand:0,sales:0,lostSales:0};
+ for(const group of groups){
+  if(paired && group.length===1){
+   const [uid]=group,order=orders[uid];
+   const result=resultFor(seed,index,order,config);
+   round.teams[uid]={...result,signals:signalFor(seed,index,order,config),switchedIn:0,switchedOut:0};
+   round.demand+=result.demand;
+   round.sales+=result.sales;
+  }else{
+   const marketOrders=Object.fromEntries(group.map(uid=>[uid,orders[uid]]));
+   const market=sharedMarket(seed,index,marketOrders,config);
+   Object.assign(round.teams,market.teams);
+   round.demand+=market.demand;
+   round.sales+=market.sales;
+  }
+ }
+ round.lostSales=round.demand-round.sales;
+ if(cache.size>=16)cache.delete(cache.keys().next().value);
+ cache.set(key,round);
+ return round;
+}

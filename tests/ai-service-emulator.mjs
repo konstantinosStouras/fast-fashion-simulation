@@ -1,0 +1,201 @@
+// Run with the Auth and Firestore emulators and the functions dependencies installed.
+import {after, before, test} from 'node:test';
+import assert from 'node:assert/strict';
+import {randomBytes} from 'node:crypto';
+import {createRequire} from 'node:module';
+import {aiService} from '../functions/service.js';
+import {DEFAULT_CONFIG} from '../model.js';
+
+const requireServer = createRequire(new URL('../functions/package.json', import.meta.url));
+const {initializeApp, deleteApp} = requireServer('firebase-admin/app');
+const {getFirestore, Timestamp} = requireServer('firebase-admin/firestore');
+const {getAuth} = requireServer('firebase-admin/auth');
+for (const key of ['FIRESTORE_EMULATOR_HOST','FIREBASE_AUTH_EMULATOR_HOST']) {
+  assert.match(process.env[key] || '', /^(localhost|127\.0\.0\.1):\d+$/, key + ' must point to a local emulator');
+}
+const run = randomBytes(4).toString('hex');
+const app = initializeApp({projectId:'demo-fashion-futures-ai'}, 'ai-test-' + run);
+const db = getFirestore(app), auth = getAuth(app);
+const master = randomBytes(32).toString('base64');
+const admin = {uid:'instructor-' + run, token:{email:'teacher-' + run + '@example.test', email_verified:true}};
+const other = {uid:'other-' + run, token:{email:'other-' + run + '@example.test', email_verified:true}};
+const call = (account, data) => ({auth:account, data});
+const key = 'fixture-provider-credential';
+const models = [{id:'model-one',label:'One'}, {id:'model-two',label:'Two'}];
+const options = {db, auth, encryptionSecret:() => master, discover:async () => models};
+const plans = (phase, quantity = 42) => Object.fromEntries((phase === 'practice' ? [0] : [1,2,3]).map(i => [i, {quantity,variety:4,cap:i === 1 ? 0 : 16}]));
+let sequence = 0;
+async function classroom(mode = 'individual') {
+  const code = 'AI' + run.toUpperCase() + (++sequence);
+  const ref = db.collection('sessions').doc(code);
+  await ref.set({owner:admin.uid, createdAt:Timestamp.now(), status:'lobby', mode, config:DEFAULT_CONFIG, seed:42,
+    aiOpponent:{provider:'openai',model:'model-one',practice:true,main:true}, assignments:{},teamNames:{}});
+  return ref;
+}
+before(async () => {
+  for (const account of [admin,other]) await db.collection('instructors').doc(account.token.email).set({createdAt:Timestamp.now()});
+  await aiService(options).saveAiSettings(call(admin,{provider:'openai',apiKey:key}));
+});
+after(async () => { await deleteApp(app); });
+
+test('keys and models remain private to each verified instructor', async () => {
+  const api = aiService(options);
+  const result = await api.getAiSettings(call(admin,{}));
+  assert.equal(result.model,'model-one');
+  assert(!JSON.stringify(result).includes(key));
+  assert(!JSON.stringify((await db.collection('privateAiSettings').doc(admin.uid).get()).data()).includes(key));
+  assert.equal((await api.getAiSettings(call(other,{}))).model,null);
+  await assert.rejects(api.getAiSettings(call({...admin,token:{...admin.token,email_verified:false}},{})),{code:'permission-denied'});
+  await assert.rejects(api.saveAiSettings(call(admin,{provider:'openai',model:'unlisted-model'})),{code:'invalid-argument'});
+});
+
+test('only one in-flight request owns a competitor and all enabled phases must be ready before start', async () => {
+  const ref = await classroom();
+  for (const uid of ['p1','p2']) await ref.collection('participants').doc(uid).set({joinedAt:Timestamp.now()});
+  let release, entered;
+  const gate = new Promise(resolve => { release = resolve; });
+  const firstCall = new Promise(resolve => { entered = resolve; });
+  let calls = 0;
+  const api = aiService({...options,generate: async (p,m,k,phase) => {
+    assert.equal(k, key); assert.equal(p, 'openai'); assert.equal(m, 'model-one');
+    const quantity = ++calls; entered(); await gate; return plans(phase, quantity);
+  }});
+  const prep = (competitor, phase) => call(admin, {code:ref.id, competitor, phase});
+  await assert.rejects(api.prepareAiOpponent(call(other, prep('p1','practice').data)), {code:'permission-denied'});
+  const first = api.prepareAiOpponent(prep('p1','practice'));
+  await firstCall;
+  await assert.rejects(api.prepareAiOpponent(prep('p1','practice')), {code:'aborted'});
+  release(); await first;
+  assert.deepEqual((await api.prepareAiOpponent(prep('p1','practice'))).orders, plans('practice',1));
+  await assert.rejects(api.startAiSession(call(admin,{code:ref.id})), {code:'failed-precondition'});
+  await api.prepareAiOpponent(prep('p2','practice'));
+  await api.prepareAiOpponent(prep('p1','main'));
+  await api.prepareAiOpponent(prep('p2','main'));
+  assert.equal(calls, 4);
+  for (const [uid,q] of [['p1',1],['p2',2]]) {
+    const round = (await ref.collection('participants').doc(uid).collection('aiRounds').doc('0').get()).data();
+    assert.equal(round.order.quantity, q);
+  }
+  await api.startAiSession(call(admin,{code:ref.id}));
+  const s = (await ref.get()).data();
+  assert.equal(s.status,'running'); assert(s.startedAt instanceof Timestamp);
+  assert.deepEqual(await api.startAiSession(call(admin,{code:ref.id})), {started:true});
+});
+
+test('changed or closed classroom discards an in-flight provider response', async () => {
+  const ref = await classroom();
+  const competitor = 'captain';
+  const participant = ref.collection('participants').doc(competitor);
+  await participant.set({joinedAt:Timestamp.now()});
+  const request = call(admin,{code:ref.id,competitor,phase:'practice'});
+  const changed = aiService({...options,generate: async () => {
+    await ref.update({'aiOpponent.model':'model-two'}); return plans('practice');
+  }});
+  await assert.rejects(changed.prepareAiOpponent(request), {code:'aborted'});
+  assert(!(await participant.collection('aiRounds').doc('0').get()).exists);
+  assert(!(await participant.collection('aiOpponents').doc('practice').get()).exists);
+  const closed = aiService({...options,generate: async () => {
+    await ref.update({status:'closed'}); return plans('practice');
+  }});
+  await assert.rejects(closed.prepareAiOpponent(request), {code:'failed-precondition'});
+  assert(!(await participant.collection('aiOpponents').doc('practice').get()).exists);
+});
+
+test('directory and team editing use registered accounts, joined roster and ownership', async () => {
+  const ref = await classroom('team');
+  const students = [0,1,2].map(index => 'team-user-' + run + '-' + index);
+  for (const uid of students) await auth.createUser({uid,email:uid+'@example.test'});
+  await db.collection('profiles').doc(students[0]).set({firstName:'Student',lastName:'One',universityId:'private-id'});
+  const api = aiService({...options,generate:async (p,m,k,phase) => plans(phase)});
+  const studentAuth = {uid:students[0],token:{email:students[0]+'@example.test',email_verified:true}};
+  await assert.rejects(api.listTeamUsers(call(studentAuth,{})),{code:'permission-denied'});
+  let pageToken, person;
+  do {
+    const page = await api.listTeamUsers(call(admin, {pageToken}));
+    person = page.users.find(user => user.uid === students[0]);
+    pageToken = page.nextPageToken;
+  } while (!person && pageToken);
+  const metadata = (await auth.getUser(students[0])).metadata;
+  assert.deepEqual(person,{uid:students[0], name:'Student One', email:students[0]+'@example.test', studentId:'private-id',
+    registeredAt:new Date(metadata.creationTime).toISOString(),
+    lastSignInAt:metadata.lastSignInTime ? new Date(metadata.lastSignInTime).toISOString() : null});
+  const changes = {[students[0]]:'2',[students[1]]:'2',[students[2]]:'7'};
+  await assert.rejects(api.saveTeamComposition(call(other,{code:ref.id,changes})),{code:'permission-denied'});
+  await assert.rejects(api.saveTeamComposition(call(admin,{code:ref.id,changes:{['absent-' + run]:'1'}})),{code:'failed-precondition'});
+  await ref.collection('participants').doc(students[1]).set({joinedAt:Timestamp.now()});
+  const result = await api.saveTeamComposition(call(admin,{code:ref.id,changes}));
+  assert.deepEqual(result.assignments,{[students[1]]:students[1]});
+  for (const uid of [students[0],students[2]]) await ref.collection('participants').doc(uid).set({joinedAt:Timestamp.now()});
+  for (const captain of [students[1],students[2]]) for (const phase of ['practice','main']) {
+    await api.prepareAiOpponent(call(admin,{code:ref.id,competitor:captain,phase}));
+  }
+  await api.startAiSession(call(admin,{code:ref.id}));
+  const started = (await ref.get()).data();
+  assert.deepEqual(started.assignments,{[students[0]]:students[1],[students[1]]:students[1],[students[2]]:students[2]});
+  assert.equal(started.teamOpponents[students[1]],students[2]);
+  await assert.rejects(api.saveTeamComposition(call(admin,{code:ref.id,changes:{[students[0]]:null}})),{code:'failed-precondition'});
+});
+
+test('user classroom lookups recover real joins, waiting assignments and scoped phase-specific opponents', async () => {
+  const uid = 'history-' + run, email = uid + '@example.test';
+  await auth.createUser({uid,email});
+  const api = aiService(options);
+  const studio = {uid:'platform-owner',token:{email:'kstouras@gmail.com',email_verified:true}};
+  const student = {uid,token:{email,email_verified:true}};
+  const history = db.collection('profiles').doc(uid).collection('sessions');
+  const room = async (data, joined, linked = false, participantUid = uid) => {
+    const ref = await classroom(data.mode || 'team');
+    await ref.update({name:'Example ' + ref.id, ...data});
+    if (joined) await ref.collection('participants').doc(participantUid).set({joinedAt:Timestamp.now(),email});
+    if (linked) await history.doc(ref.id).set({joined:true});
+    return ref;
+  };
+  const running = await room({status:'running',startedAt:Timestamp.fromMillis(Date.now()-200000),
+    assignments:{[uid]:'captain'},teamNames:{captain:'Team 4',rival:'Team 8'},teamOpponents:{captain:'rival',rival:'captain'},
+    aiOpponent:{provider:'openai',model:'model-one',practice:true,main:false}},true,true);
+  const planned = await room({teamComposition:{[uid]:'7'}},false);
+  const legacy = await room({mode:'individual',status:'running',startedAt:Timestamp.fromMillis(Date.now()-1200000)},true);
+  const otherRoom = await room({owner:other.uid, mode:'individual', status:'closed'},true,true);
+  const solo = await room({owner:uid, mode:'solo',status:'closed'},true,true);
+  const stale = await room({mode:'individual',status:'closed'},false,true);
+  const removed = await room({deletedAt:Timestamp.now()},true,true);
+  const absent = await room({teamComposition:{[uid]:'4'},status:'closed'},false);
+  const reusedEmail = await room({mode:'individual'},true,false,'previous-uid');
+  // Fill the first query page. Put an unlinked participant past its final
+  // cursor, then change the user's sign-in email after their classroom join.
+  const archive = db.batch();
+  for (let i = 0; i < 100; i++) {
+    archive.set(db.collection('sessions').doc('B' + run + String(i).padStart(3,'0')), {owner:admin.uid,mode:'individual',status:'closed'});
+  }
+  const historical = db.collection('sessions').doc('Z' + run);
+  archive.set(historical, {owner:admin.uid, name:'Past cohort', mode:'individual', status:'closed', createdAt:Timestamp.fromMillis(1)});
+  archive.set(historical.collection('participants').doc(uid), {email,joinedAt:Timestamp.now()});
+  await archive.commit();
+  await auth.updateUser(uid,{email: 'new-' + email});
+  await auth.createUser({uid:admin.uid,email:admin.token.email});
+  const instructorSolo = await room({mode:'solo',owner:admin.uid,status:'closed'},true,false,admin.uid);
+  await assert.rejects(api.getUserClassrooms(call(student,{uid})),{code:'permission-denied'});
+  await assert.rejects(api.getUserClassrooms(call({...admin,token:{...admin.token,email_verified:false}},{uid})),{code:'permission-denied'});
+  await assert.rejects(api.getUserClassrooms(call(admin,{uid:'invalid/path'})),{code:'invalid-argument'});
+  const byCode = async account => new Map((await api.getUserClassrooms(call(account,{uid}))).sessions.map(s => [s.code,s]));
+  const own = await byCode(admin);
+  assert.deepEqual([...own.keys()],[running.id,planned.id,legacy.id,historical.id]);
+  assert.equal(own.get(historical.id).joined,true);
+  assert.equal(own.get(running.id).joined,true);
+  assert.equal(own.get(running.id).team,'Team 4');
+  assert.match(own.get(running.id).practiceOpponent,/AI.*OpenAI.*model-one/);
+  assert.equal(own.get(running.id).mainOpponent,'Team 8');
+  assert.equal(own.get(running.id).currentPhase,'main');
+  assert.equal(own.get(running.id).activeOpponent,'Team 8');
+  assert.equal(own.get(planned.id).joined,false);
+  assert.equal(own.get(planned.id).team,'Team 7');
+  assert.equal(own.get(legacy.id).status,'completed');
+  assert.equal(own.get(legacy.id).activeOpponent,null);
+  assert.deepEqual([...(await byCode(other)).keys()],[otherRoom.id]);
+  const all = await byCode(studio);
+  assert(all.has(solo.id) && all.has(otherRoom.id));
+  const ownSolo = (await api.getUserClassrooms(call(admin,{uid:admin.uid}))).sessions;
+  assert.deepEqual(ownSolo.map(s=>s.code),[instructorSolo.id]);
+  assert.deepEqual((await api.getUserClassrooms(call(other,{uid:admin.uid}))).sessions,[]);
+  for (const excluded of [stale,removed,absent,reusedEmail]) assert(!all.has(excluded.id));
+});

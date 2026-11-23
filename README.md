@@ -15,6 +15,7 @@ For a synthetic local preview, open http://localhost:8791/?demo. The Google butt
 ## Test
 
 - `npm test`: model and DOM integration tests.
+- `npm ci --prefix functions` followed by `npm run test:ai` runs the instructor directory and opponent-service tests against local Auth and Firestore emulators with synthetic provider responses.
 - `npm run test:stress`: synthetic market/accounting stress tests, 500-participant/100-team leaderboard benchmark, and 2,000 local HTTP requests.
 - `npm run test:backend:stress`: local Auth/Firestore checks plus a 500-participant classroom workload (100 joins, 100 captain writes and 300 result reads).
 - `npm run test:rules`: Firestore emulator access tests; Java 21+ required on PATH.
@@ -31,17 +32,41 @@ See [QA-REPORT.md](QA-REPORT.md) for the 10 November functionality audit, fixes,
 
 Admin entrance: https://www.stouras.com/fast-fashion-simulation/admin/ — Google or email/password, with password reset. Verified administrators and authorized instructors are redirected to the studio; the URL does not grant access.
 
-## Solo and shared-market teams
+## Individual play and team competition
 
 Solo play starts from the signed-in welcome page; the student reads the briefing before starting the 18-minute clock. Each new game receives a random seed and appears in profile history.
 
-For teams, choose Team competition when creating a session. Registered students join using its code; the instructor randomly groups joined participants (default three, configurable 1–20), edits membership/captains/names, then starts. Only a captain submits; teammates share the live decisions and results. Membership locks at start.
+**Users & Teams** opens with the registered-user directory. Search by name, email or student ID. Open a person’s entry to see their classrooms, participation status, team and opponent in each phase. Instructors see participation within the classrooms they manage. The platform owner can review participation across classrooms.
 
-Teams compete for ONE normally distributed demand pool. The demand mean and SD are market-wide, not per team. Every style adds customer-choice weight; a stockout customer tries an available alternative and can switch teams. Prices stay fixed. All customers switch if any alternative is available (an explicit teaching assumption). Extra consumption is applied once to the shared market: rebound × fraction of teams offering eight styles. With rebound zero, variety can only redistribute demand.
+To form teams, select a waiting team classroom, choose a numbered team for each student and save the assignments. Students still join with the classroom code. Only joined students play, and each needs an assignment before the clock starts. A numbered team keeps its joined captain when possible. Otherwise the simulation assigns a captain from its joined members. Existing classrooms can also group joined participants in the room until the instructor starts using the directory.
 
-Orders become readable to session members after initial ordering locks, so every client can calculate the same early sales, forecasts and outcomes. Live competitor orders stay hidden before that deadline; emails and participant lists remain teaching-staff-only. The leaderboard shows cumulative profit, sales, customers won/lost to rivals, leftovers and footprint after each scored period. Practice is unscored. CSV exports one row per team/period; each member’s profile shows their shared team result.
+At the start of a team classroom, the simulation shuffles the teams uniformly and pairs them without replacement. An odd team receives a randomly drawn bye and plays its own market in human-opponent phases. The draw stays fixed throughout the classroom. Captains submit decisions for their teams.
+
+Each pair competes for its own demand pool. The configured demand mean and standard deviation apply to each pair. Customers choose among the two collections and try an available alternative when their preferred style sells out. Prices stay fixed. When one team offers eight styles, its market grows by half the configured extra-consumption rate. When both teams expand, the full rate applies. A team without an opponent uses the individual demand, replenishment and scoring rules, with the captain continuing to save decisions for the team.
+
+After initial ordering locks, each team can see its market outcomes. Paired teams compare cumulative profit, sales, customers won or lost to their opponent, leftovers and footprint after each scored season. An unpaired team sees its own results. Instructors can review all matchups and export one CSV row per team and scored season. Each member’s profile shows the shared team result. Practice is excluded from scores.
 
 Team preview uses one simulated rival with disclosed fixed decisions, the same shared-market engine and no database writes. The 18-minute structure is unchanged. This is a transparent teaching prototype, not an anti-cheating exam engine.
+
+## AI opponents
+
+In **AI settings**, an instructor can connect OpenAI, Anthropic and Google API keys and choose a text model available to their account. **Admin** lets the instructor enable AI separately for practice and the main phase at creation or in their waiting classroom. The main phase includes all three scored seasons. Private solo games use the existing individual market.
+
+Starting an AI classroom requests one independent strategy from the selected model per team or individual participant per enabled phase. The model chooses opening stock, replenishment caps and, in the final season, collection size to maximize expected profit using the classroom's costs and demand distribution. Only simulation parameters go to the provider. Ready strategies persist through preparation retries and the clock starts when all opponents are ready. Each AI matchup shares one demand draw. Extra styles redistribute that demand and customers can switch firms after a stockout. Reports use the saved opponent decisions, and practice stays outside the scored totals. The local demo and private rehearsal use simulated decisions without provider charges.
+
+### Enabling the live service
+
+Use the dedicated Firebase project `stouras-ffo` with billing enabled. The application uses second-generation callable Functions in `us-central1`. The Functions service account needs access to Firestore and permission to list Firebase Authentication users.
+
+On first setup, create the Secret Manager secret used to encrypt instructor keys. Preserve its value for subsequent releases so the service can decrypt previously saved keys.
+
+```powershell
+node -e "process.stdout.write(require('node:crypto').randomBytes(32).toString('base64'))" | npx firebase functions:secrets:set FFO_AI_KEY_ENCRYPTION --data-file - --project stouras-ffo
+npm ci --prefix functions
+npx firebase deploy --only functions,firestore:rules --project stouras-ffo
+```
+
+Publish the web files with the matching backend version, including the shared browser modules from the `functions` directory. A real instructor key is needed to run an AI classroom. Credentials stay encrypted on the server and the browser receives only connection status and the available models.
 
 Administrators have independent Firebase accounts and class ownership. The platform owner (`kstouras@gmail.com`) manages administrator access and can oversee all classes. The existing `instructors` collection holds class-administrator grants; these accounts manage only their own classes. `admin@admin.com` signs into a separate account whose recovery email is `kstouras+ffo-admin@gmail.com` (delivered to the owner’s Gmail). Its UID, password changes, profile and sessions are independent of the owner’s Google account.
 

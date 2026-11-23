@@ -8,14 +8,9 @@ import {initializeTestEnvironment} from '@firebase/rules-unit-testing';
 test('real backend registration stores profile and sends a working verification link',async t=>{
  assert.equal(process.env.FIREBASE_AUTH_EMULATOR_HOST,'127.0.0.1:9198','Must run inside the local emulator suite');
  let source=readFileSync(new URL('../backend.js',import.meta.url),'utf8');
- for(const component of ['app','auth','firestore'])source=source.replace(`https://www.gstatic.com/firebasejs/12.5.0/firebase-${component}.js`,import.meta.resolve('firebase/'+component));
+ for(const component of ['app','auth','firestore','functions'])source=source.replaceAll(`https://www.gstatic.com/firebasejs/12.5.0/firebase-${component}.js`,import.meta.resolve('firebase/'+component));
  source=source.replace("import {firebaseConfig,DATABASE,ADMIN_EMAIL} from './firebase-config.js';","const firebaseConfig={projectId:'demo-fashion-futures',apiKey:'demo-api-key',authDomain:'demo-fashion-futures.firebaseapp.com'},DATABASE='(default)',ADMIN_EMAIL='kstouras@gmail.com';");
- source=source.replace("'./competition.js'",JSON.stringify(new URL('../competition.js',import.meta.url).href)).replace("'./model.js'",JSON.stringify(new URL('../model.js',import.meta.url).href)).replace("'./profile.js?v=qa-20261110'",JSON.stringify(new URL('../profile.js',import.meta.url).href));
- source=source.replace("'./auth-identity.js'",JSON.stringify(new URL('../auth-identity.js',import.meta.url).href));
- source=source.replace("'./auth-identity.js?v=multi-admin-1'",JSON.stringify(new URL('../auth-identity.js',import.meta.url).href));
- source=source.replace("'./competition.js?v=qa-20261111'",JSON.stringify(new URL('../competition.js',import.meta.url).href));
- source=source.replace("'./auth-flow.js?v=session-codes-1'",JSON.stringify(new URL('../auth-flow.js',import.meta.url).href));
- source=source.replace("'./session-code.js'",JSON.stringify(new URL('../session-code.js',import.meta.url).href));
+ source=source.replace(/from '(\.\/[^']+)'/g,(_,path)=>'from '+JSON.stringify(new URL('../'+path.slice(2),import.meta.url).href));
  const api=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
  const app=getApp('fashion-futures');connectAuthEmulator(getAuth(app),'http://127.0.0.1:9198',{disableWarnings:true});connectFirestoreEmulator(getFirestore(app),'127.0.0.1',8180);t.after(()=>deleteApp(app));
  globalThis.location={href:'https://www.stouras.com/fast-fashion-simulation/?session=abcd-efgh'};t.after(()=>delete globalThis.location);
@@ -33,6 +28,7 @@ test('real backend registration stores profile and sends a working verification 
  await api.joinSession(team,'Test Student');assert.equal((await getDoc(doc(getFirestore(app),'sessions',team))).data().rosterVersion,1);
  await api.joinSession(team,'Test Student');assert.equal((await getDoc(doc(getFirestore(app),'sessions',team))).data().rosterVersion,1,'Rejoining is idempotent');
  await api.saveTeams(team,{[uid]:uid},{[uid]:'Team A'});await api.startSession(team);await api.saveOrder(team,0,{variety:4,quantity:101,cap:0});
+ assert.deepEqual((await getDoc(doc(getFirestore(app),'sessions',team))).data().teamOpponents,{[uid]:null});
  assert.equal((await api.readOrders(team,uid))[0].quantity,101);assert.equal((await api.playHistory()).length,2);
  await Promise.all([
   new Promise((resolve,reject)=>{const stop=api.watchOrders(team,uid,o=>{if(o[0]?.quantity===101){stop();resolve();}},reject);t.after(stop);}),
@@ -60,6 +56,38 @@ test('real backend registration stores profile and sends a working verification 
   await assert.rejects(api.saveOrder(team,0,{variety:4,quantity:127,cap:0},'plan',1));
   assert.equal((await api.readOrders(team,uid))[0].cap,35);
   assert.equal((await api.readMarketOrders(team,[uid],[0]))[uid][0].cap,35);
+ });
+ await t.test('start uses joined members of the numbered team roster and deletion clears previously prepared opponents',async()=>{
+  const config=(await import('../model.js')).DEFAULT_CONFIG;
+  const aiOpponent={provider:'openai',model:'test-model',practice:false,main:true};
+  const code=await api.createSession('Numbered team roster',config,'team',undefined,aiOpponent);
+  await api.joinSession(code,'Captain');
+  const room=db=>doc(db,'sessions',code);
+  const strategy=db=>doc(db,'sessions',code,'participants',uid,'aiOpponents','main');
+  const released=db=>doc(db,'sessions',code,'participants',uid,'aiRounds','1');
+  await env.withSecurityRulesDisabled(async c=>{
+   const db=c.firestore();
+   await Promise.all([
+    setDoc(room(db),{teamComposition:{absent:'3'}},{merge:true}),
+    setDoc(strategy(db),{status:'ready',provider:'openai'}),
+    setDoc(released(db),{order:{variety:4,quantity:80,cap:0},provider:'openai',model:'test-model'})
+   ]);
+  });
+  await api.saveSessionAiOpponent(code,null);
+  await assert.rejects(api.saveTeams(code,{[uid]:uid},{[uid]:'Old team'}),/Teams page/);
+  await assert.rejects(api.startSession(code),/Assign every participant/);
+  await env.withSecurityRulesDisabled(c=>setDoc(room(c.firestore()),{teamComposition:{[uid]:'7',absent:'3'}},{merge:true}));
+  await api.startSession(code);
+  const started=(await getDoc(room(getFirestore(app)))).data();
+  assert.deepEqual(started.assignments,{[uid]:uid});
+  assert.deepEqual(started.teamNames,{[uid]:'Team 7'});
+  assert.deepEqual(started.teamOpponents,{[uid]:null});
+  await api.deleteSession(code);
+  await env.withSecurityRulesDisabled(async c=>{
+   const db=c.firestore();
+   assert.equal((await getDoc(strategy(db))).exists(),false);
+   assert.equal((await getDoc(released(db))).exists(),false);
+  });
  });
  await t.test('two real backend instances reject an offline stale revision with an actionable conflict',async()=>{
   const secondSource=source.replace("initializeApp(firebaseConfig,'fashion-futures')","initializeApp(firebaseConfig,'fashion-futures-second-device')");

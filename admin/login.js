@@ -34,5 +34,5 @@ $('admin-verify').onclick=()=>run(async()=>{await api.verifyEmail();message('Ver
 $('admin-enter').onclick=()=>run(async()=>checkAccess(api.currentUser()));
 try{
  const restore=setBusy($('admin-main'),true);
- try{api=await import(demo?'../backend-demo.js':'../backend.js?v=session-codes-1');api.observeAuth(u=>{void checkAccess(u);});}finally{restore();}
+ try{api=await import(demo?'../backend-demo.js':'../backend.js?v=ai-opponents-1');api.observeAuth(u=>{void checkAccess(u);});}finally{restore();}
 }catch{message('Secure sign-in could not load. Check your connection and reload this page.');}
