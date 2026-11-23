@@ -1,11 +1,12 @@
 import {emailActionSettings} from './auth-flow.js?v=session-codes-1';
 import {requireSessionCode,sessionCodeTaken} from './session-code.js';
-import {decisionOwner,validateTeams} from './competition.js?v=qa-20261111';
+import {decisionOwner,validateTeams} from './competition.js?v=team-pairs-1';
+import {makeTeamOpponents,teamMatchup} from './market.js?v=team-pairs-1';
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js';
 import {getAuth,GoogleAuthProvider,signInWithPopup,signInWithEmailAndPassword,createUserWithEmailAndPassword,sendEmailVerification,sendPasswordResetEmail,signOut,onAuthStateChanged,verifyBeforeUpdateEmail} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js';
 import {getFirestore,doc,collection,getDoc,getDocFromServer,getDocs,getDocsFromServer,setDoc,updateDoc,onSnapshot,serverTimestamp,query,where,runTransaction,increment,writeBatch,deleteDoc} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js';
 import {firebaseConfig,DATABASE,ADMIN_EMAIL} from './firebase-config.js';
-import {platformHandoff} from './profile.js?v=qa-20261110';
+import {platformHandoff} from './profile.js?v=team-pairs-1';
 import {loginEmailAddress,assertAccountEmail,ADMIN_ACCOUNT_EMAIL} from './auth-identity.js?v=multi-admin-1';
 import {ROUNDS,validateConfig,DEFAULT_CONFIG} from './model.js';
 const app=initializeApp(firebaseConfig,'fashion-futures'),auth=getAuth(app),db=getFirestore(app,DATABASE);
@@ -39,7 +40,7 @@ export async function playHistory(){
  return Promise.all(refs.docs.map(async ref=>{
   try{
    const data=await requireSession(ref.id),owner=decisionOwner(data,uid)||uid;
-   const orders=await readOrders(ref.id,owner),teamOrders=data.mode==='team'?await readMarketOrders(ref.id,Object.keys(data.teamNames||{}),[1,2,3].filter(i=>data.startedAt&&((data.closedAt?.toMillis()??Date.now())-data.startedAt.toMillis())/1000>=ROUNDS[i].end)):null;
+   const orders=await readOrders(ref.id,owner),teamOrders=data.mode==='team'?await readMarketOrders(ref.id,teamMatchup(data,owner),[1,2,3].filter(i=>data.startedAt&&((data.closedAt?.toMillis()??Date.now())-data.startedAt.toMillis())/1000>=ROUNDS[i].end)):null;
    await requireSession(ref.id);return {code:ref.id,...data,decisionUid:decisionOwner(data,uid),orders,teamOrders};
   }catch(error){if(error.code==='session-deleted')return null;try{await requireSession(ref.id);}catch(check){if(check.code==='session-deleted')return null;}throw error;}
  })).then(rows=>rows.filter(Boolean));
@@ -83,7 +84,20 @@ export async function createSession(name,config,mode='individual',requestedCode)
 }
 export async function listSessions(isAdmin){const c=collection(db,'sessions');return (await getDocs(isAdmin?c:query(c,where('owner','==',currentUser().uid)))).docs.map(d=>({code:d.id,...d.data()})).sort((a,b)=>(b.createdAt?.toMillis()||0)-(a.createdAt?.toMillis()||0));}
 export const watchSession=(code,fn,error,status)=>onSnapshot(doc(db,'sessions',code),{includeMetadataChanges:true},d=>{const fresh=!d.metadata.fromCache&&!d.metadata.hasPendingWrites;status?.(fresh);if(fresh)fn(d.exists()?{code,...d.data()}:null);},error);
-export async function startSession(code){const ref=doc(db,'sessions',code);await runTransaction(db,async tx=>{const s=(await tx.get(ref)).data();if(s.mode==='team'){const people=(await getDocs(collection(db,'sessions',code,'participants'))).docs.map(d=>({uid:d.id}));if(!validateTeams(people,s.assignments,s.teamNames))throw Error('Assign every participant to a team before starting.');}tx.update(ref,{status:'running',startedAt:serverTimestamp()});});}
+export async function startSession(code){
+ const ref=doc(db,'sessions',code);
+ await runTransaction(db,async tx=>{
+  const s=(await tx.get(ref)).data();
+  if(s?.status!=='lobby')throw Error('Only a waiting session can start.');
+  const update={status:'running',startedAt:serverTimestamp()};
+  if(s.mode==='team'){
+   const people=(await getDocsFromServer(collection(db,'sessions',code,'participants'))).docs.map(d=>({uid:d.id}));
+   if(!validateTeams(people,s.assignments,s.teamNames))throw Error('Assign every participant to a team before starting.');
+   update.teamOpponents=makeTeamOpponents(s.teamNames);
+  }
+  tx.update(ref,update);
+ });
+}
 export async function saveTeams(code,assignments,teamNames){
  const ref=doc(db,'sessions',code);
  await runTransaction(db,async tx=>{

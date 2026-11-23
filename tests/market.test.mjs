@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {sharedMarket,teamRound} from '../market.js';
-import {DEFAULT_CONFIG} from '../model.js';
+import {makeTeamOpponents,sharedMarket,teamMatchup,teamMatchups,teamRound} from '../market.js';
+import {DEFAULT_CONFIG,DEFAULT_ORDER,resultFor,signalFor} from '../model.js';
 import {historyStats} from '../profile.js';
 const c={...DEFAULT_CONFIG,demandMean:480,demandSd:0,rebound:0};
 const stocked={variety:4,quantity:200,cap:0},empty={variety:4,quantity:0,cap:0};
@@ -10,3 +10,60 @@ test('expanding variety steals market share without inventing demand when reboun
 test('growth is applied once to the market and weighted by the fraction of expanded teams',()=>{const r=sharedMarket(42,3,{a:{...stocked,variety:8},b:stocked},{...c,rebound:.2});assert.equal(r.demand,528);assert.equal(sharedMarket(42,3,{a:{...stocked,variety:8},b:{...stocked,variety:8}},{...c,rebound:.2}).demand,576);});
 test('replenishment cannot change early signals; results conserve stock and cash and are independent of team map order',()=>{const orders={a:{variety:4,quantity:20,cap:60},b:{variety:4,quantity:30,cap:0}},r=sharedMarket(42,2,orders,c),without=sharedMarket(42,2,{...orders,a:{...orders.a,cap:0}},c);assert.deepEqual(r.teams.a.signals,without.teams.a.signals);assert.deepEqual(r,sharedMarket(42,2,{b:orders.b,a:orders.a},c));for(const [uid,t]of Object.entries(r.teams)){assert.equal(t.produced,t.sales+t.leftovers);assert.equal(t.profit,t.sales*c.price+t.leftovers*c.salvage-orders[uid].variety*orders[uid].quantity*c.initialCost-t.replenished*c.refillCost-orders[uid].variety*c.styleCost);assert.ok(Number.isFinite(t.profit));}assert.ok(r.sales<=r.demand);});
 test('profile history uses shared team outcomes and freezes early-closed periods',()=>{const s={mode:'team',seed:42,config:c,teamNames:{a:'A',b:'B'},decisionUid:'a',teamOrders:{a:{1:stocked},b:{1:empty}},orders:{1:stocked},startedAt:{toMillis:()=>0},closedAt:{toMillis:()=>430000}};const history=historyStats([s],2000000);assert.equal(history.seasons,1);assert.equal(history.profit,teamRound(s,1,s.teamOrders).teams.a.profit);});
+
+test('lobby pairings are deterministic and saved opponents survive reordering and renaming',()=>{
+ const teamNames={e:'E',b:'B',c:'C',a:'A',d:'D'};
+ const lobby={mode:'team',status:'lobby',teamNames};
+ assert.deepEqual(makeTeamOpponents(teamNames),{a:'b',b:'a',c:'d',d:'c',e:null});
+ assert.deepEqual(teamMatchups(lobby),[['a','b'],['c','d'],['e']]);
+ assert.deepEqual(teamMatchup(lobby,'b'),['b','a']);
+ assert.deepEqual(teamMatchup(lobby,'outsider'),[]);
+ const running={...lobby,status:'running',teamNames:{a:'Renamed',b:'B',c:'C',d:'D',e:'E'},teamOpponents:{b:'d',d:'b',c:null,a:'e',e:'a'}};
+ assert.deepEqual(teamMatchups(running),[['a','e'],['b','d'],['c']]);
+ assert.deepEqual(teamMatchup(running,'d'),['d','b']);
+ assert.deepEqual(teamMatchups({...lobby,teamNames:{a:'One team'}}),[['a']]);
+});
+
+test('each pair gets its own market through practice and every scored season',()=>{
+ const teamNames={a:'A',b:'B',c:'C',d:'D'};
+ const session={mode:'team',status:'running',teamNames,teamOpponents:makeTeamOpponents(teamNames),seed:42,config:{...c,rebound:.2}};
+ for(const index of [0,1,2,3]){
+  const orders={a:{[index]:{...stocked,cap:25}},b:{[index]:empty},c:{[index]:stocked},d:{[index]:stocked}};
+  const original=teamRound(session,index,orders);
+  const changed=teamRound(session,index,{...orders,c:{[index]:{...empty,variety:index===3?8:4}},d:{[index]:empty}});
+  const firstPair=sharedMarket(session.seed,index,{a:orders.a[index],b:empty},session.config);
+  assert.deepEqual(original.teams.a,firstPair.teams.a);
+  assert.deepEqual(original.teams.b,firstPair.teams.b);
+  assert.deepEqual(changed.teams.a,original.teams.a);
+  assert.deepEqual(changed.teams.b,original.teams.b);
+  assert.deepEqual(teamRound(session,index,{a:orders.a,b:orders.b},'b'),firstPair);
+  assert.equal(original.demand,960);
+  assert.equal(original.lostSales,original.demand-original.sales);
+  assert.equal(changed.demand,index===3?1008:960);
+ }
+});
+
+test('an unpaired team has individual-play signals, stockouts, growth and scores',()=>{
+ for(const teamNames of [{c:'C'},{a:'A',b:'B',c:'C'}]){
+  const session={mode:'team',status:'running',teamNames,teamOpponents:makeTeamOpponents(teamNames),seed:141,config:DEFAULT_CONFIG};
+  for(const index of [0,1,2,3]){
+   const order=index===1?DEFAULT_ORDER:{variety:index===3?8:4,quantity:15,cap:42};
+   const orders=index===1?{}:{c:{[index]:order},a:{[index]:empty}};
+   const individual=resultFor(session.seed,index,order,session.config);
+   const expected={...individual,signals:signalFor(session.seed,index,order,session.config),switchedIn:0,switchedOut:0};
+   assert.deepEqual(teamRound(session,index,orders).teams.c,expected);
+   assert.deepEqual(teamRound(session,index,orders,'c'),{teams:{c:expected},demand:individual.demand,sales:individual.sales,lostSales:individual.lostSales});
+  }
+ }
+});
+
+test('sessions already underway or closed without saved opponents keep historical market results',()=>{
+ const teamNames={a:'A',b:'B',c:'C'};
+ const orders={a:{1:stocked},b:{1:empty},c:{1:stocked}};
+ const expected=sharedMarket(42,1,{a:stocked,b:empty,c:stocked},c);
+ for(const status of ['running','closed']){
+  const session={mode:'team',status,teamNames,seed:42,config:c};
+  assert.deepEqual(teamMatchup(session,'a'),['a','b','c']);
+  assert.deepEqual(teamRound(session,1,orders,'c'),expected);
+ }
+});

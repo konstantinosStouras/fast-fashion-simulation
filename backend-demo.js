@@ -1,4 +1,5 @@
 import {decisionOwner,validateTeams} from './competition.js';
+import {makeTeamOpponents,teamMatchup} from './market.js';
 // Test harness, selected only on loopback hosts with ?demo. Never real authentication.
 import {platformHandoff} from './profile.js';
 import {loginEmailAddress,assertAccountEmail,ADMIN_ACCOUNT_EMAIL} from './auth-identity.js';
@@ -21,7 +22,14 @@ export const getProfile=async()=>load().profiles?.[user.uid]||{firstName:'Demo',
 export const saveProfile=async profile=>{const d=load();d.profiles??={};d.profiles[user.uid]={...d.profiles[user.uid],...profile};write(d);};
 export async function importPlatformProfile(storage){const p=platformHandoff(storage,user);if(p)await saveProfile({platformRegistration:p});}
 export const changeEmail=async email=>{assertAccountEmail(email);};
-export const playHistory=async()=>Object.values(load().sessions).filter(s=>!s.deletedAt&&load().people[s.code]?.[user.uid]).map(s=>({...toSession(s),decisionUid:decisionOwner(s,user.uid),teamOrders:load().orders[s.code]||{},orders:load().orders[s.code]?.[decisionOwner(s,user.uid)]||{}}));
+export async function playHistory(){
+ const data=load();
+ return Object.values(data.sessions).filter(s=>!s.deletedAt&&data.people[s.code]?.[user.uid]).map(s=>{
+  const captain=decisionOwner(s,user.uid),saved=data.orders[s.code]||{};
+  const teamOrders=s.mode==='team'?Object.fromEntries(teamMatchup(s,captain).map(uid=>[uid,saved[uid]||{}])):null;
+  return {...toSession(s),decisionUid:captain,teamOrders,orders:saved[captain]||{}};
+ });
+}
 export const logout=async()=>{user=null;authListeners.forEach(fn=>fn(null));};
 export const verifyEmail=async()=>{};
 export const refreshUser=async()=>user;
@@ -52,7 +60,16 @@ export async function createSession(name,config,mode='individual',requestedCode)
 }
 export const listSessions=async(isOwner=false)=>Object.values(load().sessions).filter(s=>isOwner||s.owner===user.uid).map(toSession);
 export const watchSession=(code,fn)=>watch(()=>fn(toSession(load().sessions[code])));
-export const startSession=async code=>{const d=load();if(d.sessions[code].mode==='team'&&!validateTeams(Object.values(d.people[code]||{}),d.sessions[code].assignments,d.sessions[code].teamNames))throw Error('Assign every participant to a team before starting.');Object.assign(d.sessions[code],{status:'running',startedAt:Date.now()});write(d);};
+export async function startSession(code){
+ const d=load(),s=d.sessions[code];
+ if(s?.status!=='lobby')throw Error('Only a waiting session can start.');
+ if(s.mode==='team'){
+  if(!validateTeams(Object.values(d.people[code]||{}),s.assignments,s.teamNames))throw Error('Assign every participant to a team before starting.');
+  s.teamOpponents=makeTeamOpponents(s.teamNames);
+ }
+ Object.assign(s,{status:'running',startedAt:Date.now()});
+ write(d);
+}
 export const closeSession=async code=>{const d=load();Object.assign(d.sessions[code],{status:'closed',closedAt:Date.now()});write(d);};
 export async function joinSession(code,name){const d=load();if(!d.sessions[code])throw new Error('Session code not found.');d.people[code]??={};if(!d.people[code][user.uid]){if(d.sessions[code].status!=='lobby')throw new Error('Already started.');d.people[code][user.uid]={uid:user.uid,name,email:user.email};write(d);}}
 export const watchParticipants=(code,fn)=>watch(()=>fn(Object.values(load().people[code]||{})));

@@ -31,15 +31,15 @@ See [QA-REPORT.md](QA-REPORT.md) for the 10 November functionality audit, fixes,
 
 Admin entrance: https://www.stouras.com/fast-fashion-simulation/admin/ — Google or email/password, with password reset. Verified administrators and authorized instructors are redirected to the studio; the URL does not grant access.
 
-## Solo and shared-market teams
+## Individual play and team competition
 
 Solo play starts from the signed-in welcome page; the student reads the briefing before starting the 18-minute clock. Each new game receives a random seed and appears in profile history.
 
-For teams, choose Team competition when creating a session. Registered students join using its code; the instructor randomly groups joined participants (default three, configurable 1–20), edits membership/captains/names, then starts. Only a captain submits; teammates share the live decisions and results. Membership locks at start.
+Choose **Individual play** for participants to manage their own market. In **Team competition**, registered students join with the session code. The instructor groups students (three per team by default, configurable from 1 to 20) and can adjust membership, captains and names. Starting the session locks team membership and opponents through practice and all three scored seasons. The captain submits each decision on behalf of the team.
 
-Teams compete for ONE normally distributed demand pool. The demand mean and SD are market-wide, not per team. Every style adds customer-choice weight; a stockout customer tries an available alternative and can switch teams. Prices stay fixed. All customers switch if any alternative is available (an explicit teaching assumption). Extra consumption is applied once to the shared market: rebound × fraction of teams offering eight styles. With rebound zero, variety can only redistribute demand.
+Each pair competes for its own demand pool. The configured demand mean and standard deviation apply to each pair. Customers choose among the two collections and try an available alternative when their preferred style sells out. Prices stay fixed. When one team offers eight styles, its market grows by half the configured extra-consumption rate. When both teams expand, the full rate applies. A team without an opponent uses the individual demand, replenishment and scoring rules, with the captain continuing to save decisions for the team.
 
-Orders become readable to session members after initial ordering locks, so every client can calculate the same early sales, forecasts and outcomes. Live competitor orders stay hidden before that deadline; emails and participant lists remain teaching-staff-only. The leaderboard shows cumulative profit, sales, customers won/lost to rivals, leftovers and footprint after each scored period. Practice is unscored. CSV exports one row per team/period; each member’s profile shows their shared team result.
+After initial ordering locks, each team can see its market outcomes. Paired teams compare cumulative profit, sales, customers won or lost to their opponent, leftovers and footprint after each scored season. An unpaired team sees its own results. Instructors can review all matchups and export one CSV row per team and scored season. Each member’s profile shows the shared team result. Practice is excluded from scores.
 
 Team preview uses one simulated rival with disclosed fixed decisions, the same shared-market engine and no database writes. The 18-minute structure is unchanged. This is a transparent teaching prototype, not an anti-cheating exam engine.
 

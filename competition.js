@@ -1,4 +1,4 @@
-import {teamRound} from './market.js';
+import {teamMatchup,teamMatchups,teamRound,usesPairedMarkets} from './market.js?v=team-pairs-1';
 import {ROUNDS} from './model.js';
 export const decisionOwner=(s,uid)=>s.mode==='team'?(s.assignments?.[uid]||null):uid;
 export function groupTeams(people,size=3){
@@ -12,9 +12,16 @@ export function validateTeams(people,assignments,teamNames){
  const ids=people.map(p=>p.uid),captains=Object.keys(teamNames);
  return ids.length>0&&ids.length<=500&&new Set(ids).size===ids.length&&captains.length<=100&&Object.keys(assignments).length===ids.length&&ids.every(id=>Object.hasOwn(assignments,id)&&captains.includes(assignments[id]))&&captains.every(id=>ids.includes(id)&&assignments[id]===id&&typeof teamNames[id]==='string'&&teamNames[id].trim().length>0&&teamNames[id].length<=60&&ids.filter(uid=>assignments[uid]===id).length<=20);
 }
-export function leaderboard(s,orders,seconds){
+export function leaderboard(s,orders,seconds,captain){
+ const matchups=captain===undefined?teamMatchups(s):[teamMatchup(s,captain)];
  const rounds=[1,2,3].filter(i=>seconds>=ROUNDS[i].end);
- const markets=rounds.map(i=>teamRound(s,i,orders).teams);
- const rows=Object.entries(s.teamNames||{}).map(([uid,name])=>{const results=markets.map(m=>m[uid]);const sum=k=>results.reduce((a,r)=>a+r[k],0);return {uid,name,periods:rounds.length,profit:sum('profit'),leftovers:sum('leftovers'),footprint:sum('footprint'),sales:sum('sales'),switchedIn:sum('switchedIn'),switchedOut:sum('switchedOut')};}).sort((a,b)=>b.profit-a.profit||a.name.localeCompare(b.name));
- return rows.map((r,i)=>({...r,rank:rows.findIndex(x=>Math.abs(x.profit-r.profit)<1e-8)+1}));
+ const markets=rounds.map(i=>teamRound(s,i,orders,captain).teams);
+ return matchups.flatMap(matchup=>{
+  const ranked=matchup.length>1||!usesPairedMarkets(s);
+  const rows=matchup.map(uid=>{
+   const sum=key=>markets.reduce((total,market)=>total+market[uid][key],0);
+   return {uid,name:s.teamNames[uid],matchup,periods:rounds.length,profit:sum('profit'),leftovers:sum('leftovers'),footprint:sum('footprint'),sales:sum('sales'),switchedIn:sum('switchedIn'),switchedOut:sum('switchedOut')};
+  }).sort((a,b)=>b.profit-a.profit||a.name.localeCompare(b.name));
+  return rows.map(row=>({...row,rank:ranked?rows.findIndex(r=>Math.abs(r.profit-row.profit)<1e-8)+1:null}));
+ });
 }

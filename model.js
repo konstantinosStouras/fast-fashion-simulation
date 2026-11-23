@@ -8,10 +8,10 @@ export const ROUNDS = [
 export const DEFAULT_ORDER = Object.freeze({variety:4, quantity:80, cap:0});
 export const DEFAULT_CONFIG=Object.freeze({demandMean:480,demandSd:96,forecastSd:0.2,rebound:0.2,price:40,initialCost:12,refillCost:16,styleCost:150,salvage:5,unitCarbon:5,leftoverCarbon:1});
 export const SETTINGS=[
- ['demandMean','Average market demand',480,80,2000,10,'Expected purchases in the whole market, not per style. In team mode this is ONE pool shared by all teams.'],
+ ['demandMean','Average market demand',480,80,2000,10,'Expected purchases across all styles in one market. Each pair of teams shares a market of this size. An individual player or unpaired team has its own market.'],
  ['demandSd','Demand standard deviation',96,0,1000,1,'Season-level uncertainty. Demand is a normal draw, rounded and floored at zero. Default SD is 20% of the mean.'],
  ['forecastSd','Forecast error SD',0.2,0,0.8,0.05,'Relative error in the mid-season forecast: 0.20 means 20% standard deviation. Zero gives a perfect forecast.'],
- ['rebound','Extra consumption with 8 styles',0.2,0,1,0.05,'0 = purchases only shift between styles/teams. In solo play, 0.20 adds 20% demand with eight styles. In team play, market growth is this rate × the fraction of teams offering eight styles.'],
+ ['rebound','Extra consumption with 8 styles',0.2,0,1,0.05,'With individual play, 0.20 adds 20% demand for eight styles. For a pair, demand grows by half the rate when one team expands and by the full rate when both expand. Zero keeps market size fixed.'],
  ['price','Selling price ($)',40,1,500,1,'Revenue per sold item. Fixed across all styles and seasons.'],
  ['initialCost','Initial unit cost ($)',12,0,500,1,'Cost for every unit ordered before demand is observed.'],
  ['refillCost','Replenishment unit cost ($)',16,0,500,1,'Cost per extra unit ordered after early sales. Usually higher than initial cost.'],

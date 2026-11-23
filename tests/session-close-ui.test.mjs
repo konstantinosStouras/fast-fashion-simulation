@@ -25,7 +25,7 @@ test('closed team scores use one final server snapshot despite pending saves and
  failMarket=false;marketGate=null;$('#retry-market').click();await wait(()=>$('.own-team'));
  const profit=$('.result-stats strong').textContent;
  assert.equal($('.own-team [data-label="Profit"]').textContent,profit,'Headline and leaderboard use the same final orders');
- assert.match($('#leaderboard').textContent,/after 1 scored periods/);assert.match($('#connection-status').textContent,/final team scores confirmed/);
+ assert.match($('#leaderboard').textContent,/after 1 scored period/);assert.match($('#connection-status').textContent,/final team scores confirmed/);
  delayed.splice(0).forEach(fn=>fn());assert.equal($('.result-stats strong').textContent,profit,'A delayed subscription must not replace final data');
  rejectSave(Object.assign(Error('Closed'),{code:'permission-denied'}));await wait(()=>$('#notice').textContent.includes('session is closed'));assert.equal($('.result-stats strong').textContent,profit);
  await api.logout();await wait(()=>$('#open-login'));await api.loginEmail('mate@example.test');await wait(()=>$('#join'));$('#join [name=code]').value=code;submit('#join');await wait(()=>$('.own-team'));
