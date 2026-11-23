@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {JSDOM} from 'jsdom';
 
-test('staff preview plays every phase without writes, clock waiting or live-session changes',async t=>{
+test('instructor rehearsal follows every student deadline without writing classroom records',async t=>{
  const dom=new JSDOM(readFileSync('index.html','utf8'),{url:'http://localhost:8791/?demo',pretendToBeVisual:true});
  const w=dom.window;
  for(const k of ['document','location','localStorage','sessionStorage','FormData'])globalThis[k]=w[k];
@@ -17,36 +17,64 @@ test('staff preview plays every phase without writes, clock waiting or live-sess
  click('#open-login');click('#google');await wait(()=>$('#staff'));click('#staff');await wait(()=>$('#create'));
  $('#create [name=demandMean]').value='960';
  const before=w.localStorage.getItem('ff:demo:v1');
- click('#preview-settings');await wait(()=>$('#preview-next'));
+ const realNow=Date.now;
+ const startedAt=realNow();
+ let now=startedAt;
+ Date.now=()=>now;
+ t.after(()=>{Date.now=realNow;});
+ const advanceTo=async(seconds,condition)=>{
+  now=startedAt+seconds*1000;
+  await wait(condition);
+ };
+ click('#preview-settings');await wait(()=>$('#preview-exit')&&$('#order-form'));
  assert.match($('h1').textContent,/Practice/);assert.match(w.document.body.textContent,/Market mean 960/);assert.equal($('#demo-forward'),null);
- const clock=$('#clock').textContent,now=Date.now;
- Date.now=()=>now()+3600000;try{await new Promise(r=>setTimeout(r,600));assert.equal($('#clock').textContent,clock);}finally{Date.now=now;}
- for(let round=0;round<4;round++){
-   $('#order-form [name=quantity]').value=String(90-round*10);
-   if(round===3)$('#order-form [name=variety]').value='8';
-   submit('#order-form');await wait(()=>$('.save-state').textContent.includes('Saved'));
-   click('#preview-next');
-   if(round!==1){assert.ok($('#order-form [name=cap]'));$('#order-form [name=cap]').value='60';submit('#order-form');await wait(()=>$('.save-state').textContent.includes('cap 60'));click('#preview-next');}
+ assert.equal($('#preview-next, #preview-round, #preview-restart'),null);
+ const saveInitial=async(quantity)=>{
+   $('#order-form').elements.quantity.value=String(quantity);
+   submit('#order-form');await wait(()=>$('.save-state')?.textContent.includes(String(quantity)));
+ };
+ const saveRestock=async(seconds)=>{
+   await advanceTo(seconds,()=>$('#order-form')?.elements.cap);
+   $('#order-form').elements.cap.value='60';
+   submit('#order-form');await wait(()=>$('.save-state')?.textContent.includes('cap 60'));
+ };
+ await saveInitial(90);
+ await advanceTo(89,()=>$('#clock')?.textContent==='0:01');
+ assert.equal($('#order-form').elements.quantity.value,'90');
+ await saveRestock(90);
+ for(const [seconds,title,quantity] of [[180,'Order ahead',80],[420,'Respond to demand',70],[660,'Expand the collection',60]]){
+   await advanceTo(seconds,()=>$('h1')?.textContent.includes(title));
+   if(seconds===660)$('#order-form').elements.variety.value='8';
+   await saveInitial(quantity);
+   if(seconds===420)await saveRestock(540);
+   if(seconds===660)await saveRestock(810);
  }
- assert.ok($('.stats'));assert.equal($('#order-form'),null);assert.equal($('#preview-round').disabled,true);assert.match(w.document.body.textContent,/Practice is excluded/);
+ await advanceTo(960,()=>$('#season-results')&&$('#clock')?.textContent==='2:00');
+ assert.equal($('#order-form'),null);assert.match(w.document.body.textContent,/Practice is excluded/);
+ await advanceTo(1080,()=>$('#season-results')&&!$('#clock'));
  assert.equal(w.localStorage.getItem('ff:demo:v1'),before,'preview must not create any database-like records');
  assert.equal(w.localStorage.getItem('ff:session:demo-admin'),null,'preview must not replace real student resume state');
- click('#preview-next');assert.equal($('#preview-next').disabled,true);
- click('#preview-restart');assert.match($('h1').textContent,/Practice/);assert.match($('.save-state').textContent,/Not saved/);
- $('#order-form [name=quantity]').value='137';click('#preview-restart');assert.equal($('#order-form [name=quantity]').value,'80','Restart must clear an unsaved draft too');
- click('#preview-round');assert.match($('h1').textContent,/Order ahead/);
  click('#preview-exit');await wait(()=>$('#create'));
  // Preview an already-running classroom and verify its status, timing and records are unchanged.
  $('#create [name=name]').value='Live class';submit('#create');await wait(()=>$('#start'));
  let records=JSON.parse(w.localStorage.getItem('ff:demo:v1')),code=Object.keys(records.sessions)[0];
  await backend.startSession(code);await wait(()=>$('#preview-session')&&!$('#start'));
  const liveBefore=w.localStorage.getItem('ff:demo:v1');
- click('#preview-session');await wait(()=>$('#preview-next'));assert.match($('h1').textContent,/Practice/);
- submit('#order-form');await wait(()=>$('.save-state').textContent.includes('Saved'));click('#preview-round');
+ click('#preview-session');await wait(()=>$('#preview-exit'));assert.match($('h1').textContent,/Practice/);
+ await saveInitial(137);
+ const rehearsalUrl=w.location.href;
+ const reloadStorage={...w.sessionStorage};
  click('#preview-exit');await wait(()=>$('#roster'));assert.equal(w.localStorage.getItem('ff:demo:v1'),liveBefore);
- assert.equal($('#preview-next'),null);assert.equal($('#start'),null,'the real class must still be running');
+ assert.equal($('#preview-exit'),null);assert.equal($('#start'),null,'the real class must still be running');
+ // Bootstrap a fresh app module with the URL and tab storage captured during the rehearsal.
+ for(const [key,value] of Object.entries(reloadStorage))w.sessionStorage.setItem(key,value);
+ dom.reconfigure({url:rehearsalUrl});
+ now+=30000;
+ await import('../main.js?preview-test-reloaded');
+ await wait(()=>$('#order-form')?.elements.quantity.value==='137'&&$('#clock')?.textContent==='1:00');
+ assert.equal(w.localStorage.getItem('ff:demo:v1'),liveBefore);
  // Signing out clears preview and students never receive its controls.
- click('#preview-session');await wait(()=>$('#preview-next'));click('#out');await wait(()=>$('#open-login'));assert.equal($('#preview-next'),null);
+ click('#out');await wait(()=>$('#open-login'));assert.equal($('#preview-exit'),null);
  click('#open-login');$('#email').value='student@example.test';$('#password').value='test-only-123';submit('#auth-form');await wait(()=>$('#join'));
- assert.equal($('#staff'),null);assert.equal($('#preview-settings'),null);assert.equal($('#preview-next'),null);
+ assert.equal($('#staff'),null);assert.equal($('#preview-settings'),null);assert.equal($('#preview-exit'),null);
 });

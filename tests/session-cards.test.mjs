@@ -26,7 +26,7 @@ test('session cards show counts, export directly, rehearse privately, close and 
  $('[data-card-export="PASTAAAA"]').click();await wait(()=>download);
  assert.equal(download,'fast-fashion-ops-PASTAAAA.csv');assert.equal((await csv.text()).trim().split('\r\n').length,4);assert.ok($('#create'),'export stays on dashboard');
  const before=w.localStorage.getItem('ff:demo:v1');
- $('[data-card-preview="PASTAAAA"]').click();await wait(()=>$('#preview-next'));$('#preview-round').click();$('#preview-exit').click();await wait(()=>$('#back-staff'));
+ $('[data-card-preview="PASTAAAA"]').click();await wait(()=>$('#preview-exit')&&$('#order-form'));$('#preview-exit').click();await wait(()=>$('#back-staff'));
  assert.equal(w.localStorage.getItem('ff:demo:v1'),before);$('#back-staff').click();await wait(()=>$('[data-card-close]'));
  $('[data-card-close]').click();await wait(()=>$('[data-no]'));$('[data-no]').click();await new Promise(r=>setTimeout(r,20));assert.equal(JSON.parse(w.localStorage.getItem('ff:demo:v1')).sessions.ACTIVEAA.status,'lobby');
  $('[data-card-close]').click();await wait(()=>$('[data-yes]'));$('[data-yes]').click();await wait(()=>$('#active-count').textContent==='0 active');

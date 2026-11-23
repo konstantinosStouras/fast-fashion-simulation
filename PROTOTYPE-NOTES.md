@@ -34,7 +34,7 @@ Authentication, private profiles and gameplay live in the dedicated Firebase pro
 
 Choose **Preview as student** beneath the new-session form to try its current settings without creating a class. The same option inside an existing session uses that session's locked settings and market seed. The private rehearsal begins with practice and uses the real student decision screens and scoring.
 
-The preview clock waits for **Next phase** or **Skip round**; **Restart preview** clears rehearsal decisions and reuses the same market. Save each decision before advancing. **Exit preview** returns to the originating session or the studio. Preview state lives in memory only, disappears on exit/reload/sign-out, and never writes participant records, changes a live clock, overwrites a student's saved session, or enters exported class results. Only verified teaching staff receive the controls.
+The rehearsal starts immediately and follows the same 18-minute schedule, phase deadlines, and scoring as classroom play. Save each decision before its deadline. Reloading the tab restores saved decisions and the original start time. **Exit preview** returns to the originating session or the studio. Rehearsal data stays in the current tab and is cleared on exit or sign-out. Live participant records, classroom clocks, and exported results are independent of rehearsal play. Only verified teaching staff receive the controls.
 
 ## Deliberately outside the initial prototype
 
