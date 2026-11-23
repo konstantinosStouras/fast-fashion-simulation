@@ -5,7 +5,7 @@ import {JSDOM} from 'jsdom';
 import {DEFAULT_CONFIG} from '../model.js';
 
 test('reset feedback and sign-in preserve the requested class over a saved game',async t=>{
- const dom=new JSDOM(readFileSync('index.html','utf8'),{url:'http://localhost:8791/?demo&session=demo-aaac&auth=login',pretendToBeVisual:true}),w=dom.window;
+ const dom=new JSDOM(readFileSync('index.html','utf8'),{url:'http://localhost:8791/?demo&sessionCode=demo-aaac&auth=login',pretendToBeVisual:true}),w=dom.window;
  for(const k of ['document','location','localStorage','sessionStorage','FormData'])globalThis[k]=w[k];globalThis.addEventListener=w.addEventListener.bind(w);
  w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
  const $=s=>w.document.querySelector(s),click=s=>$(s).click(),submit=s=>$(s).dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
@@ -21,7 +21,7 @@ test('reset feedback and sign-in preserve the requested class over a saved game'
  w.localStorage.setItem('ff:session:'+api.currentUser().uid,old); // Another tab enters an older game; this tab keeps its own session.
  await api.logout();await wait(()=>$('#open-login'));w.history.replaceState({},'', '/?demo');failSession=true;await api.loginEmail('returner@example.test');await wait(()=>$('#retry-session'));assert.equal(w.localStorage.getItem('ff:session:'+api.currentUser().uid),target);assert.equal(joinCalls,1,'resume must not require a join write');failSession=false;click('#retry-session');await wait(()=>$('#leave'));assert.equal($('h1').textContent,'Requested class','plain login resumes the account-specific session');
  await api.logout();await wait(()=>$('#open-login'));failProfile=true;await api.loginEmail('returner@example.test');await wait(()=>$('#retry-account'));assert.equal(w.localStorage.getItem('ff:session:'+api.currentUser().uid),target);failProfile=false;w.dispatchEvent(new w.Event('online'));await wait(()=>$('#leave'));assert.equal($('h1').textContent,'Requested class');
- await api.logout();await wait(()=>$('#open-login'));w.history.replaceState({},'', '/?demo&session=bad');await api.loginEmail('returner@example.test');await wait(()=>$('#join-status')?.textContent.includes('invalid'));assert.equal($('#leave'),null);
+ await api.logout();await wait(()=>$('#open-login'));w.history.replaceState({},'', '/?demo&sessionCode=ab');await api.loginEmail('returner@example.test');await wait(()=>$('#join-status')?.textContent.includes('invalid'));assert.equal($('#leave'),null);
  // A verification return refreshes server-backed state before offering entry.
  await api.logout();await wait(()=>$('#open-login'));w.history.replaceState({},'', '/?demo&session=demo-aaac&auth=verify');await api.loginEmail('returner@example.test');await wait(()=>$('#leave'));assert.equal($('h1').textContent,'Requested class','verification return resumes the already joined class in this tab');
 });

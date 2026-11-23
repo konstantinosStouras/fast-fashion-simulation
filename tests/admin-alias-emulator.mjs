@@ -13,11 +13,11 @@ test('separate admin accounts own their classes; students register, join and pla
  let source=readFileSync(new URL('../backend.js',import.meta.url),'utf8');
  for(const component of ['app','auth','firestore'])source=source.replaceAll(`https://www.gstatic.com/firebasejs/12.5.0/firebase-${component}.js`,import.meta.resolve('firebase/'+component));
  source=source.replace("import {firebaseConfig,DATABASE,ADMIN_EMAIL} from './firebase-config.js';","const firebaseConfig={projectId:'demo-fashion-futures',apiKey:'demo-api-key',authDomain:'demo-fashion-futures.firebaseapp.com'},DATABASE='(default)',ADMIN_EMAIL='kstouras@gmail.com';");
- for(const name of ['model','auth-identity','competition'])source=source.replace(`'./${name}.js'`,JSON.stringify(new URL(`../${name}.js`,import.meta.url).href));
+ for(const name of ['model','auth-identity','competition','session-code'])source=source.replace(`'./${name}.js'`,JSON.stringify(new URL(`../${name}.js`,import.meta.url).href));
  source=source.replace("'./profile.js?v=qa-20261110'",JSON.stringify(new URL('../profile.js',import.meta.url).href));
  source=source.replace("'./auth-identity.js?v=multi-admin-1'",JSON.stringify(new URL('../auth-identity.js',import.meta.url).href));
  source=source.replace("'./competition.js?v=qa-20261111'",JSON.stringify(new URL('../competition.js',import.meta.url).href));
- source=source.replace("'./auth-flow.js?v=mobile-auth-9'",JSON.stringify(new URL('../auth-flow.js',import.meta.url).href));
+ source=source.replace("'./auth-flow.js?v=session-codes-1'",JSON.stringify(new URL('../auth-flow.js',import.meta.url).href));
  const api=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
  const app=getApp('fashion-futures'),auth=getAuth(app);connectAuthEmulator(auth,'http://127.0.0.1:9198',{disableWarnings:true});connectFirestoreEmulator(getFirestore(app),'127.0.0.1',8180);t.after(()=>deleteApp(app));
  const google=email=>GoogleAuthProvider.credential(JSON.stringify({sub:'google-'+email,email,email_verified:true}));
@@ -42,7 +42,15 @@ test('separate admin accounts own their classes; students register, join and pla
  const verification=(await codes()).find(c=>c.email===ADMIN_ACCOUNT_EMAIL&&c.requestType==='VERIFY_EMAIL');await applyActionCode(auth,verification.oobCode);await api.refreshUser();const dedicatedUid=api.currentUser().uid;
  assert.notEqual(dedicatedUid,ownerUid);assert.equal(await api.role(),'instructor');
  await api.saveProfile({firstName:'Dedicated',lastName:'Admin',universityId:'ADMIN'});
- const dedicatedClass=await api.createSession('Dedicated admin class',DEFAULT_CONFIG);assert.match(dedicatedClass,/^[A-Z2-9]{8}$/);
+ assert.equal(await api.isSessionCodeAvailable('Paris'),true);
+ const [first,second]=await Promise.allSettled([
+  api.createSession('Dedicated admin class',DEFAULT_CONFIG,'individual',' pa-ris '),
+  api.createSession('Dedicated admin class',DEFAULT_CONFIG,'individual','PARIS')
+ ]);
+ const outcomes=[first,second];
+ assert.deepEqual(outcomes.filter(result=>result.status==='fulfilled').map(result=>result.value),['PARIS']);
+ assert.deepEqual(outcomes.filter(result=>result.status==='rejected').map(result=>result.reason.code),['session-code-taken']);
+ const dedicatedClass='PARIS';
  assert.deepEqual((await api.listSessions(false)).map(s=>s.code),[dedicatedClass]);
  await assert.rejects(api.listSessions(true),{code:'permission-denied'});await assert.rejects(api.closeSession(ownerClass),{code:'permission-denied'});
  await assert.rejects(api.grant('outsider@example.test'),{code:'permission-denied'});await assert.rejects(api.saveDefaults(DEFAULT_CONFIG),{code:'permission-denied'});
@@ -51,6 +59,8 @@ test('separate admin accounts own their classes; students register, join and pla
  await assert.rejects(api.loginEmail('admin@admin.com','initial-platform-password'));await api.loginEmail('admin@admin.com','dedicated-new-password');assert.equal(api.currentUser().uid,dedicatedUid);assert.equal((await api.getProfile()).firstName,'Dedicated');await api.logout();
  await api.loginEmail('kstouras@gmail.com','initial-platform-password');assert.equal(api.currentUser().uid,ownerUid);await api.logout();
  await api.loginEmail(target,'instructor-test-password');const javadUid=api.currentUser().uid;assert.notEqual(javadUid,dedicatedUid);assert.equal(await api.role(),'instructor');
+ assert.equal(await api.isSessionCodeAvailable('PARIS'),false);
+ await assert.rejects(api.createSession('Another class',DEFAULT_CONFIG,'team','PARIS'),{code:'session-code-taken'});
  const javadClass=await api.createSession('Javad class',DEFAULT_CONFIG);
  await api.joinSession(dedicatedClass,'Visiting Instructor');
  assert.deepEqual((await api.listSessions(false)).map(s=>s.code),[javadClass]);

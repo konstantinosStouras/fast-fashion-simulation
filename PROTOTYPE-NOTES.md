@@ -23,7 +23,7 @@ All assumptions are illustrative, not calibrated estimates. This is a discussion
 
 1. Visit the published page; log in with Google or email/password. FFO uses its own account system, separate from UCD Blog. Email/password registration requires verification before joining or teaching.
 2. The verified administrator `kstouras@gmail.com` sees **Instructor studio** and **Admin / Access**. Grant another instructor access using their sign-in email; no invitation email is sent.
-3. Create a session, optionally adjust the described settings, then share its eight-character code. Defaults are sufficient for the first discussion.
+3. Create a session, optionally adjust the described settings, then share its suggested city code or the custom code you entered. Defaults are sufficient for the first discussion.
 4. Students log in and join before the session starts. One account controls one participant record; a team can use one device/account and a team name.
 5. Start when everyone is ready. All phases advance automatically. The instructor sees enrolment, saved decisions, completed-season scores and CSV export. Closing a session stops new submissions.
 6. Admins can set defaults for future sessions or revoke instructor access. Existing session settings cannot change. Instructors see only their own rosters; the administrator sees all.

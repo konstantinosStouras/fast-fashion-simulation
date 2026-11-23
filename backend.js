@@ -1,4 +1,5 @@
-import {emailActionSettings} from './auth-flow.js?v=mobile-auth-9';
+import {emailActionSettings} from './auth-flow.js?v=session-codes-1';
+import {requireSessionCode,sessionCodeTaken} from './session-code.js';
 import {decisionOwner,validateTeams} from './competition.js?v=qa-20261111';
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js';
 import {getAuth,GoogleAuthProvider,signInWithPopup,signInWithEmailAndPassword,createUserWithEmailAndPassword,sendEmailVerification,sendPasswordResetEmail,signOut,onAuthStateChanged,verifyBeforeUpdateEmail} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js';
@@ -60,12 +61,24 @@ export async function listInstructors(){return (await getDocs(collection(db,'ins
 export async function revoke(email){const {deleteDoc}=await import('https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js');await deleteDoc(doc(db,'instructors',loginEmailAddress(email)));}
 export async function getDefaults(){const d=await getDoc(doc(db,'settings','defaults'));return d.exists()?d.data():{...DEFAULT_CONFIG};}
 export const saveDefaults=config=>setDoc(doc(db,'settings','defaults'),config);
-export async function createSession(name,config,mode='individual'){
+function randomSessionCode(){
+ const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+ const bytes=crypto.getRandomValues(new Uint8Array(8));
+ return Array.from(bytes,b=>alphabet[b%alphabet.length]).join('');
+}
+export async function isSessionCodeAvailable(value){
+ const ref=doc(db,'sessions',requireSessionCode(value));
+ const snapshot=await getDocFromServer(ref);
+ return !snapshot.exists();
+}
+export async function createSession(name,config,mode='individual',requestedCode){
+ const selected=requestedCode===undefined?null:requireSessionCode(requestedCode);
  for(let tries=0;tries<4;tries++){
-  const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';const bytes=crypto.getRandomValues(new Uint8Array(8));const code=Array.from(bytes,b=>alphabet[b%alphabet.length]).join('');
+  const code=selected??randomSessionCode();
   const ref=doc(db,'sessions',code);
   const created=await runTransaction(db,async tx=>{if((await tx.get(ref)).exists())return false;tx.set(ref,{name,mode,assignments:{},teamNames:{},rosterVersion:0,owner:currentUser().uid,config,seed:crypto.getRandomValues(new Uint32Array(1))[0]%1000001,status:'lobby',createdAt:serverTimestamp(),startedAt:null,closedAt:null});return true;});
   if(created)return code;
+  if(selected)throw sessionCodeTaken(code);
  }throw new Error('Could not reserve a code. Please try again.');
 }
 export async function listSessions(isAdmin){const c=collection(db,'sessions');return (await getDocs(isAdmin?c:query(c,where('owner','==',currentUser().uid)))).docs.map(d=>({code:d.id,...d.data()})).sort((a,b)=>(b.createdAt?.toMillis()||0)-(a.createdAt?.toMillis()||0));}

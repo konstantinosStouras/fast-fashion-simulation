@@ -1,3 +1,25 @@
+const CITY_CODES = [
+ 'PARIS', 'ROME', 'TOKYO', 'LIMA', 'OSLO', 'MILAN', 'LONDON', 'DUBLIN',
+ 'BERLIN', 'MADRID', 'CAIRO', 'DUBAI', 'SEOUL', 'MIAMI', 'SYDNEY', 'BOSTON',
+ 'ATHENS', 'DELHI', 'LAGOS', 'PERTH', 'PISA', 'KYOTO', 'OSAKA', 'HANOI',
+];
+
+export async function suggestCityCodes(usedCodes, isAvailable) {
+ const start = Math.floor(Math.random() * CITY_CODES.length);
+ const cities = [...CITY_CODES.slice(start), ...CITY_CODES.slice(0, start)];
+ const suggestions = [];
+ for (let round = 1; suggestions.length < 4; round++) {
+  const candidates = cities.map(city => round === 1 ? city : city + round).filter(code => !usedCodes.has(code));
+  for (let offset = 0; offset < candidates.length && suggestions.length < 4;) {
+   const batch = candidates.slice(offset, offset + 4 - suggestions.length);
+   const available = await Promise.all(batch.map(isAvailable));
+   suggestions.push(...batch.filter((code, index) => available[index]));
+   offset += batch.length;
+  }
+ }
+ return suggestions;
+}
+
 export function sessionState(session,now=Date.now()){
  if(session.status==='closed')return 'Closed';
  if(session.status==='running'&&session.startedAt&&now-session.startedAt.toMillis()>=1080000)return 'Completed';

@@ -3,6 +3,7 @@ import {decisionOwner,validateTeams} from './competition.js';
 import {platformHandoff} from './profile.js';
 import {loginEmailAddress,assertAccountEmail,ADMIN_ACCOUNT_EMAIL} from './auth-identity.js';
 import {DEFAULT_CONFIG} from './model.js';
+import {requireSessionCode,sessionCodeTaken} from './session-code.js';
 const KEY='ff:demo:v1';let user=null;const authListeners=new Set(),listeners=new Set();
 const load=()=>JSON.parse(localStorage.getItem(KEY)||JSON.stringify({sessions:{},people:{},orders:{},instructors:[ADMIN_ACCOUNT_EMAIL]}));
 function write(data){localStorage.setItem(KEY,JSON.stringify(data));listeners.forEach(fn=>fn());}
@@ -32,7 +33,23 @@ export const listInstructors=async()=>load().instructors;
 export const getDefaults=async()=>load().defaults||DEFAULT_CONFIG;
 export const saveDefaults=async config=>{const d=load();d.defaults=config;write(d);};
 const toSession=s=>s?{...s,createdAt:timestamp(s.createdAt),startedAt:timestamp(s.startedAt),closedAt:timestamp(s.closedAt)}:null;
-export async function createSession(name,config,mode='individual'){const d=load();let index=0,code;do{code='DEMO'+String(index++).padStart(4,'A').replace(/0/g,'B').replace(/1/g,'C');}while(d.sessions[code]);d.sessions[code]={code,name,config,mode,assignments:{},teamNames:{},seed:Math.floor(Math.random()*1000001),owner:user.uid,status:'lobby',createdAt:Date.now(),startedAt:null,closedAt:null};write(d);return code;}
+export async function isSessionCodeAvailable(value){
+ return !Object.hasOwn(load().sessions,requireSessionCode(value));
+}
+export async function createSession(name,config,mode='individual',requestedCode){
+ const d=load();
+ let code;
+ if(requestedCode===undefined){
+  let index=0;
+  do{code='DEMO'+String(index++).padStart(4,'A').replace(/0/g,'B').replace(/1/g,'C');}while(d.sessions[code]);
+ }else{
+  code=requireSessionCode(requestedCode);
+  if(Object.hasOwn(d.sessions,code))throw sessionCodeTaken(code);
+ }
+ d.sessions[code]={code,name,config,mode,assignments:{},teamNames:{},seed:Math.floor(Math.random()*1000001),owner:user.uid,status:'lobby',createdAt:Date.now(),startedAt:null,closedAt:null};
+ write(d);
+ return code;
+}
 export const listSessions=async(isOwner=false)=>Object.values(load().sessions).filter(s=>isOwner||s.owner===user.uid).map(toSession);
 export const watchSession=(code,fn)=>watch(()=>fn(toSession(load().sessions[code])));
 export const startSession=async code=>{const d=load();if(d.sessions[code].mode==='team'&&!validateTeams(Object.values(d.people[code]||{}),d.sessions[code].assignments,d.sessions[code].teamNames))throw Error('Assign every participant to a team before starting.');Object.assign(d.sessions[code],{status:'running',startedAt:Date.now()});write(d);};
