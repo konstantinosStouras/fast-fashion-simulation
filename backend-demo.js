@@ -2,7 +2,7 @@ import {decisionOwner,validateTeams} from './competition.js';
 // Test harness, selected only on loopback hosts with ?demo. Never real authentication.
 import {platformHandoff} from './profile.js';
 import {loginEmailAddress,assertAccountEmail,ADMIN_ACCOUNT_EMAIL} from './auth-identity.js';
-import {DEFAULT_CONFIG} from './model.js';
+import {validateConfig,DEFAULT_CONFIG} from './model.js';
 import {requireSessionCode,sessionCodeTaken} from './session-code.js';
 const KEY='ff:demo:v1';let user=null;const authListeners=new Set(),listeners=new Set();
 const load=()=>JSON.parse(localStorage.getItem(KEY)||JSON.stringify({sessions:{},people:{},orders:{},instructors:[ADMIN_ACCOUNT_EMAIL]}));
@@ -65,3 +65,11 @@ export const readMarketOrders=async(code,captains,rounds)=>Object.fromEntries(ca
 export const readParticipants=async code=>Object.values(load().people[code]||{});
 export const readOrders=async(code,uid)=>load().orders[code]?.[uid]||{};
 export const deleteSession=async code=>{const d=load();delete d.sessions[code];delete d.people[code];delete d.orders[code];write(d);};
+
+export async function saveDefaultField(key,value){
+ const data=load();
+ const config={...DEFAULT_CONFIG,...data.defaults,[key]:value};
+ if(!validateConfig(config))throw new Error('Check the default costs, selling price and salvage value.');
+ data.defaults=config;
+ write(data);
+}

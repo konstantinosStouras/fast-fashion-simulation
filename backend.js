@@ -7,7 +7,7 @@ import {getFirestore,doc,collection,getDoc,getDocFromServer,getDocs,getDocsFromS
 import {firebaseConfig,DATABASE,ADMIN_EMAIL} from './firebase-config.js';
 import {platformHandoff} from './profile.js?v=qa-20261110';
 import {loginEmailAddress,assertAccountEmail,ADMIN_ACCOUNT_EMAIL} from './auth-identity.js?v=multi-admin-1';
-import {ROUNDS,DEFAULT_CONFIG} from './model.js';
+import {ROUNDS,validateConfig,DEFAULT_CONFIG} from './model.js';
 const app=initializeApp(firebaseConfig,'fashion-futures'),auth=getAuth(app),db=getFirestore(app,DATABASE);
 export const currentUser=()=>auth.currentUser;
 function recordVerifiedAccount(user) {
@@ -143,4 +143,14 @@ export async function deleteSession(code){
  }
  // Keep the parent until last: authorization and retries rely on its owner.
  await deleteDoc(ref);
+}
+
+export async function saveDefaultField(key,value){
+ const ref=doc(db,'settings','defaults');
+ await runTransaction(db,async tx=>{
+  const snapshot=await tx.get(ref);
+  const config={...DEFAULT_CONFIG,...snapshot.data(),[key]:value};
+  if(!validateConfig(config))throw new Error('Check the default costs, selling price and salvage value.');
+  tx.set(ref,config);
+ });
 }

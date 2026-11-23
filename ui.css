@@ -242,3 +242,7 @@ li,blockquote,.field-description,.manifesto>div{
 #connection-status:not([hidden]){margin:12px auto;padding:12px 16px;max-width:1120px;box-sizing:border-box;font-size:14px;line-height:1.6;overflow-wrap:anywhere;text-align:left;border:1px solid var(--line);border-radius:8px;background:var(--white);color:var(--ink)}
 #connection-status[data-state="waiting"]{border-left:4px solid #ba6700}
 @media(max-width:600px){#connection-status:not([hidden]){margin:12px 20px}}
+
+.assumption-actions {display:flex;flex-wrap:wrap;gap:.5rem;margin:.45rem 0 1rem}
+.assumption-actions button {width:auto;margin:0;padding:.4rem .7rem;font-size:.75rem;line-height:1.25;border:1px solid currentColor;border-radius:6px;background:transparent;color:var(--accent,#db582b)}
+.assumption-actions button:last-child {color:inherit;font-weight:400;opacity:.8}
