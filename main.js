@@ -1,16 +1,16 @@
 import {entryMember} from './team-roles.js';
-import {sessionProgress,hasHomeTeamPractice} from './functions/session-progress.js?v=home-practice-1';
+import {sessionProgress,hasHomeTeamPractice} from './functions/session-progress.js?v=team-handoff-1';
 import {sessionCodeFromUrl} from './auth-flow.js?v=session-codes-1';
 import {normalizeSessionCode,SESSION_CODE_PATTERN} from './session-code.js';
-import {makeTeamOpponents,teamMatchup,aiActive,competitorResult,usesPairedMarkets} from './market.js?v=home-practice-1';
+import {makeTeamOpponents,teamMatchup,aiActive,competitorResult,usesPairedMarkets} from './market.js?v=team-handoff-1';
 import {rehearsalAiOrders} from './ai-rehearsal.js';
 import {mountTeamPractice,clearTeamPractice} from './team-practice-ui.js';
-import {decisionOwner,groupTeams,validateTeams,leaderboard} from './competition.js?v=home-practice-1';
+import {decisionOwner,groupTeams,validateTeams,leaderboard} from './competition.js?v=team-handoff-1';
 import {ROUNDS,DEFAULT_ORDER,DEFAULT_CONFIG,SETTINGS,validateConfig,phaseAt,signalFor} from './model.js?v=team-pairs-1';
 import {studioNavigation,showAiSettingsPanel,aiPhaseFields,phaseModelHint,readAiOpponent,editSessionAi} from './studio-ai.js?v=studio-header-1';
-import {showTeamsPanel} from './studio-teams.js?v=home-practice-1';
-import {suggestCityCodes,sessionState,partitionSessions,decisionSummary} from './studio.js?v=home-practice-1';
-import {profileComplete,profileFields,historyStats,PLATFORM_FIELDS} from './profile.js?v=home-practice-1';
+import {showTeamsPanel} from './studio-teams.js?v=team-handoff-1';
+import {suggestCityCodes,sessionState,partitionSessions,decisionSummary} from './studio.js?v=team-handoff-1';
+import {profileComplete,profileFields,historyStats,PLATFORM_FIELDS} from './profile.js?v=team-handoff-1';
 import {escapeHtml as esc,friendlyAuthError,safeStorage,setBusy,revealInvalidField,csvCell} from './ui.js?v=ai-opponent-1';
 import {accountLabel,ADMIN_ACCOUNT_EMAIL} from './auth-identity.js?v=multi-admin-1';
 const resumeStorage=safeStorage(()=>localStorage),tabStorage=safeStorage(()=>sessionStorage);
@@ -748,7 +748,7 @@ function exportResults(source=session,people=roster,savedOrders=teamResultOrders
   status.replaceChildren(document.createTextNode('CSV ready: '+(rows.length-1)+' scored-season rows. Save '+a.download+' when your browser asks. '),a);a.click();
  }catch(e){failure(e);}
 }
-try{api=await import(demo?'./backend-demo.js':'./backend.js?v=home-practice-1');api.observeAuth(async function restoreAccount(u){retryAccount=null;const version=++authVersion;if(registering){user=u;return;}clean();staffView=false;user=u;if(!u){for(const id of ['first-name','last-name','university-id','email','password'])$(id).value='';}try{if(u&&new URLSearchParams(location.search).get('auth')==='verify'){u=await api.refreshUser();if(version!==authVersion)return;user=u;}const nextRole=u?await api.role():'student';if(version!==authVersion)return;role=nextRole;profile=null;if(u){try{await api.importPlatformProfile(resumeStorage);}catch{note('Portal details could not be imported. Please retry by signing in again.');}if(version!==authVersion)return;const nextProfile=await api.getProfile();if(version!==authVersion)return;profile=nextProfile;}account();landing();await restoreView(u);}catch(e){if(version!==authVersion)return;failure(e);account();landing();if(u){retryAccount=()=>restoreAccount(api.currentUser());$('app').innerHTML='<section class="panel"><h1>Reconnect to your account.</h1><p>Your session code is kept. Reconnect to load your profile and saved game.</p><button id="retry-account">Retry connection</button></section>';$('retry-account').onclick=()=>retryAccount?.();}}});}catch(e){$('app').innerHTML='<section class="waiting"><h1 class="page-title">Fast Fashion Ops</h1><p>Run a fashion retailer. Discover how speed changes profit, waste and environmental impact.</p><p>Sign-in could not load. Check your connection and reload this page.</p><button onclick="location.reload()">Try again</button></section>';failure(e);}
+try{api=await import(demo?'./backend-demo.js':'./backend.js?v=team-handoff-1');api.observeAuth(async function restoreAccount(u){retryAccount=null;const version=++authVersion;if(registering){user=u;return;}clean();staffView=false;user=u;if(!u){for(const id of ['first-name','last-name','university-id','email','password'])$(id).value='';}try{if(u&&new URLSearchParams(location.search).get('auth')==='verify'){u=await api.refreshUser();if(version!==authVersion)return;user=u;}const nextRole=u?await api.role():'student';if(version!==authVersion)return;role=nextRole;profile=null;if(u){try{await api.importPlatformProfile(resumeStorage);}catch{note('Portal details could not be imported. Please retry by signing in again.');}if(version!==authVersion)return;const nextProfile=await api.getProfile();if(version!==authVersion)return;profile=nextProfile;}account();landing();await restoreView(u);}catch(e){if(version!==authVersion)return;failure(e);account();landing();if(u){retryAccount=()=>restoreAccount(api.currentUser());$('app').innerHTML='<section class="panel"><h1>Reconnect to your account.</h1><p>Your session code is kept. Reconnect to load your profile and saved game.</p><button id="retry-account">Retry connection</button></section>';$('retry-account').onclick=()=>retryAccount?.();}}});}catch(e){$('app').innerHTML='<section class="waiting"><h1 class="page-title">Fast Fashion Ops</h1><p>Run a fashion retailer. Discover how speed changes profit, waste and environmental impact.</p><p>Sign-in could not load. Check your connection and reload this page.</p><button onclick="location.reload()">Try again</button></section>';failure(e);}
 
 
 function captureTeamDraft(){

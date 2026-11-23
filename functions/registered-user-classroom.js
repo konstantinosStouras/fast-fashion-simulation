@@ -31,8 +31,8 @@ export function planRegisteredUserRemoval(session, uid, ownerUid, deletingUids) 
   }
   let replacementCaptain = null;
   let keepTeamResult = false;
+  const ongoing = classroomStatus(session).status === 'running';
   if (isCaptain) {
-    const ongoing = classroomStatus(session).status === 'running';
     const teammates = Object.keys(assignments).filter(id =>
       assignments[id] === uid && id !== uid && !deletingUids.has(id)).sort();
     if (session.status === 'lobby' || (ongoing && teammates.length)) {
@@ -57,6 +57,10 @@ export function planRegisteredUserRemoval(session, uid, ownerUid, deletingUids) 
           delete updates.teamOpponents[uid];
           const other = updates.teamOpponents[replacementCaptain];
           if (other != null) updates.teamOpponents[other] = replacementCaptain;
+          else if (session.oddTeamAi) {
+            updates.marketIdentities['ai/'+replacementCaptain] = session.marketIdentities?.['ai/'+uid] || 'ai/'+uid;
+            delete updates.marketIdentities['ai/'+uid];
+          }
         }
       }
     } else {
@@ -65,5 +69,33 @@ export function planRegisteredUserRemoval(session, uid, ownerUid, deletingUids) 
       keepTeamResult = true;
     }
   }
-  return {deleteSession, updates, replacementCaptain, keepTeamResult};
+  if (Object.hasOwn(session.entryRequests || {}, uid)) {
+    updates.entryRequests = {...session.entryRequests};
+    delete updates.entryRequests[uid];
+  }
+  let entryNameUid = null;
+  const team = assignments[uid];
+  const editor = session.entryMembers?.[team] || team;
+  if (team && (session.entryMembers || session.entryNames || session.entryRequests) && (replacementCaptain || deletingUids.has(editor))) {
+    const survivors = Object.keys(assignments).filter(id => assignments[id] === team && !deletingUids.has(id)).sort();
+    const nextTeam = replacementCaptain || team;
+    const nextEditor = deletingUids.has(editor)
+      ? (ongoing && (survivors.find(id => Object.hasOwn(session.entryRequests || {}, id)) || survivors[0]))
+      : editor;
+    updates.entryMembers = {...session.entryMembers};
+    updates.entryNames = {...session.entryNames};
+    delete updates.entryMembers[team];
+    delete updates.entryNames[team];
+    if (nextEditor) {
+      updates.entryMembers[nextTeam] = nextEditor;
+      const name = nextEditor === editor ? session.entryNames?.[team] : session.entryRequests?.[nextEditor];
+      if (name) updates.entryNames[nextTeam] = name;
+      else entryNameUid = nextEditor;
+      if (Object.hasOwn(session.entryRequests || {}, nextEditor)) {
+        updates.entryRequests ||= {...session.entryRequests};
+        delete updates.entryRequests[nextEditor];
+      }
+    }
+  }
+  return {deleteSession, updates, replacementCaptain, keepTeamResult, entryNameUid};
 }

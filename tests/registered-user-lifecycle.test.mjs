@@ -83,3 +83,34 @@ test('default teams seed new classrooms, played codes follow participation, and 
  assert.deepEqual(result(ids[z],1),firstSeason);assert.deepEqual(result(ids[r],1),opponentResult);
  assert.ok((await api.readParticipants(room)).every(person=>person.email==='' && person.name==='Deleted user'));
 });
+
+test('removing the editor promotes a surviving requester and preserves other teams', async () => {
+ const {planRegisteredUserRemoval}=await import('../functions/registered-user-classroom.js');
+ const session={mode:'team',status:'running',startedAt:Date.now(),phaseOffset:180,assignments:{a:'a',b:'a',c:'a',d:'d'},teamNames:{a:'A',d:'D'},
+  entryMembers:{a:'b',d:'d'},entryNames:{a:'Bob',d:'Dana'},entryRequests:{a:'Alice',c:'Cara'}};
+ const plan=planRegisteredUserRemoval(session,'b','owner',new Set(['a','b']));
+ assert.deepEqual(plan.updates.entryMembers,{a:'c',d:'d'});
+ assert.deepEqual(plan.updates.entryNames,{a:'Cara',d:'Dana'});
+ assert.deepEqual(plan.updates.entryRequests,{a:'Alice'});
+ const rekey=planRegisteredUserRemoval({...session,...plan.updates},'a','owner',new Set(['a','b']));
+ assert.deepEqual(rekey.updates.entryMembers,{c:'c',d:'d'});
+ assert.deepEqual(rekey.updates.entryNames,{c:'Cara',d:'Dana'});
+ assert.deepEqual(rekey.updates.entryRequests,{});
+});
+
+test('a captain transfer preserves a surviving editor, the AI market and confirmed scores',async()=>{
+ const {planRegisteredUserRemoval}=await import('../functions/registered-user-classroom.js');
+ const {competitorResult}=await import('../market.js');
+ const session={mode:'team',status:'running',startedAt:Date.now(),phaseOffset:540,config:DEFAULT_CONFIG,seed:452,
+  assignments:{a:'a',b:'a',c:'a'},teamNames:{a:'North'},teamOpponents:{a:null},oddTeamAi:true,
+  entryMembers:{a:'c'},entryNames:{a:'Cara'},entryRequests:{a:'Alice',b:'Bob'}};
+ const plan=planRegisteredUserRemoval(session,'a','owner',new Set(['a']));
+ assert.deepEqual(plan.updates.entryMembers,{b:'c'});
+ assert.deepEqual(plan.updates.entryNames,{b:'Cara'});
+ assert.deepEqual(plan.updates.entryRequests,{b:'Bob'});
+ const orders={1:{variety:4,quantity:87,cap:0}};
+ assert.deepEqual(competitorResult({...session,...plan.updates},1,{b:orders},'b'),competitorResult(session,1,{a:orders},'a'));
+ const fallback=planRegisteredUserRemoval({...session,entryRequests:{}},'c','owner',new Set(['c']));
+ assert.equal(fallback.entryNameUid,'a');
+ assert.deepEqual(fallback.updates.entryMembers,{a:'a'});
+});

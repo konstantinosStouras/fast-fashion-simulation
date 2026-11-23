@@ -1,6 +1,6 @@
-import {aiActive,teamMatchup,teamMatchups,teamRound,usesPairedMarkets} from './market.js?v=home-practice-1';
+import {aiActive,teamMatchup,teamMatchups,teamRound,usesPairedMarkets} from './market.js?v=team-handoff-1';
 import {ROUNDS} from './model.js';
-export {validateTeams} from './functions/teams.js?v=home-practice-1';
+export {validateTeams} from './functions/teams.js?v=team-handoff-1';
 export const decisionOwner=(s,uid)=>s.mode==='team'?(s.assignments?.[uid]||null):uid;
 export function groupTeams(people,size=3){
  if(!Number.isInteger(size)||size<1||size>20)throw Error('Team size must be 1–20.');

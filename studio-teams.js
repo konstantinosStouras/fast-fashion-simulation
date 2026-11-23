@@ -1,6 +1,6 @@
 import {escapeHtml as esc} from './ui.js?v=ai-opponent-1';
-import {getTeamComposition} from './functions/teams.js?v=home-practice-1';
-import {classroomStatus, summarizeUserClassroom} from './functions/user-classrooms.js?v=home-practice-1';
+import {getTeamComposition} from './functions/teams.js?v=team-handoff-1';
+import {classroomStatus, summarizeUserClassroom} from './functions/user-classrooms.js?v=team-handoff-1';
 import {mountSessionTeams} from './studio-session-teams.js';
 
 const PAGE_SIZE = 25;

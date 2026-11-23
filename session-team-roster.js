@@ -1,4 +1,4 @@
-import {classroomOpponent} from './functions/user-classrooms.js?v=session-team-roster-1';
+import {classroomOpponent} from './functions/user-classrooms.js?v=team-handoff-1';
 
 const byName = new Intl.Collator('en', {numeric: true, sensitivity: 'base'});
 

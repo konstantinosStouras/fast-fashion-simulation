@@ -162,6 +162,11 @@ export async function deleteRegisteredUsers(uids) {
   const code=room.code;
   for(const uid of deleting) {
    const plan=planRegisteredUserRemoval(room,uid,ownerUid,deleting);
+   if(plan.entryNameUid){
+    const team=(plan.updates.assignments||room.assignments)[plan.entryNameUid];
+    const editor=data.people[code]?.[plan.entryNameUid];
+    if(editor)plan.updates.entryNames[team]=editor.name;
+   }
    if(plan.deleteSession) {
     delete data.sessions[code];delete data.people[code];delete data.orders[code];
     if(data.aiOrders)delete data.aiOrders[code];

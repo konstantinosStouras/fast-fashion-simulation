@@ -1,7 +1,7 @@
 // Shared-market competition: customers choose a team/style, then switch if it stocks out.
 // Fixed prices; every additional style adds choice weight. Demand exists only once.
 import {DEFAULT_ORDER,ROUNDS,demandFor,resultFor,signalFor,validOrder} from './model.js';
-export {makeTeamOpponents} from './functions/teams.js?v=home-practice-1';
+export {makeTeamOpponents} from './functions/teams.js?v=team-handoff-1';
 function randomFor(seed){return ()=>{seed=(Math.imul(1664525,seed)+1013904223)>>>0;return seed/4294967296;};}
 function choose(items,u){const total=items.reduce((n,p)=>n+p.weight,0);let value=u*total;return items.find(p=>(value-=p.weight)<0)||items.at(-1);}
 export function sharedMarket(seed,index,teamOrders,config){

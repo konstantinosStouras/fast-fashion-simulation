@@ -21,6 +21,11 @@ async function cleanClassroom(db, ref, deleting, ownerUid) {
     const roomChanges = {};
     for (const person of people) {
       const plan = planRegisteredUserRemoval(session, person.id, ownerUid, deleting);
+      if (plan.entryNameUid) {
+        const editor = await tx.get(ref.collection('participants').doc(plan.entryNameUid));
+        const team = (plan.updates.assignments || session.assignments)[plan.entryNameUid];
+        if (editor.exists) plan.updates.entryNames[team] = editor.get('name');
+      }
       Object.assign(session, plan.updates);
       Object.assign(roomChanges, plan.updates);
       if (plan.deleteSession) {
