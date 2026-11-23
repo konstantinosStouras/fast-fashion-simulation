@@ -15,7 +15,8 @@ function load(){
  const data=JSON.parse(localStorage.getItem(KEY)||JSON.stringify({sessions:{},people:{},orders:{},instructors:[ADMIN_ACCOUNT_EMAIL]}));
  const pending=Object.values(data.sessions).filter(s=>s.status==='running'&&s.phaseOffset==null&&Number.isFinite(s.startedAt));
  if(pending.length){
-  data.manualStageCutover??=Date.now();
+  // Existing demo rooms froze with the published manual classroom release.
+  data.manualStageCutover??=Date.UTC(2026,10,23,22,42);
   for(const s of pending)s.phaseOffset=legacyPhaseOffset(s.startedAt,data.manualStageCutover);
   localStorage.setItem(KEY,JSON.stringify(data));
  }

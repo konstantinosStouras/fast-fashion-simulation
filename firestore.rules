@@ -17,7 +17,7 @@ service cloud.firestore {
    return uid in s.teamNames && captain in s.teamNames && (!('teamOpponents' in s)
      || (s.teamOpponents.get(captain,null)==uid && s.teamOpponents.get(uid,null)==captain));
   }
-  function aiActive(s,r) { return s.get('aiOpponent',null)!=null && (r=='0' ? s.aiOpponent.practice : s.aiOpponent.main); }
+  function aiActive(s,r) { return !s.get('teamPractice',false) && s.get('aiOpponent',null)!=null && (r=='0' ? s.aiOpponent.practice : s.aiOpponent.main); }
   function progress(s) {
    return 'phaseOffset' in s ? s.phaseOffset
      : s.closedAt!=null && s.startedAt!=null ? (s.closedAt-s.startedAt).seconds() : -1;
@@ -127,7 +127,7 @@ service cloud.firestore {
     allow list: if owner(code);
     allow delete: if canDeleteSession(code);
     allow create: if own(uid) && session(code).get('mode','individual')!='team' && (session(code).get('mode','individual')!='solo' || session(code).owner==request.auth.uid) && session(code).status=='lobby' && (!tracksRoster(session(code)) || getAfter(/databases/$(database)/documents/sessions/$(code)).data.rosterVersion==session(code).get('rosterVersion',0)+1) && request.resource.data.keys().hasOnly(['name','email','joinedAt']) && request.resource.data.name is string && request.resource.data.name.size()>0 && request.resource.data.name.size()<=80 && request.resource.data.email==request.auth.token.email && request.resource.data.joinedAt==request.time;
-    // A queued plan must never become a response after its server deadline.
+    // A queued plan cannot become a response after the instructor advances the stage.
     // Each save must advance the current revision once; stale device writes cannot rebase themselves.
     match /orders/{r} {
      allow delete: if canDeleteSession(code);
