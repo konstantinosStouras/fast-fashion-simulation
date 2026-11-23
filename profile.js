@@ -1,3 +1,4 @@
+import {sessionProgress} from './functions/session-progress.js';
 import {competitorResult} from './market.js?v=directory-roster-1';
 import {ROUNDS} from './model.js';
 export const PLATFORM_FIELDS=['name','email','studentId','age','gender','nationality','country','levelOfStudy','workExperience','occupation','industry','englishFluency','createdAt','updatedAt'];
@@ -20,7 +21,7 @@ export function platformHandoff(storage,user,now=Date.now()){
 }
 export function historyStats(sessions,now=Date.now()){
  const rows=sessions.map(s=>{
-  const seconds=s.startedAt?((s.closedAt?.toMillis()??now)-s.startedAt.toMillis())/1000:-1;
+  const seconds=sessionProgress(s,now);
   const assigned=s.mode!=='team'||Object.hasOwn(s.teamNames||{},s.decisionUid);
   const orders=s.mode==='team'?(s.teamOrders||{}):{[s.decisionUid]:s.orders||{}};
   const rounds=[1,2,3].filter(i=>assigned&&seconds>=ROUNDS[i].end).map(i=>({round:i,...competitorResult(s,i,orders,s.decisionUid)}));

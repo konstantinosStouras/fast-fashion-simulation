@@ -256,7 +256,7 @@ export async function startSession(code){
    d.aiOrders[code][uid]=orders;
   }
  }
- Object.assign(s,{status:'running',startedAt:Date.now()});
+ Object.assign(s,{status:'running',phaseOffset:0,startedAt:Date.now()});
  write(d);
 }
 export const closeSession=async code=>{const d=load();Object.assign(d.sessions[code],{status:'closed',closedAt:Date.now()});write(d);};
@@ -290,3 +290,5 @@ export async function saveDefaultField(key,value){
  data.defaults=config;
  write(data);
 }
+
+export async function advancePhase(code,next){const data=load();data.sessions[code].phaseOffset=next;write(data);}

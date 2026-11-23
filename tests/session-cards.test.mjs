@@ -14,7 +14,7 @@ test('session cards show counts, export directly, rehearse privately, close and 
  URL.createObjectURL=blob=>{csv=blob;return 'blob:test-export';};URL.revokeObjectURL=()=>{};
  w.HTMLAnchorElement.prototype.click=function(){download=this.download;};
  const common={owner:'demo-admin',mode:'individual',config:DEFAULT_CONFIG,seed:42,createdAt:Date.now()-2000000};
- w.localStorage.setItem('ff:demo:v1',JSON.stringify({instructors:[],sessions:{ACTIVEAA:{...common,code:'ACTIVEAA',name:'Current class',status:'lobby'},PASTAAAA:{...common,code:'PASTAAAA',name:'Previous class',status:'running',startedAt:Date.now()-1200000}},people:{ACTIVEAA:{alice:{uid:'alice',name:'Alice',email:'alice@example.test'}},PASTAAAA:{bob:{uid:'bob',name:'Bob',email:'bob@example.test'}}},orders:{PASTAAAA:{bob:{1:{variety:4,quantity:100,cap:0}}}}}));
+ w.localStorage.setItem('ff:demo:v1',JSON.stringify({instructors:[],sessions:{ACTIVEAA:{...common,code:'ACTIVEAA',name:'Current class',status:'lobby'},PASTAAAA:{...common,code:'PASTAAAA',name:'Previous class',status:'running',phaseOffset:960,startedAt:Date.now()-1200000}},people:{ACTIVEAA:{alice:{uid:'alice',name:'Alice',email:'alice@example.test'}},PASTAAAA:{bob:{uid:'bob',name:'Bob',email:'bob@example.test'}}},orders:{PASTAAAA:{bob:{1:{variety:4,quantity:100,cap:0}}}}}));
  const api=await import('../backend-demo.js');
  t.after(async()=>{await api.logout();await new Promise(r=>setTimeout(r,20));w.close();URL.createObjectURL=created;URL.revokeObjectURL=revoke;});
  await api.loginGoogle();await import('../main.js?session-cards');await wait(()=>$('[data-participant-count="ACTIVEAA"]')?.textContent==='1 participant');

@@ -29,9 +29,9 @@ test('solo start, team setup, captain saves, teammate read-only view and period 
  await api.startSession(code);await wait(()=>$('#leaderboard'));assert.equal($('#team-setup'),null);
  await api.logout();await wait(()=>$('#open-login'));w.localStorage.removeItem('ff:session:demo-alice@example.test');w.sessionStorage.removeItem('ff:session:demo-alice@example.test');w.history.replaceState({},'', '/?demo');await api.loginEmail('alice@example.test');await wait(()=>$('#join'));$('#join [name=code]').value=code;submit('#join');await wait(()=>$('#order-form'));assert.equal($('#save-order').disabled,false);$('#order-form [name=quantity]').value='93';submit('#order-form');await wait(()=>$('.save-state').textContent.includes('93'));
  await api.logout();await wait(()=>$('#open-login'));await api.loginEmail('bob@example.test');await wait(()=>$('#join'));$('#join [name=code]').value=code;submit('#join');await wait(()=>$('#order-form'));assert.equal($('#save-order').disabled,true);assert.equal($('#order-form [name=quantity]').value,'93');assert.match($('.team-banner').textContent,/captain submits/);
- for(let i=0;i<3;i++){click('#demo-forward');await wait(()=>$('#demo-forward'));}await wait(()=>$('#leaderboard').textContent.includes('after 1 scored period'));assert.match($('#leaderboard').textContent,/Team A/);assert.match($('#leaderboard').textContent,/Team B/);
+ for(const offset of [90,180,420])await api.advancePhase(code,offset);await wait(()=>$('#leaderboard').textContent.includes('after 1 scored period'));assert.match($('#leaderboard').textContent,/Team A/);assert.match($('#leaderboard').textContent,/Team B/);
  // A teammate receives the same final team score, an identifiable rank, and results before the exit.
- for(let i=0;i<4;i++){click('#demo-forward');await wait(()=>$('#demo-forward')||$('#season-results'));}
+ for(const offset of [540,660,810,960])await api.advancePhase(code,offset);
  await wait(()=>$('#leaderboard h2').textContent==='Final team leaderboard');
  assert.match($('.team-standing').textContent,/Your team: rank \d of 2/);
  assert.match($('.own-team').textContent,/Team A/);

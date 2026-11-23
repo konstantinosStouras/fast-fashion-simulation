@@ -1,3 +1,4 @@
+import {sessionProgress} from './functions/session-progress.js';
 const CITY_CODES = [
  'PARIS', 'ROME', 'TOKYO', 'LIMA', 'OSLO', 'MILAN', 'LONDON', 'DUBLIN',
  'BERLIN', 'MADRID', 'CAIRO', 'DUBAI', 'SEOUL', 'MIAMI', 'SYDNEY', 'BOSTON',
@@ -22,7 +23,7 @@ export async function suggestCityCodes(usedCodes, isAvailable) {
 
 export function sessionState(session,now=Date.now()){
  if(session.status==='closed')return 'Closed';
- if(session.status==='running'&&session.startedAt&&now-session.startedAt.toMillis()>=1080000)return 'Completed';
+ if(session.status==='running'&&sessionProgress(session,now)>=(session.phaseOffset==null?1080:960))return 'Completed';
  return session.status==='running'?'Running':'Waiting to start';
 }
 export function partitionSessions(sessions,now=Date.now()){

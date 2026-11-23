@@ -50,7 +50,7 @@ test('preassigned team, teammate, instructor export and individual review use th
  assert.equal(data.aiOrders[team][human][0],undefined);
  // Settle two classrooms with the same stored decisions the live result readers use.
  for(const code of [team,individual]){
-  Object.assign(data.sessions[code],{status:'closed',startedAt:Date.now()-1100000,closedAt:Date.now()});
+  Object.assign(data.sessions[code],{status:'closed',phaseOffset:960,startedAt:Date.now()-1100000,closedAt:Date.now()});
   data.orders[code]={[human]:{3:{variety:8,quantity:70,cap:20}}};
  }
  w.localStorage.setItem('ff:demo:v1',JSON.stringify(data));

@@ -1,14 +1,14 @@
 const labNames = {openai: 'OpenAI', anthropic: 'Anthropic', google: 'Google'};
 
-// Server timestamps and the local rehearsal's millisecond times describe the
-// same 18-minute session. Scoring ends before the two-minute comparison.
+import {sessionProgress} from './session-progress.js';
+
 export function classroomClock(session, now = Date.now()) {
   if (session.status !== 'running') return {status: session.status, currentPhase: null};
   const start = session.startedAt?.toMillis?.() ?? session.startedAt;
   if (!Number.isFinite(start)) return {status: 'running', currentPhase: null};
-  const seconds = (now - start) / 1000;
+  const seconds = sessionProgress(session, now);
   if (seconds < 0) return {status: 'running', currentPhase: null};
-  if (seconds >= 1080) return {status: 'completed', currentPhase: null};
+  if (seconds >= (session.phaseOffset==null?1080:960)) return {status: 'completed', currentPhase: null};
   if (seconds >= 960) return {status: 'running', currentPhase: 'comparison'};
   return {status: 'running', currentPhase: seconds >= 180 ? 'main' : 'practice'};
 }

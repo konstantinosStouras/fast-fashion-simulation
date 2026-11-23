@@ -1,6 +1,6 @@
 # Fast Fashion Ops
 
-An 18-minute executive teaching simulation about the quick-response paradox.
+A self-paced executive teaching simulation about the quick-response paradox.
 
 Live: https://www.stouras.com/fast-fashion-simulation/
 
@@ -34,11 +34,11 @@ Admin entrance: https://www.stouras.com/fast-fashion-simulation/admin/ — Googl
 
 ## Individual play and team competition
 
-Solo play starts from the signed-in welcome page; the student reads the briefing before starting the 18-minute clock. Each new game receives a random seed and appears in profile history.
+Solo play starts from the signed-in welcome page; the student reads the briefing before starting the game and advancing each phase manually. Each new game receives a random seed and appears in profile history.
 
 **Users & Teams** lists each registered user and the session codes of the classrooms they joined that went on to start. Search by name, email or student ID. Open a person’s entry to see waiting assignments, participation status, team and opponent in each phase. Instructors see participation within the classrooms they manage. The platform owner can review participation across classrooms.
 
-Choose a numbered team beside each student and select **Save team assignments**. **Default teams · new classrooms** saves the instructor’s roster even before a classroom exists. New team classrooms copy that roster at creation. Select a waiting classroom to edit its teams separately. Students join with the classroom code, and each joined participant needs an assignment before the clock starts.
+Choose a numbered team beside each student and select **Save team assignments**. **Default teams · new classrooms** saves the instructor’s roster even before a classroom exists. New team classrooms copy that roster at creation. Select a waiting classroom to edit its teams separately. Students join with the classroom code, and each joined participant needs an assignment before play starts.
 
 The platform owner can delete one registered account or all eligible accounts. Bulk deletion covers the full directory, including accounts outside the current search. A confirmation identifies the account or the total before deletion. The owner’s two administrator sign-ins are protected. Deleting an account removes its login and profile. Existing opponents and teammates keep their shared results.
 
@@ -48,13 +48,13 @@ Each pair competes for its own demand pool. The configured demand mean and stand
 
 After initial ordering locks, each team can see its market outcomes. Paired teams compare cumulative profit, sales, customers won or lost to their opponent, leftovers and footprint after each scored season. An unpaired team sees its own results. Instructors can review all matchups and export one CSV row per team and scored season. Each member’s profile shows the shared team result. Practice is excluded from scores.
 
-Team preview uses one simulated rival with disclosed fixed decisions, the same shared-market engine and no database writes. The 18-minute structure is unchanged. This is a transparent teaching prototype, not an anti-cheating exam engine.
+Team preview uses one simulated rival with disclosed fixed decisions, the same shared-market engine and no database writes. Instructors advance classroom phases when their students are ready. This is a transparent teaching prototype, not an anti-cheating exam engine.
 
 ## AI opponents
 
 In **AI settings**, an instructor can connect OpenAI, Anthropic and Google API keys and choose a text model available to their account. **Admin** lets the instructor enable AI separately for practice and the main phase at creation or in their waiting classroom. The main phase includes all three scored seasons. Private solo games use the existing individual market.
 
-Starting an AI classroom requests one independent strategy from the selected model per team or individual participant per enabled phase. The model chooses opening stock, replenishment caps and, in the final season, collection size to maximize expected profit using the classroom's costs and demand distribution. Only simulation parameters go to the provider. Ready strategies persist through preparation retries and the clock starts when all opponents are ready. Each AI matchup shares one demand draw. Extra styles redistribute that demand and customers can switch firms after a stockout. Reports use the saved opponent decisions, and practice stays outside the scored totals. The local demo and private rehearsal use simulated decisions without provider charges.
+Starting an AI classroom requests one independent strategy from the selected model per team or individual participant per enabled phase. The model chooses opening stock, replenishment caps and, in the final season, collection size to maximize expected profit using the classroom's costs and demand distribution. Only simulation parameters go to the provider. Ready strategies persist through preparation retries and play starts when all opponents are ready. Each AI matchup shares one demand draw. Extra styles redistribute that demand and customers can switch firms after a stockout. Reports use the saved opponent decisions, and practice stays outside the scored totals. The local demo and private rehearsal use simulated decisions without provider charges.
 
 ### Enabling the live service
 
