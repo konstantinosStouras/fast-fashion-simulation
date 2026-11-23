@@ -173,7 +173,7 @@ async function showProfile(returnCode=null){
   if(returnCode){const entry=[...document.querySelectorAll('[data-history]')].find(b=>b.dataset.history===returnCode);entry?.focus({preventScroll:true});entry?.closest('tr')?.scrollIntoView?.({block:'center',behavior:'auto'});}
  }catch{version===viewVersion&&$('profile-history')&&($('profile-history').textContent='Could not load your history. Reopen My activity & statistics to retry.');}
 }
-function settingsFields(c,controls=false){return `<div class="settings-grid">${SETTINGS.map(([key,label,value,min,max,step,description])=>`<div><label>${label}<input name="${key}" type="number" min="${min}" max="${max}" step="${step}" required value="${c[key]}"><span class="field-description">${description}</span></label>${controls?`<div class="assumption-actions" role="group" aria-label="${label} actions"><button type="button" data-setting="${key}" data-op="save">Save</button><button type="button" data-setting="${key}" data-op="default" ${role==="admin"?"":"disabled"}>Make this the default</button><button type="button" data-setting="${key}" data-op="restore">Restore built-in default</button></div>`:""}</div>`).join('')}</div>`;}
+function settingsFields(c,controls=false){return `<div class="settings-grid">${SETTINGS.map(([key,label,value,min,max,step,description])=>`<div><label>${label}<input name="${key}" type="number" min="${min}" max="${max}" step="${step}" required value="${c[key]}"><span class="field-description">${description}</span></label>${controls?`<div class="assumption-actions" role="group" aria-label="${label} actions"><button type="button" data-setting="${key}" data-op="save">Save</button><button type="button" data-setting="${key}" data-op="default" ${role==="admin"?"":"disabled"}>Make this the default</button><button type="button" data-setting="${key}" data-op="restore">Restore built-in default</button></div><p class="assumption-status" role="status" aria-atomic="true"></p>`:""}</div>`).join('')}</div>`;}
 function readConfig(form){const d=new FormData(form),c=Object.fromEntries(SETTINGS.map(([k])=>[k,Number(d.get(k))]));if(!validateConfig(c))throw new Error('Check the settings. Salvage must not exceed either production cost or selling price.');return c;}
 function sessionCard(s){
  const status=sessionState(s),past=status==='Completed'||status==='Closed',date=s.createdAt?.toMillis(),code=esc(s.code);
@@ -210,22 +210,42 @@ async function showStaff(draft=null){clean();staffView=true;setViewAddress('','s
   const saved=document.defaultView.sessionStorage.getItem(storageKey(key));
   if(saved!==null)createForm.elements[key].value=saved;
  }
+ createForm.addEventListener('input',event=>{
+  const status=event.target.closest('.settings-grid > div')?.querySelector('.assumption-status');
+  if(status)status.textContent='';
+ });
  createForm.addEventListener('click',event=>{
   const button=event.target.closest('button[data-setting]');
-  if(!button)return;
+  if(!button || working)return;
   const {setting,op}=button.dataset;
   const input=createForm.elements[setting];
-  if(op==='restore')input.value=DEFAULT_CONFIG[setting];
-  if(!input.reportValidity())return;
-  const value=Number(input.value);
+  const status=button.parentElement.nextElementSibling;
+  const value=op==='restore'?DEFAULT_CONFIG[setting]:Number(input.value);
+  if(op!=='restore' && !input.reportValidity()){
+   status.textContent=input.validationMessage;
+   return;
+  }
   action(async()=>{
-   if(op==='default'){
-    await api.saveDefaultField(setting,value);
-    document.defaultView.sessionStorage.removeItem(storageKey(setting));
-    note('Default saved for future sessions.');
-   }else{
-    document.defaultView.sessionStorage.setItem(storageKey(setting),String(value));
-    note(op==='restore'?'Built-in value restored for this setup.':'Value saved for this setup.');
+   const label=button.textContent;
+   const readOnly=input.readOnly;
+   input.readOnly=true;
+   button.textContent=op==='restore'?'Restoring…':'Saving…';
+   status.textContent=button.textContent;
+   try{
+    if(op==='default'){
+     await api.saveDefaultField(setting,value);
+     document.defaultView.sessionStorage.removeItem(storageKey(setting));
+     status.textContent=value+' saved as the default for future sessions.';
+    }else{
+     document.defaultView.sessionStorage.setItem(storageKey(setting),String(value));
+     if(op==='restore')input.value=value;
+     status.textContent=op==='restore'?'Built-in value restored to '+value+' for this setup.':value+' saved for this setup.';
+    }
+   }catch(error){
+    status.textContent='Could not '+(op==='restore'?'restore':'save')+' this setting. '+(error.message||'Please try again.');
+   }finally{
+    input.readOnly=readOnly;
+    button.textContent=label;
    }
   });
  });
