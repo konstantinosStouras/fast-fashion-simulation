@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {applyActionCode,confirmPasswordReset,getAuth,connectAuthEmulator} from 'firebase/auth';
 import {getApp,deleteApp} from 'firebase/app';
-import {connectFirestoreEmulator,getFirestore,doc,setDoc,serverTimestamp,getDoc,disableNetwork,enableNetwork,Timestamp} from 'firebase/firestore';
+import {connectFirestoreEmulator,getFirestore,doc,setDoc,serverTimestamp,getDoc,disableNetwork,enableNetwork} from 'firebase/firestore';
 import {initializeTestEnvironment} from '@firebase/rules-unit-testing';
 test('real backend registration stores profile and sends a working verification link',async t=>{
  assert.equal(process.env.FIREBASE_AUTH_EMULATOR_HOST,'127.0.0.1:9198','Must run inside the local emulator suite');

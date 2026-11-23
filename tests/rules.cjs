@@ -41,6 +41,46 @@ test('only a verified instructor can read and copy their own saved roster into a
  await assertFails(setDoc(doc(d,'sessions/ADDED'),{...session,teamComposition:{other:'1'}}));
  await assertFails(setDoc(doc(d,'sessions/SINGLE'),{...session,mode:'individual'}));
 });
+
+test('ordinary instructors can create team classrooms when their default roster is missing or empty',async()=>{
+ await seed();
+ const d=db('teacher'),roster=doc(d,'studioTeamDefaults/teacher');
+ // Match the backend transaction: read the new code and own default before writing.
+ for(const [code,exists] of [['NODEFAULT',false],['EMPTYDEFAULT',true]]){
+  if(exists)await env.withSecurityRulesDisabled(c=>setDoc(doc(c.firestore(),'studioTeamDefaults/teacher'),{teamComposition:{}}));
+  assertEqual((await assertSucceeds(getDoc(roster))).exists(),exists);
+  await assertSucceeds(runTransaction(d,async tx=>{
+   const room=doc(d,'sessions',code);
+   assertEqual((await tx.get(room)).exists(),false);
+   const composition=(await tx.get(roster)).data()?.teamComposition;
+   const data={name:'Team classroom',owner:'teacher',config,seed:10,mode:'team',teamPractice:true,teamSize:3,randomTeams:true,assignments:{},teamNames:{},rosterVersion:0,status:'lobby',createdAt:serverTimestamp(),startedAt:null,closedAt:null};
+   if(composition && Object.keys(composition).length)data.teamComposition=composition;
+   tx.set(room,data);
+  }));
+  assertEqual((await getDoc(doc(d,'sessions',code))).data().mode,'team');
+ }
+});
+
+test('default rosters stay private and revocation applies to an already authenticated instructor',async()=>{
+ await seed();
+ await env.withSecurityRulesDisabled(async c=>{
+  const d=c.firestore();
+  await setDoc(doc(d,'instructors/other@example.test'),{createdAt:Timestamp.now()});
+  await setDoc(doc(d,'studioTeamDefaults/teacher'),{teamComposition:{alice:'1'}});
+  await setDoc(doc(d,'studioTeamDefaults/other'),{teamComposition:{bob:'2'}});
+ });
+ const teacher=db('teacher'),other=db('other');
+ await assertSucceeds(getDoc(doc(teacher,'studioTeamDefaults/teacher')));
+ await assertFails(getDoc(doc(other,'studioTeamDefaults/teacher')));
+ await assertFails(getDocs(collection(teacher,'studioTeamDefaults')));
+ await assertFails(getDoc(doc(db('teacher','teacher@example.test',false),'studioTeamDefaults/teacher')));
+ await assertFails(getDoc(doc(db('alice'),'studioTeamDefaults/alice')));
+ await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(),'studioTeamDefaults/teacher')));
+ await assertFails(setDoc(doc(other,'sessions/FOREIGN'),{name:'Foreign roster',owner:'other',config,seed:10,mode:'team',teamPractice:true,teamSize:3,status:'lobby',createdAt:serverTimestamp(),startedAt:null,closedAt:null,teamComposition:{alice:'1'}}));
+ await env.withSecurityRulesDisabled(c=>deleteDoc(doc(c.firestore(),'instructors/teacher@example.test')));
+ await assertFails(getDoc(doc(teacher,'studioTeamDefaults/teacher')));
+ await assertFails(setDoc(doc(teacher,'sessions/REVOKED'),{name:'Revoked',owner:'teacher',config,seed:10,mode:'team',teamPractice:true,teamSize:3,status:'lobby',createdAt:serverTimestamp(),startedAt:null,closedAt:null}));
+});
 test('AI phases are configured by the classroom owner and only the trusted service can start them',async()=>{
  await seed(null,{mode:'individual'});
  const room=d=>doc(d,'sessions/ABCDEFGH');
@@ -231,7 +271,7 @@ test('a delayed initial save cannot reset a replenishment decision, including de
  assertEqual((await getDoc(doc(mate,path()))).data().cap,0);
 });
 
-test('every initial and replenishment deadline rejects expired and mismatched phases',async()=>{
+test('every initial and replenishment phase boundary rejects locked and mismatched saves',async()=>{
  const windows=[['0',0,90,180],['1',180,420,420],['2',420,540,660],['3',660,810,960]];
  for(const [r,start,split,end] of windows){
   await seed(start+10);const ref=doc(db('alice'),path('alice',r));await assertSucceeds(setDoc(ref,order({quantity:91})));
