@@ -9,7 +9,7 @@ const room = {code: 'PARIS', name: 'Classroom', mode: 'team', status: 'running',
   assignments: {student: 'captain', captain: 'captain', rival: 'rival'},
   teamNames: {captain: 'Team 1', rival: 'Team 2'}, teamOpponents: {captain: 'rival', rival: 'captain'},
   aiOpponent: {provider: 'openai', model: 'classroom-model', practice: true, main: false}};
-const describe = (session, seconds, joined = true) => summarizeUserClassroom(session, participant, joined, startedAt + seconds * 1000);
+const describe = (session, seconds, joined = true) => summarizeUserClassroom({...session,phaseOffset:seconds}, participant, joined);
 
 test('a joined team member changes from its personal AI to the saved human opponent at the phase boundary', () => {
   const practice = describe(room, ROUNDS[0].end - 1);
@@ -20,7 +20,8 @@ test('a joined team member changes from its personal AI to the saved human oppon
   assert.equal(practice.currentPhase, 'practice');
   assert.equal(describe(room, ROUNDS[1].start).activeOpponent, 'Team 2');
   const comparison = describe(room, ROUNDS.at(-1).end);
-  assert.equal(comparison.currentPhase, 'comparison');
+  assert.equal(comparison.currentPhase, null);
+  assert.equal(comparison.status, 'completed');
   assert.equal(comparison.activeOpponent, null);
   const completed = describe(room, 1080);
   assert.equal(completed.status, 'completed');

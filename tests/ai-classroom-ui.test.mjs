@@ -5,7 +5,7 @@ import {JSDOM} from 'jsdom';
 import {DEFAULT_CONFIG} from '../model.js';
 import {competitorResult} from '../market.js';
 
-test('preassigned team, teammate, instructor export and individual review use the saved opponent', async t => {
+test('new team matchups are human and historical team AI exports and individual AI reviews use their saved opponents', async t => {
  const w=new JSDOM(readFileSync('index.html','utf8'),{url:'http://localhost:8791/?demo&studio=1',pretendToBeVisual:true}).window;
  for(const key of ['document','location','localStorage','sessionStorage','FormData'])globalThis[key]=w[key];
  globalThis.addEventListener=w.addEventListener.bind(w);
@@ -41,16 +41,22 @@ test('preassigned team, teammate, instructor export and individual review use th
  assert.equal(room.teamOpponents[human],ids[2]);
  const memberRoom=(await api.getUserClassrooms(ids[1])).sessions.find(entry=>entry.code===team);
  assert.equal(memberRoom.team,'Team 1');
- assert.equal(memberRoom.practiceOpponent,'Team 2');
+ assert.equal(memberRoom.practiceOpponent,'AI practice opponent');
  assert.equal(memberRoom.activeOpponent,'Team 2');
- assert.match(memberRoom.mainOpponent,/AI opponent/);
+ assert.equal(memberRoom.mainOpponent,'Team 2');
  assert.deepEqual((await api.getUserClassrooms(ids[3])).sessions,[]);
- assert.deepEqual(Object.keys(data.aiOrders[team]).sort(),[human,ids[2]].sort());
+ assert.equal(room.phaseOffset,180);
+ assert.equal(room.teamPractice,true);
+ assert.equal(room.aiOpponent,undefined);
+ assert.equal(data.aiOrders[team],undefined);
  assert.deepEqual(Object.keys(data.aiOrders[individual]).sort(),ids.slice(0,3).sort());
- assert.equal(data.aiOrders[team][human][0],undefined);
- // Settle two classrooms with the same stored decisions the live result readers use.
+ // Restore a historical team classroom that used a saved provider strategy for
+ // each captain in its main phase, alongside today's provider-backed individual game.
+ delete room.teamPractice;
+ room.aiOpponent=aiOpponent;
+ data.aiOrders[team]=Object.fromEntries([human,ids[2]].map(uid=>[uid,data.aiOrders[individual][uid]]));
  for(const code of [team,individual]){
-  Object.assign(data.sessions[code],{status:'closed',startedAt:Date.now()-1100000,closedAt:Date.now()});
+  Object.assign(data.sessions[code],{status:'closed',phaseOffset:960,startedAt:Date.now()-1100000,closedAt:Date.now()});
   data.orders[code]={[human]:{3:{variety:8,quantity:70,cap:20}}};
  }
  w.localStorage.setItem('ff:demo:v1',JSON.stringify(data));

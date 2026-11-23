@@ -2,7 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {FieldPath, FieldValue, Timestamp} from 'firebase-admin/firestore';
 import {AiError, discoverModels, generatePlan, phaseRounds, providers, validPlan} from './providers.js';
 import {openKey, sealKey} from './keys.js';
-import {getTeamComposition, makeTeamOpponents, materializeTeams, validateTeams} from './teams.js';
+import {assignJoiningTeam, getTeamComposition, materializeTeams} from './teams.js';
 import {summarizeUserClassroom} from './user-classrooms.js';
 
 const OWNER_EMAIL = 'kstouras@gmail.com'; // Same platform-owner identity as firestore.rules.
@@ -56,22 +56,9 @@ export function aiService({db, auth, encryptionSecret, discover = discoverModels
   }
   async function lobbyOpponent(request, tx, ref, competitor, phase) {
     const s = await readOwnedSession(request, tx, ref);
-    requireValue(s.status === 'lobby' && s.aiOpponent?.[phase] === true && Object.hasOwn(providers, s.aiOpponent.provider),
+    requireValue(s.status === 'lobby' && s.mode !== 'team' && s.aiOpponent?.[phase] === true && Object.hasOwn(providers, s.aiOpponent.provider),
       'failed-precondition', 'This phase needs an active AI opponent in a waiting classroom.');
-    if (s.mode === 'team' && s.teamComposition != null) {
-      // Resolve just this team against today's join list. A classroom-wide
-      // roster scan on every provider request would multiply reads by team count.
-      const number = s.teamComposition[competitor];
-      requireValue(validTeamNumber(number), 'failed-precondition', 'Refresh the current team assignments.');
-      const members = Object.keys(s.teamComposition).filter(uid => s.teamComposition[uid] === number);
-      const docs = await tx.getAll(...members.map(uid => ref.collection('participants').doc(uid)), {fieldMask: ['joinedAt']});
-      const joined = docs.filter(doc => doc.exists).map(doc => ({uid: doc.id}));
-      requireValue(Object.hasOwn(materializeTeams(joined, s).teamNames, competitor), 'failed-precondition', 'Refresh the current team assignments.');
-    } else {
-      requireValue((await tx.get(ref.collection('participants').doc(competitor))).exists, 'failed-precondition', 'The participant must join the classroom first.');
-      if (s.mode === 'team') requireValue(s.assignments?.[competitor] === competitor && Object.hasOwn(s.teamNames || {}, competitor),
-        'failed-precondition', 'Refresh the current team assignments.');
-    }
+    requireValue((await tx.get(ref.collection('participants').doc(competitor))).exists, 'failed-precondition', 'The participant must join the classroom first.');
     return s;
   }
   function matches(doc, session, phase) {
@@ -172,19 +159,13 @@ export function aiService({db, auth, encryptionSecret, discover = discoverModels
       const phases = Object.keys(phaseRounds).filter(p => s.aiOpponent?.[p] === true);
       requireValue(phases.length > 0, 'failed-precondition', 'Enable at least one AI opponent phase.');
       if (s.status === 'running') return {started: true};
+      requireValue(s.mode !== 'team', 'failed-precondition', 'Start team competition with the human opponent draw.');
       requireValue(s.status === 'lobby', 'failed-precondition', 'Only a waiting classroom can start.');
       const roster = await tx.get(ref.collection('participants').select());
       const people = roster.docs.map(doc => ({uid: doc.id}));
       requireValue(people.length, 'failed-precondition', 'At least one participant must join before starting an AI classroom.');
-      let competitors = people.map(p => p.uid);
-      const update = {status: 'running', startedAt: timestamp()};
-      if (s.mode === 'team') {
-        const teams = materializeTeams(people, s);
-        requireValue(validateTeams(people, teams.assignments, teams.teamNames), 'failed-precondition', 'Assign every joined participant to a team before starting.');
-        Object.assign(update, teams, {teamOpponents: makeTeamOpponents(teams.teamNames)});
-        competitors = Object.keys(teams.teamNames);
-      }
-      const refs = competitors.flatMap(uid => phases.map(phase => ref.collection('participants').doc(uid).collection('aiOpponents').doc(phase)));
+      const update = {status: 'running', phaseOffset: 0, startedAt: timestamp()};
+      const refs = roster.docs.map(doc => doc.id).flatMap(uid => phases.map(phase => ref.collection('participants').doc(uid).collection('aiOpponents').doc(phase)));
       for (let i = 0; i < refs.length; i += 100) {
         const docs = await tx.getAll(...refs.slice(i, i + 100));
         requireValue(docs.every(doc => matches(doc.data(), s, doc.id)), 'failed-precondition',
@@ -192,6 +173,41 @@ export function aiService({db, auth, encryptionSecret, discover = discoverModels
       }
       tx.update(ref, update);
       return {started: true};
+    });
+  }
+
+  async function joinTeamClassroom(request) {
+    const {uid,token} = request.auth || {};
+    requireValue(validUid(uid) && token?.email_verified === true && typeof token.email === 'string',
+      'permission-denied', 'Sign in with a verified account to join a classroom.');
+    const name = typeof request.data?.name === 'string' ? request.data.name.trim() : '';
+    requireValue(name.length > 0 && name.length <= 80,
+      'invalid-argument', 'Enter your participant name (up to 80 characters).');
+    const ref = sessionRef(request.data?.code), person = ref.collection('participants').doc(uid);
+    const history = db.collection('profiles').doc(uid).collection('sessions').doc(ref.id);
+    return db.runTransaction(async tx => {
+      const [room,member] = await tx.getAll(ref,person);
+      const s = room.data();
+      requireValue(s && !s.deletedAt && s.mode === 'team','not-found','Team classroom not found.');
+      if (!member.exists || (s.status === 'lobby' && !s.assignments?.[uid])) {
+        requireValue(s.status === 'lobby','failed-precondition','This classroom has already started or closed.');
+        if (!member.exists && (s.teamSize == null || (s.rosterVersion ?? 0) >= 500)) {
+          // Older rosters can contain unassigned people; a revision can also
+          // exceed present membership after an administrator removes someone.
+          const roster = await tx.get(ref.collection('participants').select().limit(500));
+          requireValue(roster.size < 500,'resource-exhausted','This classroom is full.');
+        }
+        let teams;
+        try { teams=assignJoiningTeam(s,uid); }
+        catch (error) { throw new AiError('failed-precondition',error.message); }
+        if (!member.exists) {
+          tx.create(person,{name,email:token.email,joinedAt:timestamp()});
+          teams.rosterVersion=(s.rosterVersion ?? 0)+1;
+        }
+        tx.update(ref,teams);
+      }
+      tx.set(history,{joined:true});
+      return {joined:true};
     });
   }
 
@@ -222,8 +238,8 @@ export function aiService({db, auth, encryptionSecret, discover = discoverModels
     }
     const rooms = db.collection('sessions');
     const teamNumber = new FieldPath('teamComposition', uid), assigned = new FieldPath('assignments', uid);
-    const fields = ['name', 'mode', 'status', 'createdAt', 'startedAt', 'closedAt',
-      'teamNames', 'teamOpponents', 'aiOpponent', assigned, teamNumber];
+    const fields = ['name', 'mode', 'status', 'createdAt', 'startedAt', 'closedAt', 'phaseOffset',
+      'teamNames', 'teamOpponents', 'teamPractice', 'aiOpponent', assigned, teamNumber];
     const managed = account.isOwner ? rooms : rooms.where('owner', '==', account.uid);
     const pageSize = 100;
     const query = managed.orderBy(FieldPath.documentId()).limit(pageSize).select('owner', 'mode', 'status', 'deletedAt', teamNumber);
@@ -284,20 +300,22 @@ export function aiService({db, auth, encryptionSecret, discover = discoverModels
     return db.runTransaction(async tx => {
       const s = await confirmLobby(tx);
       requireValue(s.createdAt.isEqual(expected.createdAt), 'aborted', 'This classroom was replaced. Refresh its team assignments.');
-      const composition = getTeamComposition(s);
+      const composition = s.teamComposition!=null ? {...s.teamComposition} : s.teamSize==null ? getTeamComposition(s) : {};
       for (const [uid, number] of entries) {
         if (number === null) delete composition[uid];
         else composition[uid] = number;
       }
       const counts = new Map();
       for (const number of Object.values(composition)) counts.set(number, (counts.get(number) || 0) + 1);
-      requireValue(Object.keys(composition).length <= 500 && [...counts.values()].every(n => n <= 20), 'invalid-argument',
-        'A team can have up to 20 users and a classroom up to 500.');
+      requireValue(Object.keys(composition).length <= 500 && [...counts.values()].every(n => n <= (s.teamSize??20)), 'invalid-argument',
+        'Keep each team at or below its configured size and the classroom within 500 participants.');
       const roster = await tx.get(ref.collection('participants').select());
-      const teams = materializeTeams(roster.docs.map(doc => ({uid: doc.id})), {...s, teamComposition: composition});
+      let teams;
+      try { teams=materializeTeams(roster.docs.map(doc => ({uid:doc.id})), {...s,teamComposition:composition}); }
+      catch (error) { throw new AiError('invalid-argument',error.message); }
       tx.update(ref, {teamComposition: composition, ...teams});
       return {teamComposition: composition, ...teams};
     });
   }
-  return {getAiSettings, saveAiSettings, prepareAiOpponent, startAiSession, listTeamUsers, getUserClassrooms, saveTeamComposition};
+  return {getAiSettings, saveAiSettings, prepareAiOpponent, startAiSession, joinTeamClassroom, listTeamUsers, getUserClassrooms, saveTeamComposition};
 }

@@ -1,13 +1,15 @@
+import {sessionProgress,hasHomeTeamPractice} from './functions/session-progress.js?v=home-practice-1';
 import {sessionCodeFromUrl} from './auth-flow.js?v=session-codes-1';
 import {normalizeSessionCode,SESSION_CODE_PATTERN} from './session-code.js';
 import {makeTeamOpponents,teamMatchup,aiActive,competitorResult,usesPairedMarkets} from './market.js?v=ai-opponents-1';
 import {rehearsalAiOrders} from './ai-rehearsal.js';
-import {decisionOwner,groupTeams,validateTeams,leaderboard} from './competition.js?v=ai-opponents-1';
+import {mountTeamPractice,clearTeamPractice} from './team-practice-ui.js';
+import {decisionOwner,groupTeams,validateTeams,leaderboard} from './competition.js?v=home-practice-1';
 import {ROUNDS,DEFAULT_ORDER,DEFAULT_CONFIG,SETTINGS,validateConfig,phaseAt,signalFor} from './model.js?v=team-pairs-1';
 import {studioNavigation,showAiSettingsPanel,aiPhaseFields,phaseModelHint,readAiOpponent,editSessionAi} from './studio-ai.js?v=studio-header-1';
-import {showTeamsPanel} from './studio-teams.js?v=ai-opponent-1';
-import {suggestCityCodes,sessionState,partitionSessions,decisionSummary} from './studio.js?v=city-codes-1';
-import {profileComplete,profileFields,historyStats,PLATFORM_FIELDS} from './profile.js?v=ai-opponents-1';
+import {showTeamsPanel} from './studio-teams.js?v=home-practice-1';
+import {suggestCityCodes,sessionState,partitionSessions,decisionSummary} from './studio.js?v=home-practice-1';
+import {profileComplete,profileFields,historyStats,PLATFORM_FIELDS} from './profile.js?v=home-practice-1';
 import {escapeHtml as esc,friendlyAuthError,safeStorage,setBusy,revealInvalidField,csvCell} from './ui.js?v=ai-opponent-1';
 import {accountLabel,ADMIN_ACCOUNT_EMAIL} from './auth-identity.js?v=multi-admin-1';
 const resumeStorage=safeStorage(()=>localStorage),tabStorage=safeStorage(()=>sessionStorage);
@@ -22,7 +24,7 @@ const demo=/^(localhost|127\.0\.0\.1)$/.test(location.hostname)&&new URLSearchPa
 const $=id=>document.getElementById(id);
 const money=n=>new Intl.NumberFormat('en-IE',{style:'currency',currency:'USD',currencyDisplay:'narrowSymbol',maximumFractionDigits:0}).format(n),fmt=n=>Math.round(n).toLocaleString();
 const time=n=>{n=Math.max(0,Math.ceil(n));return `${Math.floor(n/60)}:${String(n%60).padStart(2,'0')}`;};
-let api,user=null,role='student',session=null,orders={},roster=[],classOrders={},subscriptions=[],rosterSubs=new Map(),staffView=false,authMode='login',phaseKey='',tickHandle,working=false,demoOffset=0;
+let api,user=null,role='student',session=null,orders={},roster=[],classOrders={},subscriptions=[],rosterSubs=new Map(),staffView=false,authMode='login',phaseKey='',working=false;
 let retryAccount=null,historyNeedsRefresh=false;
 let exportUrl=null,historyReviewCode=null,historyReviewPending=false,sessionEntryPending=false;
 let studentPreview=null,profile=null,orderUnsub=null,currentOrderUid=null,marketReady='',marketLoading='',finalTeamOrders=null;
@@ -31,7 +33,7 @@ const note=message=>{$('notice').textContent=message;};
 function failure(error){
  const code=String(error.code||'');
  if(staffView&&code.startsWith('functions/')){note(error.message||'The classroom service could not complete the request.');return;}
- const message=code.includes('permission-denied')?'Access denied or the deadline has passed. Check your verified account and session.'
+ const message=code.includes('permission-denied')?'Access denied or the phase has changed. Check your verified account and session.'
   :code.includes('unavailable')?'Connection unavailable. Your decision has not been confirmed. Reconnect and try again.'
   :error.message||'Something went wrong. Please try again.';
  note(message);
@@ -43,7 +45,7 @@ document.addEventListener('invalid',revealInvalidField,true);
 document.querySelector('.brand').addEventListener('click',e=>{e.preventDefault();action(async()=>{if(session||staffView)setViewAddress();clean();staffView=false;note('');landing();window.scrollTo?.({top:0,behavior:'auto'});});});
 function confirmAction(message){return new Promise(resolve=>{const d=document.createElement('dialog');d.innerHTML=`<h2>Confirm your decision.</h2><p>${esc(message)}</p><div class="button-row"><button data-yes>Confirm</button><button class="secondary" data-no>Cancel</button></div>`;document.body.append(d);const done=value=>{d.close();d.remove();resolve(value);};d.querySelector('[data-yes]').onclick=()=>done(true);d.querySelector('[data-no]').onclick=()=>done(false);d.oncancel=e=>{e.preventDefault();done(false);};d.showModal();});}
 function clearExport(){if(exportUrl){URL.revokeObjectURL(exportUrl);exportUrl=null;}}
-function clean(){document.querySelector('header > .studio-nav')?.remove();if(studentPreview)clearRehearsal();localDecisionWrites.clear();historyNeedsRefresh=false;sessionFresh=true;ordersFresh=true;savePending=false;pendingDecision=null;connectionBanner.hidden=true;historyReviewCode=null;historyReviewPending=false;sessionEntryPending=false;clearExport();viewVersion++;ordersReady=false;rosterReady=false;renderedOrderKey='';teamEditor=null;clearTimeout(rosterTimer);rosterTimer=null;orderUnsub?.();orderUnsub=null;currentOrderUid=null;marketReady='';marketLoading='';finalTeamOrders=null;subscriptions.forEach(f=>f());subscriptions=[];rosterSubs.forEach(f=>f());rosterSubs.clear();clearInterval(tickHandle);session=null;orders={};roster=[];classOrders={};phaseKey='';studentPreview=null;demoOffset=0;}
+function clean(){document.querySelector('header > .studio-nav')?.remove();if(studentPreview)clearRehearsal();localDecisionWrites.clear();historyNeedsRefresh=false;sessionFresh=true;ordersFresh=true;savePending=false;pendingDecision=null;connectionBanner.hidden=true;historyReviewCode=null;historyReviewPending=false;sessionEntryPending=false;clearExport();viewVersion++;ordersReady=false;rosterReady=false;renderedOrderKey='';teamEditor=null;clearTimeout(rosterTimer);rosterTimer=null;orderUnsub?.();orderUnsub=null;currentOrderUid=null;marketReady='';marketLoading='';finalTeamOrders=null;subscriptions.forEach(f=>f());subscriptions=[];rosterSubs.forEach(f=>f());rosterSubs.clear();session=null;orders={};roster=[];classOrders={};phaseKey='';studentPreview=null;}
 function updateConnection(){
  const active=session&&!staffView&&!studentPreview;
  connectionBanner.hidden=!active;
@@ -52,7 +54,7 @@ function updateConnection(){
  const finalConfirmed=session.status==='closed'&&finalTeamOrders!==null&&sessionFresh&&connected;
  if(session.status==='closed'&&(!connected||!sessionFresh)){finalTeamOrders=null;marketReady='';marketLoading='';$('app').innerHTML='<section class="panel" id="session-rechecking"><h1>Reconnect to check this session.</h1><p>Results are hidden until the server confirms this session is still available. Your instructor may have deleted it.</p></section>';}
  connectionBanner.dataset.state=!connected?'waiting':finalConfirmed?'ready':savePending?'saving':waiting?'waiting':'ready';
- connectionBanner.textContent='Session '+session.code+' · '+(!connected?(session.status==='closed'?'Offline. This session is closed. Reconnect to confirm final scores.':'Offline. Reconnect to receive team updates and save. The clock keeps running.'):finalConfirmed?(session.mode==='team'?'Session closed · final team scores confirmed. Later saves cannot change them.':'Session closed · final scores confirmed.'):savePending?'Save pending. Keep this page open until confirmation.':waiting?'Reconnecting… waiting for the latest session and saved decisions.':session.status==='lobby'?'Connected · waiting for your instructor.':'Connected · saved decisions are up to date.');
+ connectionBanner.textContent='Session '+session.code+' · '+(!connected?(session.status==='closed'?'Offline. This session is closed. Reconnect to confirm final scores.':'Offline. Reconnect to receive team updates and save.'):finalConfirmed?(session.mode==='team'?'Session closed · final team scores confirmed. Later saves cannot change them.':'Session closed · final scores confirmed.'):savePending?'Save pending. Keep this page open until confirmation.':waiting?'Reconnecting… waiting for the latest session and saved decisions.':session.status==='lobby'?'Connected · waiting for your instructor.':'Connected · saved decisions are up to date.');
  const button=$('save-order');if(button)button.disabled=waiting||savePending||(session.mode==='team'&&decisionOwner(session,user.uid)!==user.uid);
 }
 function resumeVisibleGame(){
@@ -61,15 +63,15 @@ function resumeVisibleGame(){
  if(historyNeedsRefresh&&$('profile-history')&&connected){refreshHistory();return;}
  if(!session)return;
  const p=phase(),key=p.index+':'+p.kind+':'+session.status;
- if(key!==phaseKey||$('retry-market'))renderSession();else updateClock();
+ if(key!==phaseKey||$('retry-market'))renderSession();
  updateConnection();
 }
 pageWindow.addEventListener('offline',()=>{connected=false;hideUnconfirmedHistory();updateConnection();});
 pageWindow.addEventListener('online',()=>{connected=true;if(retryAccount){retryAccount();return;}const retry=$('retry-session')||$('retry-orders');if(retry){retry.click();return;}resumeVisibleGame();});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')resumeVisibleGame();});
 pageWindow.addEventListener('pageshow',resumeVisibleGame);
-const elapsed=()=>session?.startedAt?((session.closedAt?.toMillis()??(Date.now()+demoOffset))-session.startedAt.toMillis())/1000:-1;
-const phase=()=>phaseAt(elapsed());
+const progress=()=>sessionProgress(session);
+const phase=()=>phaseAt(progress());
 function closeAccountMenu(restoreFocus=false){
  const menu=$('account-menu'),toggle=$('account-toggle');
  if(!menu||menu.hidden)return;
@@ -141,7 +143,7 @@ function showJoinForm(){
  target?.focus();target?.scrollIntoView?.({block:'center',behavior:'auto'});
 }
 function landing(){
- $('app').innerHTML=`<section class="hero"><div class="hero-copy"><p class="eyebrow"><span class="dot"></span> A BOARDROOM DECISION. A WORLD OF CONSEQUENCES.</p><h1>Speed sells.<br><em>At what cost?</em></h1><p class="intro">Lead a fashion house through three seasons.<br>Read the market. Make your move.<br>Find the hidden cost of getting faster.</p><div class="hero-actions">${!user?'<button id="enter">Enter the simulation <span>↗</span></button>':!user.emailVerified?`<div class="panel verification-panel"><h2>Verify your email.</h2><p>Verify this email address:<strong class="verification-email">${esc(user.email)}</strong></p><p>Open the verification link, then return here to check your status.</p>${sessionCodeFromUrl(location.href)?'<p class="auth-context">Session '+esc(sessionCodeFromUrl(location.href))+' is waiting for you.</p>':''}<button id="verified">I have verified my email</button><button class="secondary" id="resend">Resend verification email</button><p id="verification-status" role="status" aria-live="polite">Check your spam folder if the email is missing.</p><button class="secondary" id="verify-switch">Use another account</button></div>`:!profileComplete(profile)?'<div class="panel"><h2>Complete your profile.</h2><p>Add your first name, last name and university ID to join your class.</p><button id="complete-profile">Complete profile →</button></div>':`<div class="join-box"><button type="button" id="solo-play">Play solo ↗</button><p class="hint">Your own 18-minute game with a fresh random market. No session code needed. Results are saved to your profile.</p></div><form class="join-box" id="join"><p class="eyebrow">YOUR CLASS IS WAITING</p><label>Your name<input name="name" maxlength="80" required value="${esc(profileComplete(profile)?(profile.firstName+' '+profile.lastName).slice(0,80):user.displayName||'')}" autocomplete="name"></label><label for="session-code">Session code</label><input id="session-code" name="code" maxlength="32" minlength="3" required pattern="${SESSION_CODE_PATTERN}" placeholder="PARIS" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" class="code-input" aria-describedby="session-code-help join-status"><p class="hint" id="session-code-help">Enter the code from your instructor. Spaces and hyphens are ignored.</p><button>Join session ↗</button><p id="join-status" role="status" aria-live="polite" aria-atomic="true"></p><p class="hint">Your instructor provides the code. Your profile and decisions are visible to you and authorised teaching staff.</p></form>`}</div><div class="hero-meta"><span><b>18</b> MINUTES</span><span><b>03</b> SEASONS</span><span><b>01</b> PRACTICE ROUND</span></div></div><div class="editorial" aria-hidden="true"><div class="art-label">SCENARIO 01 / THE QUICK-RESPONSE PARADOX</div><div class="fabric fabric-one"></div><div class="fabric fabric-two"></div><div class="fabric fabric-three"></div><div class="art-caption"><span>LESS WASTE.<br>MORE PRODUCTION?</span><b>↗</b></div><span class="art-index">FFO—01</span></div></section><section class="manifesto"><p>THE CHALLENGE</p><h2>A leaner business.<br>A larger footprint.<br><em>Both can be true.</em></h2><div><p>Better information can reduce unsold stock. But what happens when you use that advantage to grow?</p><p>One short simulation. Three decisions that challenge your intuition.</p></div></section>`;
+ $('app').innerHTML=`<section class="hero"><div class="hero-copy"><p class="eyebrow"><span class="dot"></span> A BOARDROOM DECISION. A WORLD OF CONSEQUENCES.</p><h1>Speed sells.<br><em>At what cost?</em></h1><p class="intro">Lead a fashion house through three seasons.<br>Read the market. Make your move.<br>Find the hidden cost of getting faster.</p><div class="hero-actions">${!user?'<button id="enter">Enter the simulation <span>↗</span></button>':!user.emailVerified?`<div class="panel verification-panel"><h2>Verify your email.</h2><p>Verify this email address:<strong class="verification-email">${esc(user.email)}</strong></p><p>Open the verification link, then return here to check your status.</p>${sessionCodeFromUrl(location.href)?'<p class="auth-context">Session '+esc(sessionCodeFromUrl(location.href))+' is waiting for you.</p>':''}<button id="verified">I have verified my email</button><button class="secondary" id="resend">Resend verification email</button><p id="verification-status" role="status" aria-live="polite">Check your spam folder if the email is missing.</p><button class="secondary" id="verify-switch">Use another account</button></div>`:!profileComplete(profile)?'<div class="panel"><h2>Complete your profile.</h2><p>Add your first name, last name and university ID to join your class.</p><button id="complete-profile">Complete profile →</button></div>':`<div class="join-box"><button type="button" id="solo-play">Play solo ↗</button><p class="hint">Your own game with a fresh random market. No session code needed. Results are saved to your profile.</p></div><form class="join-box" id="join"><p class="eyebrow">YOUR CLASS IS WAITING</p><label>Your name<input name="name" maxlength="80" required value="${esc(profileComplete(profile)?(profile.firstName+' '+profile.lastName).slice(0,80):user.displayName||'')}" autocomplete="name"></label><label for="session-code">Session code</label><input id="session-code" name="code" maxlength="32" minlength="3" required pattern="${SESSION_CODE_PATTERN}" placeholder="PARIS" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" class="code-input" aria-describedby="session-code-help join-status"><p class="hint" id="session-code-help">Enter the code from your instructor. Spaces and hyphens are ignored.</p><button>Join session ↗</button><p id="join-status" role="status" aria-live="polite" aria-atomic="true"></p><p class="hint">Your instructor provides the code. Your profile and decisions are visible to you and authorised teaching staff.</p></form>`}</div><div class="hero-meta"><span><b>03</b> SEASONS</span><span><b>01</b> PRACTICE ROUND</span></div></div><div class="editorial" aria-hidden="true"><div class="art-label">SCENARIO 01 / THE QUICK-RESPONSE PARADOX</div><div class="fabric fabric-one"></div><div class="fabric fabric-two"></div><div class="fabric fabric-three"></div><div class="art-caption"><span>LESS WASTE.<br>MORE PRODUCTION?</span><b>↗</b></div><span class="art-index">FFO—01</span></div></section><section class="manifesto"><p>THE CHALLENGE</p><h2>A leaner business.<br>A larger footprint.<br><em>Both can be true.</em></h2><div><p>Better information can reduce unsold stock. But what happens when you use that advantage to grow?</p><p>One short simulation. Three decisions that challenge your intuition.</p></div></section>`;
  const codeInput=$('join')?.elements.code;if(codeInput)codeInput.addEventListener('input',()=>{codeInput.value=normalizeSessionCode(codeInput.value);$('join-status').textContent='';});
  const sharedCode=sessionCodeFromUrl(location.href);if(codeInput&&sharedCode)codeInput.value=sharedCode;
  $('solo-play')?.addEventListener('click',()=>action(async()=>{const code=await api.createSession('Solo · '+new Date().toLocaleDateString('en-GB'),{...DEFAULT_CONFIG},'solo');await api.joinSession(code,(profile.firstName+' '+profile.lastName).slice(0,80));await openSession(code,false);}));
@@ -202,7 +204,7 @@ async function showStaffTeams(draft=null,code=null){
  void showTeamsPanel(panel,api,role==='admin',code,roomCode=>action(()=>openSession(roomCode,true))).catch(error=>{if(panel.isConnected)failure(error);});
 }
 async function showStaff(draft=null){clean();staffView=true;setViewAddress('','staff');const version=viewVersion;const [sessions,defaults]=await Promise.all([api.listSessions(role==='admin'),api.getDefaults()]);if(version!==viewVersion)return;
- $('app').innerHTML=`<h1 class="sr-only">Admin</h1><div class="studio-layout"><aside class="studio-options" aria-label="Session setup and admin options"><section class="panel"><p class="eyebrow">01 / DESIGN YOUR SESSION</p><h2>Create a classroom.</h2><form id="create"><label>Session name<input name="name" maxlength="80" required placeholder="Executive MBA · November"></label><label for="classroom-code">Session code</label><input id="classroom-code" name="code" type="text" class="code-input" required minlength="3" maxlength="12" pattern="${SESSION_CODE_PATTERN}" aria-describedby="classroom-code-help classroom-code-status" autocomplete="off" autocapitalize="characters" spellcheck="false"><p id="classroom-code-help" class="hint">Choose a city below or type your own code using 3–12 letters or numbers.</p><div id="city-suggestions" role="group" aria-label="Suggested city codes"></div><p id="classroom-code-status" class="hint" role="status">Checking available cities…</p><label>Play mode<select name="mode" aria-describedby="play-mode-help"><option value="individual">Individual play</option><option value="team">Team competition</option></select><span class="field-description" id="play-mode-help"></span></label>${aiPhaseFields()}<p id="create-ai-model" class="hint" aria-live="polite">Loading the selected AI model…</p><details class="settings"><summary>Market & business assumptions</summary>${settingsFields(defaults,true)}</details><p class="hint">Defaults are ready to use. Market assumptions lock when you create a session. You can change the AI opponent phases until you start the clock.</p><button>Create session ↗</button><button type="button" id="preview-settings" class="secondary">Test round</button><p class="hint">Rehearse practice and all three seasons on the 18-minute clock. Your decisions stay in this tab.<span id="ai-rehearsal-help" hidden> Test round uses a simulated rival. Start a classroom for the selected AI model.</span></p></form></section></aside><div class="studio-sessions" aria-label="Classroom sessions"><section class="panel" aria-labelledby="active-heading"><div class="heading"><h2 id="active-heading">Active sessions</h2><span class="pill" id="active-count"></span></div><p class="hint">Open a waiting or running class to manage participants, follow decisions and export results.</p><div id="card-export-status" role="status" aria-live="polite"></div><button type="button" class="small secondary danger" id="active-delete-all" aria-label="Delete all active sessions" hidden>Delete all</button><div id="active-sessions"></div></section><section class="panel" aria-labelledby="past-heading"><div class="heading"><h2 id="past-heading">Past sessions</h2><span class="pill" id="past-count"></span></div><p class="hint">Review completed or closed classes, export their results, or rehearse with the same assumptions.</p><button type="button" class="small secondary danger" id="past-delete-all" aria-label="Delete all past sessions" hidden>Delete all</button><div id="past-sessions"></div></section><section class="panel studio-guide"><h3>18 minutes, start to finish.</h3><p class="hint">Practice 3 min → order ahead 4 min → quick response 4 min → expand 5 min → compare 2 min. Test rounds follow the same deadlines. Profit is the business score; leftovers and footprint stay separate.</p></section></div></div>`;
+ $('app').innerHTML=`<h1 class="sr-only">Admin</h1><div class="studio-layout"><aside class="studio-options" aria-label="Session setup and admin options"><section class="panel"><p class="eyebrow">01 / DESIGN YOUR SESSION</p><h2>Create a classroom.</h2><form id="create"><label>Session name<input name="name" maxlength="80" required placeholder="Executive MBA · November"></label><label for="classroom-code">Session code</label><input id="classroom-code" name="code" type="text" class="code-input" required minlength="3" maxlength="12" pattern="${SESSION_CODE_PATTERN}" aria-describedby="classroom-code-help classroom-code-status" autocomplete="off" autocapitalize="characters" spellcheck="false"><p id="classroom-code-help" class="hint">Choose a city below or type your own code using 3–12 letters or numbers.</p><div id="city-suggestions" role="group" aria-label="Suggested city codes"></div><p id="classroom-code-status" class="hint" role="status">Checking available cities…</p><label>Play mode<select name="mode" aria-describedby="play-mode-help"><option value="individual">Individual play</option><option value="team">Team competition</option></select><span class="field-description" id="play-mode-help"></span></label><label id="classroom-team-size-field" hidden>Students per team<input name="teamSize" type="number" inputmode="numeric" min="1" max="20" step="1" value="3" required disabled><span class="field-description">Students join teams automatically with the classroom code. If the class does not divide evenly, the last team can be smaller.</span></label>${aiPhaseFields()}<p id="create-ai-model" class="hint" aria-live="polite">Loading the selected AI model…</p><details class="settings"><summary>Market & business assumptions</summary>${settingsFields(defaults,true)}</details><p class="hint">Market assumptions lock when you create the classroom.</p><button>Create session ↗</button><button type="button" id="preview-settings" class="secondary">Test round</button><p class="hint">Rehearse practice and all three seasons at your own pace. Your decisions stay in this tab.<span id="ai-rehearsal-help" hidden> Test round uses a simulated rival. Start a classroom for the selected AI model.</span></p></form></section></aside><div class="studio-sessions" aria-label="Classroom sessions"><section class="panel" aria-labelledby="active-heading"><div class="heading"><h2 id="active-heading">Active sessions</h2><span class="pill" id="active-count"></span></div><p class="hint">Open a waiting or running class to manage participants, follow decisions and export results.</p><div id="card-export-status" role="status" aria-live="polite"></div><button type="button" class="small secondary danger" id="active-delete-all" aria-label="Delete all active sessions" hidden>Delete all</button><div id="active-sessions"></div></section><section class="panel" aria-labelledby="past-heading"><div class="heading"><h2 id="past-heading">Past sessions</h2><span class="pill" id="past-count"></span></div><p class="hint">Review completed or closed classes, export their results, or rehearse with the same assumptions.</p><button type="button" class="small secondary danger" id="past-delete-all" aria-label="Delete all past sessions" hidden>Delete all</button><div id="past-sessions"></div></section></div></div>`;
  showStudioNavigation('admin');
  const createForm=$('create'), mode=createForm.elements.mode;
  const storageKey=key=>'ffo:setup:'+user.uid+':'+key;
@@ -242,17 +244,22 @@ async function showStaff(draft=null){clean();staffView=true;setViewAddress('','s
   if(version===viewVersion)$('create-ai-model').textContent='AI settings could not load. Open AI settings to reconnect before activating an opponent.';
  });
  const sessionOpponent=async()=>{
+  if(mode.value==='team')return null;
   if(createForm.elements.aiPractice.checked||createForm.elements.aiMain.checked)await aiSettingsRequest;
   return readAiOpponent(createForm,aiSettings);
  };
  const updateModeHelp=()=>{
-  const enabled=createForm.elements.aiPractice.checked||createForm.elements.aiMain.checked;
-  $('ai-rehearsal-help').hidden=!enabled;
-  $('play-mode-help').textContent=mode.value==='team'&&enabled
-  ? 'Each captain submits one decision for their team. Each team plays its own AI rival in the phases you select. Other phases use random human team pairings.'
-  : mode.value==='team'
-  ? 'Use Users & Teams to assign registered students to this classroom. Each team shares one set of decisions. Teams are paired at random at the start and play the same opponent from practice through the final season. Each pair has its own market. With an odd number of teams, the unpaired team uses individual play.'
-  : 'Each participant manages a collection and makes decisions in their own market.';};
+  const team=mode.value==='team',fields=createForm.querySelector('.ai-phase-fields');
+  $('classroom-team-size-field').hidden=!team;
+  createForm.elements.teamSize.disabled=!team;
+  fields.hidden=team;
+  fields.disabled=team;
+  $('create-ai-model').hidden=team;
+  $('ai-rehearsal-help').hidden=team||!(createForm.elements.aiPractice.checked||createForm.elements.aiMain.checked);
+  $('play-mode-help').textContent=team
+   ? 'Share the classroom code so students can practice against AI as often as they like before class. When you start the scored competition, teams draw a human opponent for all three seasons. An unpaired team uses individual play.'
+   : 'Each participant manages a collection in their own market. You advance the classroom when students are ready.';
+ };
  mode.addEventListener('change',updateModeHelp);
  createForm.elements.aiPractice.onchange=updateModeHelp;
  createForm.elements.aiMain.onchange=updateModeHelp;
@@ -329,7 +336,7 @@ async function showStaff(draft=null){clean();staffView=true;setViewAddress('','s
  document.querySelectorAll('[data-card-delete]').forEach(b=>b.onclick=()=>action(async()=>{
   if(await confirmAction('Permanently delete session '+b.dataset.cardDelete+' and all its participant decisions and results? This cannot be undone. Export data first if you need a copy.')){await api.deleteSession(b.dataset.cardDelete);await showStaff();note('Session and its results deleted.');}
  }));
- };drawSessions();tickHandle=setInterval(drawSessions,1000);
+ };drawSessions();
  for(const source of sessions){
   subscriptions.push(api.watchParticipants(source.code,people=>{
    if(version!==viewVersion)return;source.participantCount=people.length;
@@ -347,7 +354,7 @@ async function showStaff(draft=null){clean();staffView=true;setViewAddress('','s
   const form=e.target, data=new FormData(form), requestedCode=normalizeSessionCode(data.get('code'));
   action(async()=>{
    try{
-    await api.createSession(data.get('name').trim(),readConfig(form),data.get('mode'),requestedCode,await sessionOpponent());
+    await api.createSession(data.get('name').trim(),readConfig(form),data.get('mode'),requestedCode,await sessionOpponent(),data.get('mode')==='team'?form.elements.teamSize.valueAsNumber:undefined);
    }catch(error){
     if(error.code!=='session-code-taken')throw error;
     usedCodes.add(requestedCode);
@@ -448,7 +455,7 @@ async function openSession(code,staff,review=false,focusEntry=false){
  subscriptions.push(api.watchSession(code,s=>{
   if(version!==viewVersion)return;
   if(!s||s.deletedAt){sessionUnavailable(code,!!s?.deletedAt||session?.code===code);return;}
-  const signature=x=>JSON.stringify([x.code,x.name,x.status,x.mode,x.config,x.seed,x.assignments,x.teamNames,x.teamOpponents,x.aiOpponent,x.teamComposition,x.startedAt?.toMillis(),x.closedAt?.toMillis()]);
+  const signature=x=>JSON.stringify([x.code,x.name,x.status,x.phaseOffset,x.mode,x.config,x.seed,x.assignments,x.teamNames,x.teamOpponents,x.aiOpponent,x.teamComposition,x.startedAt?.toMillis(),x.closedAt?.toMillis()]);
   const unchanged=session&&signature(session)===signature(s),justClosed=s.status==='closed'&&session?.status!=='closed';session={...s,aiOrders:session?.aiOrders};if(justClosed&&!staff)note('Your instructor closed this session. Decisions are locked; only completed seasons count.');updateConnection();if(unchanged){if($('session-rechecking')&&sessionFresh&&connected)renderSession();return;}
   if(!staff){const uid=decisionOwner(s,user.uid);if(uid!==currentOrderUid){
    orderUnsub?.();orders={};ordersReady=false;currentOrderUid=uid;
@@ -469,18 +476,20 @@ async function openSession(code,staff,review=false,focusEntry=false){
   for(const p of people)if(!rosterSubs.has(p.uid))rosterSubs.set(p.uid,api.watchOrders(code,p.uid,o=>{if(version!==viewVersion)return;classOrders[p.uid]=o;scheduleRoster();},failure));
   if(session?.aiOpponent && session.mode!=='team' && session.status!=='lobby')renderSession();else scheduleRoster();
  },failure));
- startGameClock();
+
 }
-function startGameClock(){
- tickHandle=setInterval(()=>{if(!session)return;const p=phase(),key=p.index+':'+p.kind+':'+session.status;if(key!==phaseKey)renderSession();else updateClock();},500);
+function playInstructions(){return `<section class="panel play-instructions" aria-labelledby="play-instructions-title"><p class="eyebrow">BEFORE YOU PLAY</p><h2 id="play-instructions-title">You run the collection.</h2><p>Manage a fashion business: earn profit while watching unsold stock and environmental footprint.</p><ol><li><strong>Order:</strong> choose initial units per style before you know demand.</li><li><strong>Respond:</strong> when replenishment is available, use early sales and forecasts to set a maximum extra quantity per style.</li><li><strong>Expand:</strong> in the final season, keep four styles or offer eight.</li></ol><p><strong>Your score is total profit across three scored seasons.</strong> Leftovers and footprint are shown separately. Practice does not count.</p><p class="hint">Save your decision before advancing. Unsaved edits do not count. If you make no decision, defaults apply: four styles, 80 initial units per style and no replenishment.</p><p class="hint">Explore whether faster response and a larger collection improve your results. This is an illustrative business model.</p></section>`;}
+async function advancePhase(next){
+ if(savePending)return;
+ if(!studentPreview){await api.advancePhase(session.code,next);return;}
+ studentPreview.phaseOffset=session.phaseOffset=next;
+ persistRehearsal();renderSession();
 }
-function updateClock(){if($('decision-clock'))$('decision-clock').textContent=time(phase().end-elapsed());if($('clock'))$('clock').textContent=session.status==='lobby'?'18:00':time(phase().end-elapsed());if($('overall'))$('overall').textContent=session.status==='lobby'?'Waiting to start':`${time(1080-elapsed())} remaining in session`;}
-const schedule=()=>'<p class="hint">Practice 3 min · Order ahead 4 min · Quick response 4 min · Expand 5 min · Compare 2 min. The clock advances automatically.</p>';
-function playInstructions(){return `<section class="panel play-instructions" aria-labelledby="play-instructions-title"><p class="eyebrow">BEFORE YOU PLAY</p><h2 id="play-instructions-title">You run the collection.</h2><p>Manage a fashion business: earn profit while watching unsold stock and environmental footprint.</p><ol><li><strong>Order:</strong> choose initial units per style before you know demand.</li><li><strong>Respond:</strong> when replenishment is available, use early sales and forecasts to set a maximum extra quantity per style.</li><li><strong>Expand:</strong> in the final season, keep four styles or offer eight.</li></ol><p><strong>Your score is total profit across three scored seasons.</strong> Leftovers and footprint are shown separately. Practice does not count.</p><p class="hint">One practice + three seasons + comparison = 18 minutes. Save each decision before its countdown ends; you can revise it until then. Unsaved edits do not count. If you make no decision, defaults apply: four styles, 80 initial units per style and no replenishment.</p><p class="hint">Explore whether faster response and a larger collection improve your results. This is an illustrative business model.</p></section>`;}
 function persistRehearsal(){
  tabStorage.setItem('ff:rehearsal:'+user.uid,JSON.stringify({...studentPreview,orders}));
 }
 function clearRehearsal(){
+ if(studentPreview?.mode==='team'&&session)clearTeamPractice(tabStorage,session,user.uid);
  tabStorage.removeItem('ff:rehearsal:'+user.uid);
  const url=new URL(location.href);
  url.searchParams.delete('testRound');
@@ -497,15 +506,25 @@ function restoreRehearsal(){
 function startStudentPreview(config,source=null,saved=null){
  if(!user?.emailVerified||!['admin','instructor'].includes(role))throw new Error('Instructor access is required to preview.');
  if(!validateConfig(config))throw new Error('Check the preview settings.');
- const snapshot={mode:source?.mode||'individual',config:{...config},aiOpponent:saved?.aiOpponent??source?.aiOpponent??null,seed:source?.seed??(crypto.getRandomValues(new Uint32Array(1))[0]%1000001),name:source?.name||'Student preview',returnCode:source?.code||null,startedAt:saved?.startedAt??Date.now()};
+ const mode=source?.mode||'individual';
+ const progress=saved?.phaseOffset??0;
+ const snapshot={mode,config:{...config},aiOpponent:mode==='team'?null:saved?.aiOpponent??source?.aiOpponent??null,seed:source?.seed??(crypto.getRandomValues(new Uint32Array(1))[0]%1000001),name:source?.name||'Student preview',returnCode:source?.code||null,phaseOffset:mode==='team'&&progress<ROUNDS[1].start?-1:progress,startedAt:saved?.startedAt??Date.now()};
  clean();staffView=false;studentPreview=snapshot;orders=saved?.orders||{};
  const url=new URL(location.href);url.searchParams.set('testRound','1');pageWindow.history.replaceState(null,'',url.href);
- session={code:'PREVIEW',name:snapshot.name,seed:snapshot.seed,config:snapshot.config,mode:snapshot.mode,aiOpponent:snapshot.aiOpponent,aiOrders:{[user.uid]:rehearsalAiOrders(snapshot.config,snapshot.seed)},status:'running',startedAt:{toMillis:()=>snapshot.startedAt},closedAt:null};
- if(snapshot.mode==='team'){session.mode='team';session.assignments={[user.uid]:user.uid};session.teamNames={[user.uid]:'Your preview team',previewRival:'Rival team'};session.teamOpponents=makeTeamOpponents(session.teamNames);classOrders={previewRival:{0:{...DEFAULT_ORDER},1:{...DEFAULT_ORDER},2:{...DEFAULT_ORDER,cap:40},3:{...DEFAULT_ORDER,variety:8,quantity:40,cap:40}}};}
- persistRehearsal();note('');renderSession();startGameClock();
+ session={code:'PREVIEW',name:snapshot.name,seed:snapshot.seed,config:snapshot.config,mode:snapshot.mode,aiOpponent:snapshot.aiOpponent,aiOrders:{[user.uid]:rehearsalAiOrders(snapshot.config,snapshot.seed)},status:'running',phaseOffset:snapshot.phaseOffset,startedAt:{toMillis:()=>snapshot.startedAt},closedAt:null};
+ if(snapshot.mode==='team'){
+  session.teamPractice=true;
+  session.createdAt={toMillis:()=>snapshot.startedAt};
+  session.assignments={[user.uid]:user.uid};
+  session.teamNames={[user.uid]:'Your preview team',previewRival:'Rival team'};
+  session.teamOpponents=makeTeamOpponents(session.teamNames);
+  classOrders={previewRival:{1:{...DEFAULT_ORDER},2:{...DEFAULT_ORDER,cap:40},3:{...DEFAULT_ORDER,variety:8,quantity:40,cap:40}}};
+  if(snapshot.phaseOffset<0){session.status='lobby';session.startedAt=null;}
+ }
+ persistRehearsal();note('');renderSession();
 }
 async function exitStudentPreview(){const code=studentPreview?.returnCode;clean();note('');if(code)await openSession(code,true);else await showStaff();}
-function savedDecisionText(index){const saved=orders[index];return saved?'✓ Saved: '+saved.variety+' styles · '+saved.quantity+' units/style · cap '+saved.cap+'.':'Not saved yet. Defaults apply if time runs out.';}
+function savedDecisionText(index){const saved=orders[index];return saved?'✓ Saved: '+saved.variety+' styles · '+saved.quantity+' units/style · cap '+saved.cap+'.':'Not saved yet. Defaults apply when the phase advances.';}
 function decisionPhaseMatches(index,kind){return session?.status==='running'&&phase().index===index&&phase().kind===kind;}
 async function saveDecision(index,kind,order,expectedRevision){
  if(!studentPreview&&(!connected||!sessionFresh||!ordersFresh))throw Error('Reconnect and wait for saved decisions before saving.');
@@ -522,8 +541,8 @@ async function saveDecision(index,kind,order,expectedRevision){
   localDecisionWrites.delete(index);
   if(session?.status==='closed')note('The session is closed. This save was not accepted. Final scores use confirmed decisions from completed seasons.');
   else if(error.code==='decision-conflict'){conflict=error.message;note(conflict);}
-  else if(!decisionPhaseMatches(index,kind))note('The deadline has passed. This save was not accepted. Your team keeps the last confirmed decision, or the defaults if none was saved.');
-  else{const message=error.code==='permission-denied'?'Save rejected. The server deadline may have passed. Your last confirmed decision is unchanged.':'Save not confirmed. Your edits are still here; reconnect and retry before the deadline.';decisionStatus(message,'error');note(message);}
+  else if(!decisionPhaseMatches(index,kind))note('The phase has changed. This save was not accepted. Your team keeps the last confirmed decision, or the defaults if none was saved.');
+  else{const message=error.code==='permission-denied'?'Save rejected. The phase may have changed. Your last confirmed decision is unchanged.':'Save not confirmed. Your edits are still here; reconnect and retry during the current phase.';decisionStatus(message,'error');note(message);}
  }
  finally{
   if(version===viewVersion){savePending=false;pendingDecision=null;updateConnection();}
@@ -532,7 +551,7 @@ async function saveDecision(index,kind,order,expectedRevision){
  if(conflict){await openSession(code,false);note(conflict);return;}
  const samePhase=decisionPhaseMatches(index,kind);
  // Only subscription snapshots replace orders; a delayed acknowledgement must not overwrite a newer save.
- if(accepted){note(samePhase?'Decision saved. You may revise it until this phase ends.':'Your previous decision was accepted by the server before its deadline. It is now locked.');if(samePhase)updateDecisionDraftState();}
+ if(accepted){note(samePhase?'Decision saved. You may revise it until this phase ends.':'Your previous decision was accepted by the server during the previous phase. It is now locked.');if(samePhase)updateDecisionDraftState();}
  if(!samePhase)renderSession();
 }
 function decisionStatus(message,state='saved'){const el=document.querySelector('.save-state');if(el){el.textContent=message;el.dataset.state=state;}}
@@ -546,10 +565,14 @@ function updateDecisionDraftState(){
 }
 function renderSession(){
  if(!session)return;
+ if(session.status==='running'&&session.phaseOffset==null){
+  $('app').innerHTML='<section class="panel"><h1>Updating classroom progress</h1><p>This session will reopen at its saved stage when the update finishes.</p></section>';
+  return;
+ }
  if(session.status==='closed'&&(!connected||!sessionFresh)){updateConnection();return;}
  if((session.status!=='closed'||session.mode!=='team')&&savePending&&pendingDecision&&!decisionPhaseMatches(pendingDecision.index,pendingDecision.kind)){
-  if(!$('pending-save'))$('app').innerHTML='<section class="panel" id="pending-save"><h1>Confirming your previous decision…</h1><p>The deadline has passed. Waiting for the server to accept or reject your save. Only confirmed decisions count; a late save cannot replace the locked result.</p><p id="pending-confirmed"></p><p>Keep this page open and reconnect if needed. Your teammates see confirmed saves only.</p></section>';
-  $('pending-confirmed').textContent=orders[pendingDecision.index]?savedDecisionText(pendingDecision.index):'No confirmed decision yet. Defaults remain unless the server accepts this save before its deadline.';updateConnection();return;
+  if(!$('pending-save'))$('app').innerHTML='<section class="panel" id="pending-save"><h1>Confirming your previous decision…</h1><p>The phase has changed. Waiting for the server to accept or reject your save. Only confirmed decisions count; a late save cannot replace the locked result.</p><p id="pending-confirmed"></p><p>Keep this page open and reconnect if needed. Your teammates see confirmed saves only.</p></section>';
+  $('pending-confirmed').textContent=orders[pendingDecision.index]?savedDecisionText(pendingDecision.index):'No confirmed decision yet. Defaults remain unless the server accepts this save during the previous phase.';updateConnection();return;
  }
  if((session.status!=='closed'||session.mode!=='team')&&!staffView&&!studentPreview&&currentOrderUid&&!ordersReady){$('app').innerHTML='<section class="panel"><h1>Loading your saved decisions…</h1><p>Please wait before making your next decision.</p></section>';return;}
  if(loadTeamMarket())return;
@@ -567,12 +590,23 @@ function renderSession(){
  else if(focused&&$(focused))$(focused).focus({preventScroll:true});
  if(!studentPreview)return;
  const bar=document.createElement('section');bar.className='preview-bar';bar.setAttribute('aria-label','Test round controls');
- bar.innerHTML=`<div><p class="eyebrow">TEST ROUND · PRIVATE REHEARSAL</p><strong>Timed student rehearsal</strong><p class="hint">${session.aiOpponent?'AI-enabled phases use a simulated opponent in this rehearsal. ':session.mode==='team'?'Your preview team plays the same simulated opponent in every season. The simulated rival uses 80 units/style in the first two scored seasons, then eight styles with 40 units/style. Its replenishment cap is 40 where available. ':''}Save before each deadline. Your decisions stay in this tab and are cleared when you exit.</p></div><div class="button-row"><button id="preview-exit" class="secondary">Exit preview</button></div>`;
+ bar.innerHTML=`<div><p class="eyebrow">TEST ROUND · PRIVATE REHEARSAL</p><strong>Student rehearsal</strong><p class="hint">${session.aiOpponent?'AI-enabled phases use a simulated opponent in this rehearsal. ':session.mode==='team'?(session.status==='lobby'?'Try an AI practice round or start the three-season competition. ':'A simulated team stands in for the human opponent in this rehearsal of the scored seasons. '):''}Save before advancing. Your decisions stay in this tab and are cleared when you exit.</p></div><div class="button-row">${session.status==='lobby'?'<button id="preview-main">Start scored competition</button>':''}<button id="preview-exit" class="secondary">Exit preview</button></div>`;
  $('app').prepend(bar);
+ if($('preview-main')){
+  $('leave')?.remove();
+  $('preview-main').onclick=()=>action(async()=>{
+   session.status='running';
+   session.startedAt={toMillis:()=>studentPreview.startedAt};
+   await advancePhase(ROUNDS[1].start);
+  });
+ }
  $('preview-exit').onclick=()=>action(exitStudentPreview);
  if($('finish')){$('finish').textContent='Back to instructor studio';$('finish').onclick=()=>action(exitStudentPreview);}
 }
 function staffSessionAi(room){
+ if(hasHomeTeamPractice(room))return '<p class="hint" id="room-ai-summary">'+(room.status==='lobby'
+  ? 'Students can join now and practice against AI as often as they like. Start the scored competition when your class is ready for the team draw.'
+  : 'Teams keep the same opponent across the three scored seasons. An unpaired team uses individual play.')+'</p>';
  const opponent=room.aiOpponent, labels=[];
  if(opponent?.practice)labels.push('practice');
  if(opponent?.main)labels.push('main phase');
@@ -590,37 +624,45 @@ function bindStaffAiControls(){
  }
  $('start')?.addEventListener('click',()=>action(async()=>{
   const code=session.code;
-  const enabled=[session.aiOpponent?.practice,session.aiOpponent?.main].filter(Boolean).length;
-  let prompt='Start for everyone now? The clock cannot be paused.';
+  const enabled=hasHomeTeamPractice(session)?0:[session.aiOpponent?.practice,session.aiOpponent?.main].filter(Boolean).length;
+  let prompt=hasHomeTeamPractice(session)?'End home practice, draw team opponents and open the first scored season?':'Start for everyone now?';
   if(enabled&&!demo){
    const rivals=session.mode==='team'
     ?new Set(roster.map(person=>session.teamComposition?.[person.uid]||session.assignments?.[person.uid]).filter(Boolean)).size
     :roster.length;
    const estimate=rivals*enabled;
    prompt=rosterReady&&estimate?'Prepare '+estimate+' opponent strategies and start the classroom?':'Prepare opponents and start the classroom?';
-   prompt+=' Each new strategy uses one request billed to the classroom owner’s provider account. The clock starts when all opponents are ready.';
+   prompt+=' Each new strategy uses one request billed to the classroom owner’s provider account. Play opens when the opponents are ready.';
   }
   if(!await confirmAction(prompt))return;
   if(enabled)
-   note('Preparing an independent AI opponent for each matchup. The classroom clock starts when all opponents are ready.');
+   note('Preparing the AI opponents before play opens.');
   await api.startSession(code,(done,total)=>note(`Preparing AI opponents · ${done} of ${total} phase strategies ready.`));
   note('Session started.');
  }));
 }
 function renderSessionContent(){const p=phase();phaseKey=`${p.index}:${p.kind}:${session.status}`;
- if(staffView){$('app').innerHTML=`<p class="eyebrow">LIVE STUDIO / ${esc(session.name)}</p><div class="heading"><h1 class="page-title">Your room.<br><span class="code-display">${esc(session.code)}</span></h1><div class="timer"><strong id="clock"></strong><small id="overall"></small></div></div><section class="panel session-controls"><h2>${session.status==='lobby'?'Ready when your class is.':session.status==='closed'?'Session closed':p.index<4?ROUNDS[p.index].name+' · '+(p.kind==='plan'?'initial orders':'replenishment'):p.kind==='finished'?'Session finished':'Final comparison'}</h2>${schedule()}<p>Demand N(${session.config.demandMean}, ${session.config.demandSd}²), floored at zero. Extra consumption with eight styles: <strong>${Math.round(session.config.rebound*100)}%</strong>${session.aiOpponent?' in phases with human opponents or individual play. AI matchups keep total demand fixed.':'.'}</p>${staffSessionAi(session)}<details><summary>Locked session assumptions</summary><dl>${SETTINGS.map(([k,label])=>`<dt>${label}</dt><dd>${session.config[k]}</dd>`).join('')}</dl></details><div class="button-row">${session.status==='lobby'?'<button id="start">Start the 18-minute session ↗</button>':''}${session.status!=='closed'&&p.kind!=='finished'?'<button id="close-session" class="secondary">Close session early</button>':''}<button id="copy-code" class="secondary">Copy session code</button><button id="preview-session" class="secondary">Test round</button><button class="secondary" id="back-staff">All sessions</button>${demo?'<button id="demo-forward" class="secondary">Demo: next phase</button>':''}</div></section><section class="panel participant-panel"><div class="heading"><h2 id="roster-title">Participants</h2><button class="small secondary" id="export">Export CSV ↓</button></div><p class="hint">Only completed seasons count. Practice is excluded. Missing decisions use 4 styles, 80 initial units and no replenishment. Saved decisions determine scores.</p><div id="export-status" role="status" aria-live="polite"></div><div id="roster" class="table-wrap"></div></section>`;bindStaffAiControls();$('close-session')?.addEventListener('click',()=>action(async()=>{if(await confirmAction('Close this session now? Further decisions will be blocked.'))await api.closeSession(session.code);}));$('copy-code').onclick=()=>action(async()=>{try{await navigator.clipboard.writeText(session.code);note('Session code copied: '+session.code);}catch{note('Copy this session code: '+session.code);}});$('preview-session').onclick=()=>action(async()=>startStudentPreview(session.config,session));$('back-staff').onclick=()=>action(showStaff);$('export').onclick=()=>exportResults();$('demo-forward')?.addEventListener('click',()=>{demoOffset+=(phase().end-elapsed()+1)*1000;renderSession();});renderRoster();updateClock();return;}
- if(session.status==='lobby'){$('app').innerHTML=`<section class="waiting"><p class="eyebrow">SEAT CONFIRMED / ${esc(session.code)}</p><h1 class="page-title">${esc(session.name)}</h1><p class="intro">${session.mode==='solo'?'Read the briefing, then start when you are ready.':'Your next move starts when your instructor does.'}</p>${playInstructions()}${session.mode==='solo'?'<button id="start-solo">Start my 18-minute game ↗</button>':''}<button class="secondary" id="leave">← Leave waiting room</button></section>`;$('start-solo')?.addEventListener('click',()=>action(()=>api.startSession(session.code)));$('leave').onclick=()=>{forgetSession(session.code);clean();landing();};return;}
+ if(staffView){$('app').innerHTML=`<p class="eyebrow">LIVE STUDIO / ${esc(session.name)}</p><div class="heading"><h1 class="page-title">Your room.<br><span class="code-display">${esc(session.code)}</span></h1></div><section class="panel session-controls"><h2>${session.status==='lobby'?'Ready when your class is.':session.status==='closed'?'Session closed':p.index<4?ROUNDS[p.index].name+' · '+(p.kind==='plan'?'initial orders':'replenishment'):'Completed · Final comparison'}</h2><p>Demand N(${session.config.demandMean}, ${session.config.demandSd}²), floored at zero. Extra consumption with eight styles: <strong>${Math.round(session.config.rebound*100)}%</strong>${session.aiOpponent?' in phases with human opponents or individual play. AI matchups keep total demand fixed.':'.'}</p>${staffSessionAi(session)}<details><summary>Locked session assumptions</summary><dl>${SETTINGS.map(([k,label])=>`<dt>${label}</dt><dd>${session.config[k]}</dd>`).join('')}</dl></details><div class="button-row">${session.status==='lobby'?'<button id="start">'+(session.mode==='team'?'Start scored competition':'Start the session')+' ↗</button>':''}${session.status!=='closed'&&p.index<4?'<button id="close-session" class="secondary">Close session early</button>':''}<button id="copy-code" class="secondary">Copy session code</button><button id="preview-session" class="secondary">Test round</button><button class="secondary" id="back-staff">All sessions</button>${session.status==='running'&&p.index<4?'<button id="next-phase" class="secondary">Next phase →</button>':''}</div></section><section class="panel participant-panel"><div class="heading"><h2 id="roster-title">Participants</h2><button class="small secondary" id="export">Export CSV ↓</button></div><p class="hint">Only completed seasons count. Practice is excluded. Missing decisions use 4 styles, 80 initial units and no replenishment. Saved decisions determine scores.</p><div id="export-status" role="status" aria-live="polite"></div><div id="roster" class="table-wrap"></div></section>`;bindStaffAiControls();$('close-session')?.addEventListener('click',()=>action(async()=>{if(await confirmAction('Close this session now? Further decisions will be blocked.'))await api.closeSession(session.code);}));$('copy-code').onclick=()=>action(async()=>{try{await navigator.clipboard.writeText(session.code);note('Session code copied: '+session.code);}catch{note('Copy this session code: '+session.code);}});$('preview-session').onclick=()=>action(async()=>startStudentPreview(session.config,session));$('back-staff').onclick=()=>action(showStaff);$('export').onclick=()=>exportResults();$('next-phase')?.addEventListener('click',()=>action(()=>advancePhase(p.end)));renderRoster();return;}
+ if(session.status==='lobby'){
+  const team=session.mode==='team';
+  const intro=team?'Practice at your own pace while the classroom is open.':session.mode==='solo'?'Read the briefing, then start when you are ready.':'Your next move starts when your instructor does.';
+  $('app').innerHTML=`<section class="waiting"><p class="eyebrow">SEAT CONFIRMED / ${esc(session.code)}</p><h1 class="page-title">${esc(session.name)}</h1><p class="intro">${intro}</p>${team?'<section class="panel" id="team-practice" aria-label="Practice against AI"></section>':''}${playInstructions()}${session.mode==='solo'?'<button id="start-solo">Start my game ↗</button>':''}<button class="secondary" id="leave">← Leave waiting room</button></section>`;
+  if(team)mountTeamPractice($('team-practice'),{room:session,userId:user.uid,storage:tabStorage,signalTable,money});
+  $('start-solo')?.addEventListener('click',()=>action(()=>api.startSession(session.code)));
+  $('leave').onclick=()=>{forgetSession(session.code);clean();landing();};
+  return;
+ }
  if(session.mode==='team'&&!decisionOwner(session,user.uid)){$('app').innerHTML='<section class="panel"><h1>No team assigned.</h1><p>Ask your instructor to include you in a new session.</p></section>';return;}
  if(session.status==='closed'||p.index===4){renderComparison(session.status==='closed');return;}
  const r=ROUNDS[p.index],o=orders[p.index]||DEFAULT_ORDER,c=session.config;
  const teamMarket=aiActive(session,p.index)||session.mode==='team'&&(!usesPairedMarkets(session)||teamMatchup(session,decisionOwner(session,user.uid)).length===2);
- $('app').innerHTML=`${p.index===0&&p.kind==='plan'?playInstructions():''}<div class="heading"><div><p class="eyebrow">${esc(session.name)} / ${r.scored?'SCORED SEASON':'PRACTICE · NOT SCORED'}</p><h1 class="page-title">${r.name}</h1></div><div class="timer"><strong id="clock"></strong><small>${p.kind==='plan'?'to save your initial order':'to save your replenishment'}</small><small id="overall"></small></div></div><div class="steps">${ROUNDS.map((x,i)=>`<span class="${i===p.index?'active':''}">${x.name}</span>`).join('')}</div><div class="layout"><section class="panel decision"><p class="eyebrow">YOUR MOVE</p><h2>${p.kind==='plan'?'Commit to your collection.':'Read the signal. Respond.'}</h2><p>${p.index===1?'Commit before you know which styles will sell. No replenishment this season.':p.index===2?'Same four styles. This time you can wait, learn and replenish.':p.index===3?'Stay focused or double your assortment. Will growth erase your efficiency gains?':'Try initial ordering and replenishment. This season does not count.'}</p><form id="order-form">${p.kind==='plan'?`<label>Collection size<select name="variety" ${p.index===3?'':'disabled'}><option value="4" ${o.variety===4?'selected':''}>4 styles · focused</option>${p.index===3?`<option value="8" ${o.variety===8?'selected':''}>8 styles · expanded</option>`:''}</select></label><label>Initial units per style<input name="quantity" type="number" inputmode="numeric" min="0" max="200" step="1" required value="${o.quantity}"></label><p class="hint">${teamMarket?'Shared market':'Market'} mean ${c.demandMean} purchases (SD ${c.demandSd}). ${teamMarket?'Each style attracts a share of demand. Stockouts send customers to stocked alternatives in this market.':'Styles share that market unevenly.'} ${p.index===3?(aiActive(session,p.index)?'Offering eight styles changes your share of the fixed demand pool.':teamMarket?'Market growth equals the fraction of teams in this market offering eight styles × '+Math.round(c.rebound*100)+'%.':'Eight styles add '+Math.round(c.rebound*100)+'% to total demand.'):''}</p>`:`<p>Locked: <strong>${o.variety} styles × ${o.quantity} initial units.</strong></p><label>Maximum extra units per style<input name="cap" type="number" inputmode="numeric" min="0" max="200" step="1" required value="${o.cap}"></label><p class="hint">Each style orders forecast remaining demand minus current stock, bounded between zero and your cap. Zero means no replenishment.</p>`}<p class="decision-deadline">Time remaining: <strong id="decision-clock" role="timer" aria-label="Time remaining for this decision"></strong></p><button id="save-order">Save ${p.kind==='plan'?'initial order':'replenishment cap'} ↗</button><p class="save-state" role="status" aria-live="polite" aria-atomic="true">${orders[p.index]?savedDecisionText(p.index):'Not saved yet. Defaults apply if time runs out.'}</p></form><p class="hint">Revise until the countdown ends. Defaults: 4 styles, 80 initial units, no replenishment.</p>${demo&&!studentPreview?'<button id="demo-forward" class="secondary">Demo: next phase</button>':''}</section><section><div class="panel"><p class="eyebrow">${p.kind==='respond'?'MARKET INTELLIGENCE':'THE BUSINESS CASE'}</p><h2>${p.kind==='respond'?'Early sales. Imperfect foresight.':'Know your economics.'}</h2>${p.kind==='respond'?signalTable(teamMarket?currentResult(p.index).signals:signalFor(session.seed,p.index,o,c)):`<dl><dt>Selling price</dt><dd>${money(c.price)} / unit</dd><dt>Initial production</dt><dd>${money(c.initialCost)} / unit</dd><dt>Replenishment</dt><dd>${money(c.refillCost)} / unit</dd><dt>Development</dt><dd>${money(c.styleCost)} / style</dd><dt>Leftover salvage</dt><dd>${money(c.salvage)} / unit</dd></dl><p class="hint">Half of demand arrives before replenishment. Lost early sales cannot be recovered.</p>`}</div><div class="panel"><h2>Your track record.</h2>${historyTable(p.index)}<p class="hint">Footprint: ${c.unitCarbon} kg CO₂e / produced unit + ${c.leftoverCarbon} kg / leftover. Speed itself has no automatic footprint penalty.</p></div></section></div>`;
+ $('app').innerHTML=`${p.index===0&&p.kind==='plan'?playInstructions():''}<div class="heading"><div><p class="eyebrow">${esc(session.name)} / ${r.scored?'SCORED SEASON':'PRACTICE · NOT SCORED'}</p><h1 class="page-title">${r.name}</h1></div></div><div class="steps">${ROUNDS.map((x,i)=>i===0&&hasHomeTeamPractice(session)?'':`<span class="${i===p.index?'active':''}">${x.name}</span>`).join('')}</div><div class="layout"><section class="panel decision"><p class="eyebrow">YOUR MOVE</p><h2>${p.kind==='plan'?'Commit to your collection.':'Read the signal. Respond.'}</h2><p>${p.index===1?'Commit before you know which styles will sell. No replenishment this season.':p.index===2?'Same four styles. This time you can wait, learn and replenish.':p.index===3?'Stay focused or double your assortment. Will growth erase your efficiency gains?':'Try initial ordering and replenishment. This season does not count.'}</p><form id="order-form">${p.kind==='plan'?`<label>Collection size<select name="variety" ${p.index===3?'':'disabled'}><option value="4" ${o.variety===4?'selected':''}>4 styles · focused</option>${p.index===3?`<option value="8" ${o.variety===8?'selected':''}>8 styles · expanded</option>`:''}</select></label><label>Initial units per style<input name="quantity" type="number" inputmode="numeric" min="0" max="200" step="1" required value="${o.quantity}"></label><p class="hint">${teamMarket?'Shared market':'Market'} mean ${c.demandMean} purchases (SD ${c.demandSd}). ${teamMarket?'Each style attracts a share of demand. Stockouts send customers to stocked alternatives in this market.':'Styles share that market unevenly.'} ${p.index===3?(aiActive(session,p.index)?'Offering eight styles changes your share of the fixed demand pool.':teamMarket?'Market growth equals the fraction of teams in this market offering eight styles × '+Math.round(c.rebound*100)+'%.':'Eight styles add '+Math.round(c.rebound*100)+'% to total demand.'):''}</p>`:`<p>Locked: <strong>${o.variety} styles × ${o.quantity} initial units.</strong></p><label>Maximum extra units per style<input name="cap" type="number" inputmode="numeric" min="0" max="200" step="1" required value="${o.cap}"></label><p class="hint">Each style orders forecast remaining demand minus current stock, bounded between zero and your cap. Zero means no replenishment.</p>`}<button id="save-order">Save ${p.kind==='plan'?'initial order':'replenishment cap'} ↗</button><p class="save-state" role="status" aria-live="polite" aria-atomic="true">${orders[p.index]?savedDecisionText(p.index):'Not saved yet. Defaults apply when the phase advances.'}</p></form><p class="hint">Revise before advancing. Defaults: 4 styles, 80 initial units, no replenishment.</p>${(studentPreview||session.mode==='solo')?'<button id="next-phase" class="secondary">Next phase →</button>':''}</section><section><div class="panel"><p class="eyebrow">${p.kind==='respond'?'MARKET INTELLIGENCE':'THE BUSINESS CASE'}</p><h2>${p.kind==='respond'?'Early sales. Imperfect foresight.':'Know your economics.'}</h2>${p.kind==='respond'?signalTable(teamMarket?currentResult(p.index).signals:signalFor(session.seed,p.index,o,c)):`<dl><dt>Selling price</dt><dd>${money(c.price)} / unit</dd><dt>Initial production</dt><dd>${money(c.initialCost)} / unit</dd><dt>Replenishment</dt><dd>${money(c.refillCost)} / unit</dd><dt>Development</dt><dd>${money(c.styleCost)} / style</dd><dt>Leftover salvage</dt><dd>${money(c.salvage)} / unit</dd></dl><p class="hint">Half of demand arrives before replenishment. Lost early sales cannot be recovered.</p>`}</div><div class="panel"><h2>Your track record.</h2>${historyTable(p.index)}<p class="hint">Footprint: ${c.unitCarbon} kg CO₂e / produced unit + ${c.leftoverCarbon} kg / leftover. Speed itself has no automatic footprint penalty.</p></div></section></div>`;
  $('order-form').addEventListener('input',updateDecisionDraftState);
- $('order-form').onsubmit=e=>{e.preventDefault();const f=new FormData(e.target),index=p.index;action(async()=>{if(phase().index!==index||phase().kind!==p.kind)throw new Error('The phase changed. Use the current decision screen.');const order=p.kind==='plan'?{variety:p.index===3?Number(f.get('variety')):4,quantity:Number(f.get('quantity')),cap:0}:{variety:o.variety,quantity:o.quantity,cap:Number(f.get('cap'))};await saveDecision(index,p.kind,order,o.revision??0);});};$('demo-forward')?.addEventListener('click',()=>{demoOffset+=(phase().end-elapsed()+1)*1000;renderSession();});updateClock();
+ $('order-form').onsubmit=e=>{e.preventDefault();const f=new FormData(e.target),index=p.index;action(async()=>{if(phase().index!==index||phase().kind!==p.kind)throw new Error('The phase changed. Use the current decision screen.');const order=p.kind==='plan'?{variety:p.index===3?Number(f.get('variety')):4,quantity:Number(f.get('quantity')),cap:0}:{variety:o.variety,quantity:o.quantity,cap:Number(f.get('cap'))};await saveDecision(index,p.kind,order,o.revision??0);});};$('next-phase')?.addEventListener('click',()=>action(()=>advancePhase(p.end)));
 }
 function signalTable(rows){return `<div class="table-wrap"><table><thead><tr><th>Style</th><th>Early sales</th><th>Stock</th><th>Remaining forecast</th></tr></thead><tbody>${rows.map(s=>`<tr><td>0${s.style}</td><td>${s.sales}${s.stockout?' *':''}</td><td>${s.stock}</td><td>≈ ${s.signal}</td></tr>`).join('')}</tbody></table></div><p class="hint">* Sold out: observed sales may understate demand. The forecast is uncertain.</p>`;}
 function historyTable(before,final=false){
- const completed=ROUNDS.map((round,index)=>({round,index})).filter(({round,index})=>index<before&&elapsed()>=round.end);
+ const completed=ROUNDS.map((round,index)=>({round,index})).filter(({round,index})=>(index!==0||!hasHomeTeamPractice(session))&&index<before&&progress()>=round.end);
  if(!completed.length){
   const message=session.status==='closed'?'No seasons were completed before this session closed.':'Results appear here after each season.';
   return '<p class="hint">'+message+'</p>';
@@ -642,17 +684,17 @@ function historyTable(before,final=false){
 function renderComparison(closed){
  const captain=decisionOwner(session,user.uid);
  const paired=usesPairedMarkets(session);
- const ranked=session.mode==='team'&&(!session.aiOpponent||elapsed()>=ROUNDS[1].end)&&(session.aiOpponent?.main||!paired||teamMatchup(session,captain).length===2);
- const complete=[1,2,3].filter(i=>elapsed()>=ROUNDS[i].end),results=complete.map(i=>currentResult(i)),sum=k=>results.reduce((a,r)=>a+r[k],0);$('app').innerHTML=`${historyReviewCode?'<button id="back-history" class="secondary">← Back to my history</button>':''}<p class="eyebrow">${closed?'SESSION CLOSED':'THE MOMENT OF TRUTH'}</p><div class="heading"><h1 class="page-title">Did you get leaner,<br><em>or just bigger?</em></h1>${!closed&&phase().kind==='comparison'?'<div class="timer"><strong id="clock"></strong><small>to compare your results</small></div>':''}</div><nav class="results-nav" aria-label="Results sections">${ranked?'<a href="#leaderboard">Team ranking</a>':''}<a href="#season-results">Season scores</a><a href="#final-feedback">Reflection</a></nav><div class="stats result-stats"><article><span>${session.mode==='team'?'Team':'Business'} score / profit</span><strong>${money(sum('profit'))}</strong></article><article><span>Unsold / leftover units</span><strong>${fmt(sum('leftovers'))}</strong></article><article><span>Total footprint / kg CO₂e</span><strong>${fmt(sum('footprint'))}</strong></article></div><section class="panel" id="season-results" aria-labelledby="season-results-title"><h2 id="season-results-title">Season scores</h2>${historyTable(4,true)}<p class="hint">Practice is excluded from totals. ${closed?'Only completed seasons count.':''} Environmental outcomes remain separate from profit.</p></section><section class="debrief" id="final-feedback" aria-labelledby="feedback-title"><p class="eyebrow">TAKE THIS TO THE BOARDROOM</p><h2 id="feedback-title">Efficiency is a capability.<br><em>What you do with it is a choice.</em></h2><ol><li>Did quick response reduce leftovers with four styles?</li><li>Did expanding the collection increase profit and total footprint?</li><li>What if new styles only shifted existing purchases?</li></ol><p class="hint">${session.aiOpponent?.main?'You and your AI opponent shared a fixed pool of customers in each scored season. A wider collection can attract customers from your rival.':ranked?(paired?'Your team and its opponent shared one market. ':'Teams shared one classroom market. ')+'More styles can attract a larger share of customers. Stockouts can send customers to an available alternative. Market growth equals the fraction of teams in that market offering eight styles × '+Math.round(session.config.rebound*100)+'%.':'Matched demand draws across scored seasons. Extra demand with eight styles: '+Math.round(session.config.rebound*100)+'%.'} These are model assumptions, not empirical estimates.</p></section><button id="finish" class="secondary">Return to welcome</button>`;$('finish').onclick=()=>{forgetSession(session.code);clean();landing();};if(historyReviewCode){const code=historyReviewCode;const back=()=>action(()=>showProfile(code));$('back-history').onclick=back;$('finish').textContent='Back to my history';$('finish').onclick=back;}updateClock();}
+ const ranked=session.mode==='team'&&(!session.aiOpponent||progress()>=ROUNDS[1].end)&&(session.aiOpponent?.main||!paired||teamMatchup(session,captain).length===2);
+ const complete=[1,2,3].filter(i=>progress()>=ROUNDS[i].end),results=complete.map(i=>currentResult(i)),sum=k=>results.reduce((a,r)=>a+r[k],0);$('app').innerHTML=`${historyReviewCode?'<button id="back-history" class="secondary">← Back to my history</button>':''}<p class="eyebrow">${closed?'SESSION CLOSED':'THE MOMENT OF TRUTH'}</p><div class="heading"><h1 class="page-title">Did you get leaner,<br><em>or just bigger?</em></h1></div><nav class="results-nav" aria-label="Results sections">${ranked?'<a href="#leaderboard">Team ranking</a>':''}<a href="#season-results">Season scores</a><a href="#final-feedback">Reflection</a></nav><div class="stats result-stats"><article><span>${session.mode==='team'?'Team':'Business'} score / profit</span><strong>${money(sum('profit'))}</strong></article><article><span>Unsold / leftover units</span><strong>${fmt(sum('leftovers'))}</strong></article><article><span>Total footprint / kg CO₂e</span><strong>${fmt(sum('footprint'))}</strong></article></div><section class="panel" id="season-results" aria-labelledby="season-results-title"><h2 id="season-results-title">Season scores</h2>${historyTable(4,true)}<p class="hint">Practice is excluded from totals. ${closed?'Only completed seasons count.':''} Environmental outcomes remain separate from profit.</p></section><section class="debrief" id="final-feedback" aria-labelledby="feedback-title"><p class="eyebrow">TAKE THIS TO THE BOARDROOM</p><h2 id="feedback-title">Efficiency is a capability.<br><em>What you do with it is a choice.</em></h2><ol><li>Did quick response reduce leftovers with four styles?</li><li>Did expanding the collection increase profit and total footprint?</li><li>What if new styles only shifted existing purchases?</li></ol><p class="hint">${session.aiOpponent?.main?'You and your AI opponent shared a fixed pool of customers in each scored season. A wider collection can attract customers from your rival.':ranked?(paired?'Your team and its opponent shared one market. ':'Teams shared one classroom market. ')+'More styles can attract a larger share of customers. Stockouts can send customers to an available alternative. Market growth equals the fraction of teams in that market offering eight styles × '+Math.round(session.config.rebound*100)+'%.':'Matched demand draws across scored seasons. Extra demand with eight styles: '+Math.round(session.config.rebound*100)+'%.'} These are model assumptions, not empirical estimates.</p></section><button id="finish" class="secondary">Return to welcome</button>`;$('finish').onclick=()=>{forgetSession(session.code);clean();landing();};if(historyReviewCode){const code=historyReviewCode;const back=()=>action(()=>showProfile(code));$('back-history').onclick=back;$('finish').textContent='Back to my history';$('finish').onclick=back;}}
 function completedRows(uid){
  const owner=decisionOwner(session,uid);
- return owner?[1,2,3].filter(i=>elapsed()>=ROUNDS[i].end).map(i=>({round:i,...competitorResult(session,i,teamResultOrders(),owner)})):[];
+ return owner?[1,2,3].filter(i=>progress()>=ROUNDS[i].end).map(i=>({round:i,...competitorResult(session,i,teamResultOrders(),owner)})):[];
 }
 // Closure makes completed orders immutable. Keep the server snapshot separate from delayed listeners.
 function teamResultOrders(){return finalTeamOrders??classOrders;}
 function rosterOrdersReady(){if(session?.aiOpponent && session.status!=='lobby'){
  const ids=session.mode==='team'?Object.keys(session.teamNames):roster.map(p=>p.uid);
- if(!rosterReady||ids.some(uid=>ROUNDS.some((r,i)=>elapsed()>=r.end&&aiActive(session,i)&&!session.aiOrders?.[uid]?.[i])))return false;
+ if(!rosterReady||ids.some(uid=>ROUNDS.some((r,i)=>progress()>=r.end&&aiActive(session,i)&&!session.aiOrders?.[uid]?.[i])))return false;
  }if(session?.mode==='team'&&session.status==='closed')return rosterReady&&finalTeamOrders!==null;return rosterReady&&roster.every(p=>Object.hasOwn(classOrders,p.uid));}
 function renderRoster(){if(!$('roster')||!session)return;renderTeamSetup();if($('export'))$('export').disabled=!rosterOrdersReady();if(!rosterOrdersReady()){$('roster').textContent='Loading saved decisions…';return;}renderLeaderboard();$('roster-title').textContent=`Participants (${roster.length})`;$('roster').innerHTML=roster.length?`<table class="participant-results"><thead><tr><th scope="col">Name</th><th scope="col">${session.status==='closed'||phase().index>=4?'Saved decisions':'Current decision'}</th><th scope="col">Profit</th><th scope="col">Leftovers</th><th scope="col">Footprint kg</th></tr></thead><tbody>${roster.map(p=>{const rows=completedRows(p.uid),sum=k=>rows.reduce((a,r)=>a+r[k],0),saved=teamResultOrders()[decisionOwner(session,p.uid)]||{};return `<tr><td>${esc(p.name)}<small>${esc(p.email)}</small>${session.mode==='team'?'<small>'+esc(session.teamNames?.[decisionOwner(session,p.uid)]||'Unassigned')+'</small>':''}</td><td data-label="${session.status==='closed'||phase().index>=4?'Saved decisions':'Current decision'}">${esc(decisionSummary(session,phase(),saved,rows.map(r=>r.round)))}</td><td data-label="Profit">${money(sum('profit'))}</td><td data-label="Leftovers">${sum('leftovers')}</td><td data-label="Footprint kg">${fmt(sum('footprint'))}</td></tr>`;}).join('')}</tbody></table>`:'<p>Share your session code. Participants appear here as they join.</p>';}
 function exportResults(source=session,people=roster,savedOrders=teamResultOrders(),status=$('export-status')){
@@ -664,7 +706,7 @@ function exportResults(source=session,people=roster,savedOrders=teamResultOrders
   if(source.aiOpponent?.main)header.push('AI provider','AI model','AI styles','AI initial per style','AI cap','AI profit $','AI sales','Market demand');
   const rows=[header];
   const competitors=teamMode?Object.entries(source.teamNames||{}).map(([uid,name])=>({uid,name,email:people.filter(p=>decisionOwner(source,p.uid)===uid).map(p=>p.email).join('; ')})):people;
-  const duration=source.startedAt?((source.closedAt?.toMillis()??Date.now())-source.startedAt.toMillis())/1000:-1;
+  const duration=sessionProgress(source);
   const rounds=[1,2,3].filter(i=>duration>=ROUNDS[i].end);
   // Calculate each season in the same market used on the student's results screen.
   for(const {uid,name,email} of competitors){
@@ -685,31 +727,57 @@ function exportResults(source=session,people=roster,savedOrders=teamResultOrders
   status.replaceChildren(document.createTextNode('CSV ready: '+(rows.length-1)+' scored-season rows. Save '+a.download+' when your browser asks. '),a);a.click();
  }catch(e){failure(e);}
 }
-try{api=await import(demo?'./backend-demo.js':'./backend.js?v=ai-opponents-1');api.observeAuth(async function restoreAccount(u){retryAccount=null;const version=++authVersion;if(registering){user=u;return;}clean();staffView=false;user=u;if(!u){for(const id of ['first-name','last-name','university-id','email','password'])$(id).value='';}try{if(u&&new URLSearchParams(location.search).get('auth')==='verify'){u=await api.refreshUser();if(version!==authVersion)return;user=u;}const nextRole=u?await api.role():'student';if(version!==authVersion)return;role=nextRole;profile=null;if(u){try{await api.importPlatformProfile(resumeStorage);}catch{note('Portal details could not be imported. Please retry by signing in again.');}if(version!==authVersion)return;const nextProfile=await api.getProfile();if(version!==authVersion)return;profile=nextProfile;}account();landing();await restoreView(u);}catch(e){if(version!==authVersion)return;failure(e);account();landing();if(u){retryAccount=()=>restoreAccount(api.currentUser());$('app').innerHTML='<section class="panel"><h1>Reconnect to your account.</h1><p>Your session code is kept. Reconnect to load your profile and saved game.</p><button id="retry-account">Retry connection</button></section>';$('retry-account').onclick=()=>retryAccount?.();}}});}catch(e){$('app').innerHTML='<section class="waiting"><h1 class="page-title">Fast Fashion Ops</h1><p>Run a fashion retailer. Discover how speed changes profit, waste and environmental impact.</p><p>Sign-in could not load. Check your connection and reload this page.</p><button onclick="location.reload()">Try again</button></section>';failure(e);}
+try{api=await import(demo?'./backend-demo.js':'./backend.js?v=home-practice-1');api.observeAuth(async function restoreAccount(u){retryAccount=null;const version=++authVersion;if(registering){user=u;return;}clean();staffView=false;user=u;if(!u){for(const id of ['first-name','last-name','university-id','email','password'])$(id).value='';}try{if(u&&new URLSearchParams(location.search).get('auth')==='verify'){u=await api.refreshUser();if(version!==authVersion)return;user=u;}const nextRole=u?await api.role():'student';if(version!==authVersion)return;role=nextRole;profile=null;if(u){try{await api.importPlatformProfile(resumeStorage);}catch{note('Portal details could not be imported. Please retry by signing in again.');}if(version!==authVersion)return;const nextProfile=await api.getProfile();if(version!==authVersion)return;profile=nextProfile;}account();landing();await restoreView(u);}catch(e){if(version!==authVersion)return;failure(e);account();landing();if(u){retryAccount=()=>restoreAccount(api.currentUser());$('app').innerHTML='<section class="panel"><h1>Reconnect to your account.</h1><p>Your session code is kept. Reconnect to load your profile and saved game.</p><button id="retry-account">Retry connection</button></section>';$('retry-account').onclick=()=>retryAccount?.();}}});}catch(e){$('app').innerHTML='<section class="waiting"><h1 class="page-title">Fast Fashion Ops</h1><p>Run a fashion retailer. Discover how speed changes profit, waste and environmental impact.</p><p>Sign-in could not load. Check your connection and reload this page.</p><button onclick="location.reload()">Try again</button></section>';failure(e);}
 
 
 function captureTeamDraft(){
  if(!teamEditor||!$('team-setup'))return;
- if($('team-size'))teamEditor.size=$('team-size').value;
  document.querySelectorAll('[data-team-member]').forEach(el=>teamEditor.assignments[el.dataset.teamMember]=el.value);
  document.querySelectorAll('[data-team-name]').forEach(el=>teamEditor.names[el.dataset.teamName]=el.value);
 }
 function teamCaptainName(uid){return roster.find(p=>p.uid===uid)?.name||'Unknown captain';}
 function teamAssignmentDescription(uid){return uid?(teamEditor.names[uid]||'New team')+' · Captain: '+teamCaptainName(uid):'No team selected';}
+function mergeTeamDraft(saved,previous,draft){
+ const merged={...saved};
+ for(const uid of Object.keys(saved)){
+  if(previous && Object.hasOwn(draft,uid) && previous[uid]===saved[uid])merged[uid]=draft[uid];
+ }
+ return merged;
+}
 function renderTeamSetup(){
  if(!staffView||session?.mode!=='team'||session.status!=='lobby')return;
+ const size=session.teamSize??3;
+ const membersByCaptain=new Map();
+ for(const person of roster){
+  const captain=session.assignments?.[person.uid];
+  if(!captain)continue;
+  if(!membersByCaptain.has(captain))membersByCaptain.set(captain,[]);
+  membersByCaptain.get(captain).push(person.name);
+ }
+ const groups=Object.entries(session.teamNames||{}).filter(([captain])=>membersByCaptain.has(captain));
+ const rosterSummary=groups.length?'<details><summary>Joined teams ('+groups.length+')</summary><ul aria-label="Joined team members">'+groups.map(([captain,name])=>{
+  const members=membersByCaptain.get(captain);
+  return '<li><strong>'+esc(name)+'</strong> · '+members.length+(members.length===1?' student':' students')+' · '+members.map(esc).join(', ')+'</li>';
+ }).join('')+'</ul></details>':'';
+ const groupingHelp='<p>Students are assigned as they join, in groups of <strong id="team-size">'+size+'</strong>. The last team may be smaller.</p>';
  if(session.teamComposition){
   let panel=$('team-setup');
   if(!panel){panel=document.createElement('section');panel.id='team-setup';panel.className='panel';$('roster').closest('section').before(panel);}
-  panel.innerHTML='<h2>Team composition</h2><p>Teams use the assignments saved in the directory. Only students who join this classroom play.</p><button type="button" class="secondary" id="edit-composition">Edit in Users &amp; Teams</button>';
+  panel.innerHTML='<h2>Team membership</h2>'+groupingHelp+rosterSummary+'<p>Adjust assignments in the directory before starting the competition.</p><button type="button" class="secondary" id="edit-composition">Edit in Users &amp; Teams</button>';
   $('edit-composition').onclick=()=>action(()=>showStaffTeams(null,session.code));
   return;
  }
  captureTeamDraft();
  const assignmentKey=JSON.stringify(session.assignments||{}),nameKey=JSON.stringify(session.teamNames||{});
- teamEditor??={page:0,size:'3',assignments:{},names:{}};
- if(teamEditor.assignmentKey!==assignmentKey){teamEditor.assignments={...session.assignments};teamEditor.assignmentKey=assignmentKey;}
- if(teamEditor.nameKey!==nameKey){teamEditor.names={...session.teamNames};teamEditor.nameKey=nameKey;}
+ teamEditor??={page:0,assignments:{},names:{}};
+ if(teamEditor.assignmentKey!==assignmentKey){
+  teamEditor.assignments=mergeTeamDraft(session.assignments||{},teamEditor.savedAssignments,teamEditor.assignments);
+  teamEditor.savedAssignments=session.assignments;teamEditor.assignmentKey=assignmentKey;
+ }
+ if(teamEditor.nameKey!==nameKey){
+  teamEditor.names=mergeTeamDraft(session.teamNames||{},teamEditor.savedNames,teamEditor.names);
+  teamEditor.savedNames=session.teamNames;teamEditor.nameKey=nameKey;
+ }
  const pages=Math.max(1,Math.ceil(roster.length/25));teamEditor.page=Math.min(teamEditor.page,pages-1);
  const signature=JSON.stringify([roster.map(p=>[p.uid,p.name]),assignmentKey,nameKey,teamEditor.page]);
  let panel=$('team-setup');if(panel?.dataset.signature===signature)return;
@@ -717,11 +785,11 @@ function renderTeamSetup(){
  panel.dataset.signature=signature;
  const shown=roster.slice(teamEditor.page*25,(teamEditor.page+1)*25);
  const drawNotice='Human opponents are drawn at random when the classroom starts. With an odd number of teams, one team receives a bye and plays its own market.';
- panel.innerHTML='<p class="eyebrow">TEAM COMPETITION</p><h2>Build your teams.</h2><p>Registered students join with the session code first. Randomly group them, then adjust captains, team names and membership. '+drawNotice+' AI-enabled phases pair each team with its own AI opponent. The captain saves each decision for the team.</p><label>Target team size<input id="team-size" type="number" min="1" max="20" value="'+esc(teamEditor.size)+'"></label><button id="group-teams">Randomly assign teams</button><p class="hint">The last team may be smaller. Maximum 20 people per team and 100 teams. Students see their team and its opponent. Only teaching staff can see participant emails.</p><form id="team-form">'+(roster.length?shown.map((p,i)=>'<label>'+esc(p.name)+'<select aria-label="Assign team for '+esc(p.name)+'" aria-describedby="team-assignment-'+i+'" data-team-member="'+esc(p.uid)+'"><option value="">Unassigned</option>'+roster.map(c=>'<option value="'+esc(c.uid)+'" '+(teamEditor.assignments[p.uid]===c.uid?'selected':'')+'>'+esc(c.name)+' (captain)</option>').join('')+'</select><span id="team-assignment-'+i+'" class="team-assignment-summary">'+esc(teamAssignmentDescription(teamEditor.assignments[p.uid]))+'</span></label>').join('')+'<button class="secondary">Save membership</button>':'<p>Participants will appear here after joining.</p>')+'</form>'+(pages>1?'<div class="button-row"><button id="team-prev" class="secondary" '+(teamEditor.page===0?'disabled':'')+'>Previous participants</button><span>Page '+(teamEditor.page+1)+' of '+pages+'</span><button id="team-next" class="secondary" '+(teamEditor.page===pages-1?'disabled':'')+'>Next participants</button></div><p class="hint">Edits on every page are saved together with Save membership.</p>':'')+'<form id="team-names">'+Object.entries(teamEditor.names).map(([uid,name])=>'<label>Team name<input aria-label="Team name for captain '+esc(teamCaptainName(uid))+'" data-team-name="'+esc(uid)+'" maxlength="60" required value="'+esc(name)+'"><span class="team-captain">Captain: '+esc(teamCaptainName(uid))+' · '+'Opponent drawn at start'+'</span></label>').join('')+(Object.keys(teamEditor.names).length?'<button class="secondary">Save team names</button>':'')+'</form>';
+ panel.innerHTML='<h2>Team membership</h2>'+groupingHelp+rosterSummary+'<p>'+drawNotice+' Each captain saves the team’s scored decisions.</p><button type="button" class="secondary" id="group-teams" '+(roster.length?'':'disabled')+'>Reshuffle joined students</button><p class="hint">You can adjust members, captains and team names before starting the competition.</p><form id="team-form">'+(roster.length?shown.map((p,i)=>'<label>'+esc(p.name)+'<select aria-label="Assign team for '+esc(p.name)+'" aria-describedby="team-assignment-'+i+'" data-team-member="'+esc(p.uid)+'"><option value="">Unassigned</option>'+roster.map(c=>'<option value="'+esc(c.uid)+'" '+(teamEditor.assignments[p.uid]===c.uid?'selected':'')+'>'+esc(c.name)+' (captain)</option>').join('')+'</select><span id="team-assignment-'+i+'" class="team-assignment-summary">'+esc(teamAssignmentDescription(teamEditor.assignments[p.uid]))+'</span></label>').join('')+'<button class="secondary">Save membership</button>':'<p>Participants will appear here after joining.</p>')+'</form>'+(pages>1?'<div class="button-row"><button id="team-prev" class="secondary" '+(teamEditor.page===0?'disabled':'')+'>Previous participants</button><span>Page '+(teamEditor.page+1)+' of '+pages+'</span><button id="team-next" class="secondary" '+(teamEditor.page===pages-1?'disabled':'')+'>Next participants</button></div><p class="hint">Edits on every page are saved together with Save membership.</p>':'')+'<form id="team-names">'+Object.entries(teamEditor.names).map(([uid,name])=>'<label>Team name<input aria-label="Team name for captain '+esc(teamCaptainName(uid))+'" data-team-name="'+esc(uid)+'" maxlength="60" required value="'+esc(name)+'"><span class="team-captain">Captain: '+esc(teamCaptainName(uid))+' · '+'Opponent drawn at start'+'</span></label>').join('')+(Object.keys(teamEditor.names).length?'<button class="secondary">Save team names</button>':'')+'</form>';
  document.querySelectorAll('[data-team-member]').forEach(el=>el.addEventListener('change',()=>{$(el.getAttribute('aria-describedby')).textContent=teamAssignmentDescription(el.value);}));
- $('group-teams').onclick=()=>action(async()=>{if(!roster.length)throw Error('Ask students to join first.');const groups=groupTeams(roster,Number($('team-size').value));await api.saveTeams(session.code,groups.assignments,groups.teamNames);note('Teams assigned. Review membership before starting.');});
+ $('group-teams').onclick=()=>action(async()=>{const groups=groupTeams(roster,size);await api.saveTeams(session.code,groups.assignments,groups.teamNames);note('Joined students reshuffled into teams.');});
  for(const [id,delta] of [['team-prev',-1],['team-next',1]])$(id)?.addEventListener('click',()=>{captureTeamDraft();teamEditor.page+=delta;renderTeamSetup();});
- $('team-form').onsubmit=e=>{e.preventDefault();action(async()=>{captureTeamDraft();const assignments=Object.fromEntries(roster.map(p=>[p.uid,teamEditor.assignments[p.uid]||'']));const teamNames=Object.fromEntries([...new Set(Object.values(assignments))].map((uid,i)=>[uid,session.teamNames?.[uid]||'Team '+(i+1)]));if(!validateTeams(roster,assignments,teamNames))throw Error('Assign everyone and ensure each captain is assigned to their own team (maximum 20 per team).');await api.saveTeams(session.code,assignments,teamNames);note('Team membership saved.');});};
+ $('team-form').onsubmit=e=>{e.preventDefault();action(async()=>{captureTeamDraft();const assignments=Object.fromEntries(roster.map(p=>[p.uid,teamEditor.assignments[p.uid]||'']));const teamNames=Object.fromEntries([...new Set(Object.values(assignments))].map((uid,i)=>[uid,session.teamNames?.[uid]||'Team '+(i+1)]));const limit=session.teamSize??20;if(!validateTeams(roster,assignments,teamNames,limit))throw Error('Assign each student and captain to a team with at most '+limit+' members.');await api.saveTeams(session.code,assignments,teamNames);note('Team membership saved.');});};
  $('team-names').onsubmit=e=>{e.preventDefault();action(async()=>{captureTeamDraft();const names=Object.fromEntries(Object.entries(teamEditor.names).map(([uid,name])=>[uid,name.trim()]));await api.saveTeams(session.code,session.assignments,names);note('Team names saved.');});};
 }
 function competitionInstructions(){
@@ -748,24 +816,24 @@ function renderCompetition(){
  const aiNow=waiting?false:aiActive(session,final?1:phase().index);
  const individual=!waiting&&!aiNow&&paired&&captain&&!opponent;
  const assignedNumber=waiting&&session.teamComposition?.[user.uid];
- const name=session.teamNames?.[captain]||(assignedNumber?'Team '+assignedNumber:'Waiting for team assignment');
+ const name=session.teamNames?.[captain]||(assignedNumber?'Team '+assignedNumber:waiting?'Joining your team…':'Your team');
  const banner=document.createElement('section');banner.className='panel team-banner';
- const matchup=waiting?(session.aiOpponent?aiPhaseDescription(session)+' ':'')+((!session.aiOpponent?.main||!session.aiOpponent?.practice)?'Human opponents are drawn at random when the session starts.':'')
+ const matchup=waiting?'Human opponents are drawn at random when the instructor starts the scored competition.'
   : aiNow?aiPhaseDescription(session):opponent
   ? (waiting?'Current opponent':'Session opponent')+' · '+esc(session.teamNames[opponent])
   : individual?'Individual play · Your team has its own market.':'';
  const heading=waiting?'TEAM WAITING ROOM':final?'TEAM RESULTS':individual?'INDIVIDUAL PLAY':'TEAM COMPETITION';
  banner.innerHTML='<p class="eyebrow">'+heading+'</p>'+(waiting?'<p class="session-context">'+esc(session.name)+' · Session code '+esc(session.code)+'</p>':'')+'<h2>'+esc(name)+'</h2>'+(matchup?'<p class="team-matchup">'+matchup+'</p>':'');
  if(waiting){
-  const role=captain?(captain===user.uid?'You are the team captain. You will save decisions for this team.':'You are a teammate. Your captain submits the shared decisions. You can follow updates and discuss together.'):assignedNumber?'Your team assignment is saved. The classroom will confirm the captain when play starts.':'You have joined the session. Your instructor assigns teams. Your team will appear here automatically.';
+  const role=captain?(captain===user.uid?'You are the team captain. You will save decisions for this team.':'You are a teammate. Your captain submits the shared decisions. You can follow updates and discuss together.'):assignedNumber?'Your team assignment is saved. The classroom will confirm the captain when play starts.':'You can practice while your team membership loads.';
   banner.insertAdjacentHTML('beforeend','<p class="team-role" role="status" aria-live="polite">'+role+'</p><p class="hint">Membership and opponents lock when the session starts. Ask your instructor if your team assignment needs to change.</p>');
-  if(!session.aiOpponent && captain)banner.insertAdjacentHTML('beforeend','<details><summary>How team competition works</summary>'+competitionInstructions()+'</details>');
+  if(captain)banner.insertAdjacentHTML('beforeend','<details><summary>How team competition works</summary>'+competitionInstructions()+'</details>');
  }else if(final){
   banner.insertAdjacentHTML('beforeend','<p>These are your team’s shared results. Only completed scored seasons count. Practice is excluded.</p>');
  }else if(captain){
   const role=captain===user.uid?'You are the captain. Discuss with your team, then save one shared decision.':'Your captain submits the shared decision. Saved changes appear here automatically.';
   banner.insertAdjacentHTML('beforeend','<p>'+role+'</p>');
-  if((aiNow||!individual)&&phase().index===0&&phase().kind==='plan')banner.insertAdjacentHTML('beforeend',competitionInstructions());
+  if((aiNow||!individual)&&phase().index===(hasHomeTeamPractice(session)?1:0)&&phase().kind==='plan')banner.insertAdjacentHTML('beforeend',competitionInstructions());
  }
  $('app').prepend(banner);
  if($('order-form')){const readOnly=captain!==user.uid;$('order-form').insertAdjacentHTML('beforebegin','<p class="decision-role">'+(readOnly?'Team view · Your captain saves decisions. Saved changes appear here automatically.':'Team captain · Save your decisions to share them with your teammates.')+'</p>');if(readOnly){for(const el of $('order-form').elements)el.disabled=true;$('save-order').hidden=true;}}
@@ -773,12 +841,12 @@ function renderCompetition(){
 }
 function renderLeaderboard(){
  if(session?.mode!=='team'||session.status==='lobby'||(staffView&&!rosterOrdersReady()))return;
- if(session.aiOpponent&&elapsed()<ROUNDS[1].end)return;
+ if(session.aiOpponent&&progress()<ROUNDS[1].end)return;
  const captain=staffView?undefined:decisionOwner(session,user.uid);
  const paired=usesPairedMarkets(session);
  if(!staffView&&(!captain||(paired&&!session.aiOpponent?.main&&teamMatchup(session,captain).length<2)))return;
  const saved=studentPreview?{...classOrders,[captain]:orders}:teamResultOrders();
- const rows=leaderboard(session,saved,elapsed(),captain);
+ const rows=leaderboard(session,saved,progress(),captain);
  if(!rows.length)return;
  let panel=$('leaderboard');
  if(!panel){
@@ -832,7 +900,7 @@ function loadTeamMarket(){
  const key=JSON.stringify([code,session.status,p.index,p.kind,competitors]);
  if(marketReady===key)return false;
  if(marketLoading===key)return true;
- const rounds=ROUNDS.map((r,i)=>elapsed()>=(session.status==='closed'?r.end:r.split)?i:null).filter(i=>i!==null);
+ const rounds=ROUNDS.map((r,i)=>(i!==0||!hasHomeTeamPractice(session))&&progress()>=(session.status==='closed'?r.end:r.split)?i:null).filter(i=>i!==null);
  if(!rounds.length){if(session.status==='closed')finalTeamOrders={};marketReady=key;return false;}
  const needHuman=staffView?session.status==='closed':team||session.status==='closed';
  const needAi=rounds.some(i=>aiActive(session,i));

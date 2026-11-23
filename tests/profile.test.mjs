@@ -23,7 +23,7 @@ test('profile validation trims details and rejects whitespace-only names',()=>{
 });
 test('history excludes practice and freezes early-closed results',()=>{
  const base={seed:42,config:DEFAULT_CONFIG,orders:{0:{...DEFAULT_ORDER,quantity:200}},createdAt:{toMillis:()=>0},startedAt:{toMillis:()=>0}};
- const stats=historyStats([{...base,code:'one',status:'running'},{...base,code:'two',status:'closed',closedAt:{toMillis:()=>500000}},{...base,code:'three',startedAt:null,status:'lobby'}],1080000);
+ const stats=historyStats([{...base,code:'one',status:'running',phaseOffset:960},{...base,code:'two',status:'closed',closedAt:{toMillis:()=>500000}},{...base,code:'three',startedAt:null,status:'lobby'}],1080000);
  assert.equal(stats.finished,1);assert.equal(stats.seasons,4);assert.equal(stats.rows[1].rounds.length,1);
  assert.equal(stats.profit,[1,2,3,1].reduce((sum,i)=>sum+resultFor(42,i,DEFAULT_ORDER,DEFAULT_CONFIG).profit,0));
 });

@@ -19,8 +19,23 @@ test('solo start, team setup, captain saves, teammate read-only view and period 
  assert.ok($('#create'),'creating a session keeps the admin dashboard open');
  createdCard().querySelector('[data-session]').click();await wait(()=>$('#team-setup'));
  data=JSON.parse(w.localStorage.getItem('ff:demo:v1'));const code=Object.values(data.sessions).find(s=>s.mode==='team').code;
- // Populate the synthetic classroom with registered participants before testing assignment controls.
- data.people[code]=Object.fromEntries(['alice','bob','charlie','dana'].map(n=>['demo-'+n+'@example.test',{uid:'demo-'+n+'@example.test',name:n,email:n+'@example.test'}]));w.localStorage.setItem('ff:demo:v1',JSON.stringify(data));await api.saveDefaults(DEFAULT_CONFIG);await wait(()=>$('[data-team-member]'));assert.equal($('#team-size').value,'3');click('#group-teams');await wait(()=>Object.keys(JSON.parse(w.localStorage.getItem('ff:demo:v1')).sessions[code].teamNames).length===2);
+ const entrants=await import('../backend-demo.js?team-entrants');
+ for(const name of ['alice','bob','charlie','dana']){
+  if(name==='dana'){
+   await wait(()=>w.document.querySelectorAll('[data-team-member]').length===3);
+   $('[data-team-name]').value='North draft';
+  }
+  await entrants.loginEmail(name+'@example.test');await entrants.joinSession(code,name);
+  w.dispatchEvent(new w.StorageEvent('storage',{key:'ff:demo:v1'}));
+ }
+ await wait(()=>w.document.querySelectorAll('[data-team-member]').length===4);
+ assert.equal($('#team-size').textContent,'3');
+ assert.equal($('[data-team-name="demo-alice@example.test"]').value,'North draft');
+ const membership=Array.from(w.document.querySelectorAll('[aria-label="Joined team members"] li'),el=>el.textContent);
+ assert.ok(membership.some(line=>line.includes('Team 1 · 3 students')));
+ assert.ok(membership.some(line=>line.includes('Team 2 · 1 student')));
+ assert.equal($('[data-team-member="demo-bob@example.test"]').value,'demo-alice@example.test');
+ assert.equal($('[data-team-member="demo-dana@example.test"]').value,'demo-dana@example.test');
  const assignments=Object.fromEntries(['alice','bob','charlie','dana'].map(n=>['demo-'+n+'@example.test','demo-'+(['alice','bob'].includes(n)?'alice':'charlie')+'@example.test']));for(const el of w.document.querySelectorAll('[data-team-member]')){el.value=assignments[el.dataset.teamMember];el.dispatchEvent(new w.Event('change',{bubbles:true}));assert.match(w.document.getElementById(el.getAttribute('aria-describedby')).textContent,new RegExp('Captain: '+(el.value.includes('alice')?'alice':'charlie')));}
  submit('#team-form');await wait(()=>JSON.stringify(JSON.parse(w.localStorage.getItem('ff:demo:v1')).sessions[code].assignments)===JSON.stringify(assignments));
  await wait(()=>w.document.querySelectorAll('[data-team-name]').length===2);
@@ -29,9 +44,14 @@ test('solo start, team setup, captain saves, teammate read-only view and period 
  await api.startSession(code);await wait(()=>$('#leaderboard'));assert.equal($('#team-setup'),null);
  await api.logout();await wait(()=>$('#open-login'));w.localStorage.removeItem('ff:session:demo-alice@example.test');w.sessionStorage.removeItem('ff:session:demo-alice@example.test');w.history.replaceState({},'', '/?demo');await api.loginEmail('alice@example.test');await wait(()=>$('#join'));$('#join [name=code]').value=code;submit('#join');await wait(()=>$('#order-form'));assert.equal($('#save-order').disabled,false);$('#order-form [name=quantity]').value='93';submit('#order-form');await wait(()=>$('.save-state').textContent.includes('93'));
  await api.logout();await wait(()=>$('#open-login'));await api.loginEmail('bob@example.test');await wait(()=>$('#join'));$('#join [name=code]').value=code;submit('#join');await wait(()=>$('#order-form'));assert.equal($('#save-order').disabled,true);assert.equal($('#order-form [name=quantity]').value,'93');assert.match($('.team-banner').textContent,/captain submits/);
- for(let i=0;i<3;i++){click('#demo-forward');await wait(()=>$('#demo-forward'));}await wait(()=>$('#leaderboard').textContent.includes('after 1 scored period'));assert.match($('#leaderboard').textContent,/Team A/);assert.match($('#leaderboard').textContent,/Team B/);
+ const host=await import('../backend-demo.js?competition-host');
+ await host.loginGoogle();
+ const advance=async offset=>{await host.advancePhase(code,offset);w.dispatchEvent(new w.StorageEvent('storage',{key:'ff:demo:v1'}));};
+ assert.equal(JSON.parse(w.localStorage.getItem('ff:demo:v1')).sessions[code].phaseOffset,180);
+ await assert.rejects(api.advancePhase(code,420),/owner or administrator/);
+ await advance(420);await wait(()=>$('#leaderboard').textContent.includes('after 1 scored period'));assert.match($('#leaderboard').textContent,/Team A/);assert.match($('#leaderboard').textContent,/Team B/);
  // A teammate receives the same final team score, an identifiable rank, and results before the exit.
- for(let i=0;i<4;i++){click('#demo-forward');await wait(()=>$('#demo-forward')||$('#season-results'));}
+ for(const offset of [540,660,810,960])await advance(offset);
  await wait(()=>$('#leaderboard h2').textContent==='Final team leaderboard');
  assert.match($('.team-standing').textContent,/Your team: rank \d of 2/);
  assert.match($('.own-team').textContent,/Team A/);
@@ -41,12 +61,12 @@ test('solo start, team setup, captain saves, teammate read-only view and period 
  assert.ok($('#leaderboard').compareDocumentPosition($('#finish')) & w.Node.DOCUMENT_POSITION_FOLLOWING);
  assert.ok($('#leaderboard').compareDocumentPosition($('#season-results')) & w.Node.DOCUMENT_POSITION_FOLLOWING);
  assert.equal($('#leaderboard .table-wrap').getAttribute('aria-label'),'Team leaderboard');
- assert.equal(w.document.querySelectorAll('.season-results tbody tr').length,4);
- assert.match($('.season-results tbody tr').textContent,/unscored/);
+ assert.equal(w.document.querySelectorAll('.season-results tbody tr').length,3);
+ assert.doesNotMatch($('.season-results tbody').textContent,/practice|unscored/i);
  assert.equal($('.results-nav a').getAttribute('href'),'#leaderboard');
  click('#my-profile');await wait(()=>$('#profile-history').textContent.includes('Teams'));assert.doesNotMatch($('#profile-history').textContent,/Solo/);
- // Reopen a truly completed shared game from history, not only the local demo clock.
- data=JSON.parse(w.localStorage.getItem('ff:demo:v1'));data.sessions[code].startedAt=Date.now()-1081000;
+ // Review the completed classroom from history with its confirmed scored orders.
+ data=JSON.parse(w.localStorage.getItem('ff:demo:v1'));
  data.orders[code]['demo-alice@example.test'][1]={variety:4,quantity:111,cap:0};
  w.localStorage.setItem('ff:demo:v1',JSON.stringify(data));click('#my-profile');await wait(()=>$('[data-review="true"]'));
  const historyProfit=$('.history-results [data-label="Team profit"]').textContent;

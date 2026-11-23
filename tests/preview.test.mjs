@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {JSDOM} from 'jsdom';
 
-test('instructor rehearsal follows every student deadline without writing classroom records',async t=>{
+test('instructor rehearsal advances only on request without writing classroom records',async t=>{
  const dom=new JSDOM(readFileSync('index.html','utf8'),{url:'http://localhost:8791/?demo',pretendToBeVisual:true});
  const w=dom.window;
  for(const k of ['document','location','localStorage','sessionStorage','FormData'])globalThis[k]=w[k];
@@ -19,9 +19,33 @@ test('instructor rehearsal follows every student deadline without writing classr
  assert.equal(mode.selectedOptions[0].textContent,'Individual play');
  assert.match($('#play-mode-help').textContent,/their own market/);
  mode.value='team';mode.dispatchEvent(new w.Event('change'));
- assert.match($('#play-mode-help').textContent,/same opponent from practice through the final season/);
+ assert.equal($('#classroom-team-size-field').hidden,false);
+ assert.equal($('#create [name=teamSize]').valueAsNumber,3);
+ $('#create [name=teamSize]').value='21';
+ assert.equal($('#create [name=teamSize]').checkValidity(),false);
+ $('#create [name=teamSize]').value='2';
+ assert.match($('#play-mode-help').textContent,/practice against AI as often as they like before class/);
+ assert.match($('#play-mode-help').textContent,/human opponent for all three seasons/);
  assert.match($('#play-mode-help').textContent,/unpaired team uses individual play/);
- mode.value='individual';mode.dispatchEvent(new w.Event('change'));
+ assert.equal($('#create .ai-phase-fields').hidden,true);
+ click('#preview-settings');await wait(()=>$('#team-practice')&&$('#preview-main'));
+ click('[data-practice-start]');await wait(()=>$('[data-practice-order]'));
+ assert.equal($('#clock'),null);
+ click('#preview-main');await wait(()=>$('#order-form')&&$('h1').textContent.includes('Order ahead'));
+ assert.doesNotMatch($('.steps').textContent,/practice/i);
+ assert.equal($('.history-results'),null);
+ click('#preview-exit');await wait(()=>$('#create'));
+ assert.equal(Object.keys(w.sessionStorage).filter(key=>key.startsWith('ff:team-practice:')).length,0);
+ const teamMode=$('#create [name=mode]');
+ teamMode.value='team';teamMode.dispatchEvent(new w.Event('change'));
+ $('#create [name=teamSize]').value='2';
+ $('#create [name=name]').value='Pairs classroom';
+ $('#classroom-code').value='PAIRS2';
+ submit('#create');
+ await wait(()=>Object.values(JSON.parse(w.localStorage.getItem('ff:demo:v1')).sessions).some(s=>s.name==='Pairs classroom'&&s.teamSize===2));
+ await wait(()=>Array.from(w.document.querySelectorAll('.studio-session-card h4')).some(el=>el.textContent==='Pairs classroom'));
+ $('#create [name=mode]').value='individual';$('#create [name=mode]').dispatchEvent(new w.Event('change'));
+ assert.equal($('#classroom-team-size-field').hidden,true);
  $('#create [name=demandMean]').value='960';
  const before=w.localStorage.getItem('ff:demo:v1');
  const realNow=Date.now;
@@ -30,7 +54,8 @@ test('instructor rehearsal follows every student deadline without writing classr
  Date.now=()=>now;
  t.after(()=>{Date.now=realNow;});
  const advanceTo=async(seconds,condition)=>{
-  now=startedAt+seconds*1000;
+  now=startedAt+(seconds+10000)*1000;
+  click('#next-phase');
   await wait(condition);
  };
  click('#preview-settings');await wait(()=>$('#preview-exit')&&$('#order-form'));
@@ -46,7 +71,9 @@ test('instructor rehearsal follows every student deadline without writing classr
    submit('#order-form');await wait(()=>$('.save-state')?.textContent.includes('cap 60'));
  };
  await saveInitial(90);
- await advanceTo(89,()=>$('#clock')?.textContent==='0:01');
+ now+=86400000;
+ await new Promise(r=>setTimeout(r,550));
+ assert.equal($('#clock'),null);
  assert.equal($('#order-form').elements.quantity.value,'90');
  await saveRestock(90);
  for(const [seconds,title,quantity] of [[180,'Order ahead',80],[420,'Respond to demand',70],[660,'Expand the collection',60]]){
@@ -56,9 +83,9 @@ test('instructor rehearsal follows every student deadline without writing classr
    if(seconds===420)await saveRestock(540);
    if(seconds===660)await saveRestock(810);
  }
- await advanceTo(960,()=>$('#season-results')&&$('#clock')?.textContent==='2:00');
+ await advanceTo(960,()=>$('#season-results')&&!$('#clock'));
  assert.equal($('#order-form'),null);assert.match(w.document.body.textContent,/Practice is excluded/);
- await advanceTo(1080,()=>$('#season-results')&&!$('#clock'));
+
  assert.equal(w.localStorage.getItem('ff:demo:v1'),before,'preview must not create any database-like records');
  assert.equal(w.localStorage.getItem('ff:session:demo-admin'),null,'preview must not replace real student resume state');
  click('#preview-exit');await wait(()=>$('#create'));
@@ -70,7 +97,7 @@ test('instructor rehearsal follows every student deadline without writing classr
  await wait(createdCard);
  assert.ok($('#create'),'creating a session keeps the admin dashboard open');
  createdCard().querySelector('[data-session]').click();await wait(()=>$('#start'));
- let records=JSON.parse(w.localStorage.getItem('ff:demo:v1')),code=Object.keys(records.sessions)[0];
+ let records=JSON.parse(w.localStorage.getItem('ff:demo:v1')),code=Object.values(records.sessions).find(s=>s.name===createdName).code;
  await backend.startSession(code);await wait(()=>$('#preview-session')&&!$('#start'));
  const liveBefore=w.localStorage.getItem('ff:demo:v1');
  click('#preview-session');await wait(()=>$('#preview-exit'));assert.match($('h1').textContent,/Practice/);
@@ -84,7 +111,7 @@ test('instructor rehearsal follows every student deadline without writing classr
  dom.reconfigure({url:rehearsalUrl});
  now+=30000;
  await import('../main.js?preview-test-reloaded');
- await wait(()=>$('#order-form')?.elements.quantity.value==='137'&&$('#clock')?.textContent==='1:00');
+ await wait(()=>$('#order-form')?.elements.quantity.value==='137'&&!$('#clock'));
  assert.equal(w.localStorage.getItem('ff:demo:v1'),liveBefore);
  // Signing out clears preview and students never receive its controls.
  click('#out');await wait(()=>$('#open-login'));assert.equal($('#preview-exit'),null);

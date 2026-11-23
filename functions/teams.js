@@ -17,49 +17,123 @@ export function makeTeamOpponents(teamNames, random) {
   ]));
 }
 
-export function getTeamComposition(session) {
-  if (session.teamComposition != null) return {...session.teamComposition};
-  // Older classrooms store membership by captain UID. Reserve their numbered
-  // names first, then assign available numbers to any custom-named teams.
-  const teams = Object.entries(session.teamNames || {});
+export const DEFAULT_TEAM_SIZE = 3;
+export const validTeamSize = size => Number.isInteger(size) && size >= 1 && size <= 20;
+
+// Numbered directory assignments must also refer to classrooms with custom team names.
+function teamNumbers(teamNames = {}) {
+  const teams = Object.keys(teamNames).sort();
   const numbers = new Map();
   const used = new Set();
-  for (const [captain, name] of teams) {
+  for (const captain of teams) {
+    const name = teamNames[captain];
     const n = /^Team ([1-9]\d?|100)$/.exec(name)?.[1];
     if (n && !used.has(n)) { numbers.set(captain, n); used.add(n); }
   }
   let next = 1;
-  for (const [captain] of teams) {
+  for (const captain of teams) {
     if (numbers.has(captain)) continue;
     while (used.has(String(next))) next++;
     numbers.set(captain, String(next)); used.add(String(next));
   }
-  return Object.fromEntries(Object.entries(session.assignments || {})
-    .filter(([, captain]) => numbers.has(captain)).map(([uid, captain]) => [uid, numbers.get(captain)]));
+  return numbers;
+}
+
+export function getTeamComposition(session) {
+  const numbers = teamNumbers(session.teamNames);
+  const assigned = Object.entries(session.assignments || {})
+    .filter(([, captain]) => numbers.has(captain)).map(([uid, captain]) => [uid, numbers.get(captain)]);
+  return {...Object.fromEntries(assigned), ...session.teamComposition};
+}
+
+function capacity(session) {
+  const size = session.teamSize ?? DEFAULT_TEAM_SIZE;
+  if (!validTeamSize(size)) throw Error('Team size must be 1–20.');
+  return size;
+}
+
+function availableNumber(captains, seats, size) {
+  // Fill existing groups in team-number order before creating another group.
+  for (let n = 1; n <= 100; n++) {
+    const number = String(n);
+    if (captains.has(number) && seats[n] < size) return number;
+  }
+  for (let n = 1; n <= 100; n++) {
+    if (!captains.has(String(n)) && seats[n] < size) return String(n);
+  }
+  throw Error('This classroom has reached its limit of 100 teams. Increase the team size to admit more participants.');
+}
+
+export function assignJoiningTeam(session, uid) {
+  const assignments = session.assignments || {}, teamNames = session.teamNames || {};
+  if (Object.hasOwn(assignments, uid)) return {assignments, teamNames};
+  if (Object.keys(assignments).length >= 500) throw Error('A classroom supports up to 500 participants.');
+  const size = capacity(session);
+  const numbers = teamNumbers(teamNames);
+  const captains = new Map(Array.from(numbers, ([captain, number]) => [number, captain]));
+  const seats = Array(101).fill(0);
+  for (const captain of Object.values(assignments)) seats[numbers.get(captain)]++;
+  const planned = session.teamComposition || {};
+  for (const [student, number] of Object.entries(planned)) {
+    if (!Object.hasOwn(assignments, student)) seats[number]++;
+  }
+  const number = Object.hasOwn(planned, uid) ? planned[uid] : availableNumber(captains, seats, size);
+  const maxMembers = session.teamSize ?? 20;
+  if (!/^(?:[1-9]\d?|100)$/.test(number)) throw Error('Choose a team number from 1 to 100.');
+  if (seats[number] > maxMembers) throw Error('This team supports up to ' + maxMembers + ' members. Review the team assignments.');
+  const captain = captains.get(number) || uid;
+  return {
+    assignments: {...assignments, [uid]: captain},
+    teamNames: captain === uid ? {...teamNames, [uid]: 'Team ' + number} : teamNames
+  };
 }
 
 export function materializeTeams(people, session) {
-  if (session.teamComposition == null) return {assignments: session.assignments || {}, teamNames: session.teamNames || {}};
+  if (session.status && session.status !== 'lobby') return {assignments: session.assignments || {}, teamNames: session.teamNames || {}};
+  const ids = people.map(person => person.uid).sort();
+  if (ids.length > 500 || new Set(ids).size !== ids.length) throw Error('A classroom supports up to 500 distinct participants.');
+  const size = capacity(session);
+  const existing = session.assignments || {}, planned = session.teamComposition || {};
+  const numbers = teamNumbers(session.teamNames);
+  const oldCaptains = new Map(Array.from(numbers, ([captain, number]) => [number, captain]));
+  const seats = Array(101).fill(0);
   const members = new Map();
-  for (const {uid} of people) {
-    const number = session.teamComposition[uid];
-    if (!number) continue;
+  const unassigned = [];
+  const maxMembers = session.teamSize ?? 20;
+  for (const number of Object.values(planned)) {
+    if (!/^(?:[1-9]\d?|100)$/.test(number)) throw Error('Choose a team number from 1 to 100.');
+    if (++seats[number] > maxMembers) throw Error('This team supports up to ' + maxMembers + ' members. Review the team assignments.');
+  }
+  for (const uid of ids) {
+    const fixed = Object.hasOwn(planned, uid);
+    const number = fixed ? planned[uid] : numbers.get(existing[uid]);
+    // Keep legacy manually assembled teams. For automatic teams, preserve each
+    // student's place whenever it fits beside the instructor's reserved seats.
+    const limit = session.teamSize != null || session.teamComposition != null ? size : 20;
+    if (!number || (!fixed && seats[number] >= limit)) { unassigned.push(uid); continue; }
+    if (!fixed) seats[number]++;
     if (!members.has(number)) members.set(number, []);
     members.get(number).push(uid);
   }
+  for (const uid of unassigned) {
+    const number = availableNumber(members, seats, size);
+    if (!members.has(number)) members.set(number, []);
+    members.get(number).push(uid);
+    seats[number]++;
+  }
   const assignments = [], teamNames = [];
-  for (const [number, ids] of members) {
-    const name = 'Team ' + number;
-    ids.sort();
-    const captain = ids.find(uid => session.teamNames?.[uid] === name && session.assignments?.[uid] === uid) || ids[0];
+  for (const [number, students] of members) {
+    const oldCaptain = oldCaptains.get(number);
+    const name = oldCaptain ? session.teamNames[oldCaptain] : 'Team ' + number;
+    const captain = students.includes(oldCaptain) ? oldCaptain : students[0];
     teamNames.push([captain, name]);
-    ids.forEach(uid => assignments.push([uid, captain]));
+    students.forEach(uid => assignments.push([uid, captain]));
   }
   return {assignments: Object.fromEntries(assignments), teamNames: Object.fromEntries(teamNames)};
 }
 
-export function validateTeams(people, assignments, teamNames) {
-  if (!assignments || !teamNames || typeof assignments !== 'object' || typeof teamNames !== 'object') return false;
+export function validateTeams(people, assignments, teamNames, maxSize = 20) {
+  if (!validTeamSize(maxSize) || !assignments || !teamNames || typeof assignments !== 'object' || typeof teamNames !== 'object') return false;
   const ids = people.map(person => person.uid);
   const captains = Object.keys(teamNames);
   return ids.length > 0 && ids.length <= 500 && new Set(ids).size === ids.length &&
@@ -67,5 +141,5 @@ export function validateTeams(people, assignments, teamNames) {
     ids.every(id => Object.hasOwn(assignments, id) && captains.includes(assignments[id])) &&
     captains.every(id => ids.includes(id) && assignments[id] === id &&
       typeof teamNames[id] === 'string' && teamNames[id].trim().length > 0 && teamNames[id].length <= 60 &&
-      ids.filter(uid => assignments[uid] === id).length <= 20);
+      ids.filter(uid => assignments[uid] === id).length <= maxSize);
 }

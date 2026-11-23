@@ -1,3 +1,4 @@
+import {useLocalTeamJoin} from './local-team-join.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -10,7 +11,7 @@ import {ADMIN_ACCOUNT_EMAIL} from '../auth-identity.js';
 test('separate admin accounts own their classes; students register, join and play; password resets are independent',async t=>{
  assert.equal(process.env.FIREBASE_AUTH_EMULATOR_HOST,'127.0.0.1:9198');
  assert.equal(process.env.FIRESTORE_EMULATOR_HOST,'127.0.0.1:8180');
- let source=readFileSync(new URL('../backend.js',import.meta.url),'utf8');
+ let source=useLocalTeamJoin(readFileSync(new URL('../backend.js',import.meta.url),'utf8'));
  for(const component of ['app','auth','firestore','functions'])source=source.replaceAll(`https://www.gstatic.com/firebasejs/12.5.0/firebase-${component}.js`,import.meta.resolve('firebase/'+component));
  source=source.replace("import {firebaseConfig,DATABASE,ADMIN_EMAIL} from './firebase-config.js';","const firebaseConfig={projectId:'demo-fashion-futures',apiKey:'demo-api-key',authDomain:'demo-fashion-futures.firebaseapp.com'},DATABASE='(default)',ADMIN_EMAIL='kstouras@gmail.com';");
  source=source.replace(/from '(\.\/[^']+)'/g,(_,path)=>'from '+JSON.stringify(new URL('../'+path.slice(2),import.meta.url).href));

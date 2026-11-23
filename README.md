@@ -1,6 +1,6 @@
 # Fast Fashion Ops
 
-An 18-minute executive teaching simulation about the quick-response paradox.
+A self-paced executive teaching simulation about the quick-response paradox.
 
 Live: https://www.stouras.com/fast-fashion-simulation/
 
@@ -10,7 +10,7 @@ Use Node 22 or newer. Run `npm ci`, then `node tools/serve.mjs` and open http://
 
 Real mode uses Firebase Google/email authentication and the default Firestore database in the dedicated `stouras-ffo` project (Fast Fashion Ops). The blog project is unchanged; FFO accounts are separate. Students verify their account and complete their profile. They can then start a private solo game without a code, or use an instructor’s code to join a classroom. Public Firebase web identifiers are not administrator credentials.
 
-For a synthetic local preview, open http://localhost:8791/?demo. The Google button signs in as a fake admin; email/password can sign in as a fake student. This mode exists only on localhost/127.0.0.1 and uses browser storage, never production data. Demo phase-advance buttons are absent from production.
+For a synthetic local preview, open http://localhost:8791/?demo. The Google button signs in as a fake admin. Email/password can sign in as a fake student. This mode runs on localhost/127.0.0.1 and uses browser storage.
 
 ## Test
 
@@ -24,6 +24,8 @@ For a synthetic local preview, open http://localhost:8791/?demo. The Google butt
 
 ## Deploy
 
+Deploy the updated Functions (including `joinTeamClassroom`) and Firestore rules to `stouras-ffo` before publishing the app. To switch from timed play, run `node tools/migrate-manual-stages.mjs --apply` immediately after the rules deployment. It saves each running classroom’s stage at cutover and can be rerun safely. If the existing rules already specify an earlier freeze, run the migration before replacing those rules so it preserves that stage. If those rules were already replaced, supply their verified timestamp with `--previous-cutover=<ISO timestamp>`. Omit `--apply` to preview the affected classroom count.
+
 GitHub Pages publishes main at the existing URL. Deploy database rules separately with `npx firebase deploy --only firestore --project stouras-ffo`. The checked-in firebase.json and .firebaserc target **only the dedicated FFO project**. `npx firebase deploy --only auth --project stouras-ffo` configures Google/email providers. Authorized domains include www.stouras.com, stouras.com and localhost.
 
 See PROTOTYPE-NOTES.md for assumptions, defaults, teaching workflow, limitations and verification scope. No private emails or real student records are included in this repository.
@@ -34,25 +36,27 @@ Admin entrance: https://www.stouras.com/fast-fashion-simulation/admin/ — Googl
 
 ## Individual play and team competition
 
-Solo play starts from the signed-in welcome page; the student reads the briefing before starting the 18-minute clock. Each new game receives a random seed and appears in profile history.
+In solo play, the student starts from the signed-in welcome page and advances each phase when ready. Each new game receives a random seed and appears in profile history. In classrooms, the instructor starts and advances the scored simulation for everyone. Advancing locks the preceding phase’s decisions.
 
 **Users & Teams** opens with the registered-user directory. Search by name, email or student ID. Open a person’s entry to see their classrooms, participation status, team and opponent in each phase. Instructors see participation within the classrooms they manage. The platform owner can review participation across classrooms.
 
-To form teams, select a waiting team classroom, choose a numbered team for each student and save the assignments. Students still join with the classroom code. Only joined students play, and each needs an assignment before the clock starts. A numbered team keeps its joined captain when possible. Otherwise the simulation assigns a captain from its joined members. Existing classrooms can also group joined participants in the room until the instructor starts using the directory.
+Choose **Students per team** when you create a team classroom. The default is three and the supported range is 1–20. Students who join with the classroom code are assigned to teams automatically. For example, seven students at the default size form groups of three, three and one. In the waiting classroom you can review the roster, reshuffle joined students or adjust membership, captains and team names. **Users & Teams** also lets you choose a numbered team for a registered student before they join.
 
-At the start of a team classroom, the simulation shuffles the teams uniformly and pairs them without replacement. An odd team receives a randomly drawn bye and plays its own market in human-opponent phases. The draw stays fixed throughout the classroom. Captains submit decisions for their teams.
+While the classroom is waiting, every joined student can practice at home against the built-in AI. Each student chooses opening stock and replenishment, sees both businesses’ results, and can start another round in a fresh market. Practice is private to the student’s tab and unscored. The built-in opponent runs locally without a provider key.
+
+When the instructor starts the competition, the simulation shuffles the teams and pairs them without replacement. Captains submit decisions for their teams against the same opponent across all three scored seasons. With an odd number of teams, one randomly selected team receives a bye and plays its own market.
 
 Each pair competes for its own demand pool. The configured demand mean and standard deviation apply to each pair. Customers choose among the two collections and try an available alternative when their preferred style sells out. Prices stay fixed. When one team offers eight styles, its market grows by half the configured extra-consumption rate. When both teams expand, the full rate applies. A team without an opponent uses the individual demand, replenishment and scoring rules, with the captain continuing to save decisions for the team.
 
 After initial ordering locks, each team can see its market outcomes. Paired teams compare cumulative profit, sales, customers won or lost to their opponent, leftovers and footprint after each scored season. An unpaired team sees its own results. Instructors can review all matchups and export one CSV row per team and scored season. Each member’s profile shows the shared team result. Practice is excluded from scores.
 
-Team preview uses one simulated rival with disclosed fixed decisions, the same shared-market engine and no database writes. The 18-minute structure is unchanged. This is a transparent teaching prototype, not an anti-cheating exam engine.
+The instructor’s private team preview includes the built-in AI practice and a simulated rival for the scored seasons. The instructor controls progression and preview decisions stay in the current tab.
 
 ## AI opponents
 
-In **AI settings**, an instructor can connect OpenAI, Anthropic and Google API keys and choose a text model available to their account. **Admin** lets the instructor enable AI separately for practice and the main phase at creation or in their waiting classroom. The main phase includes all three scored seasons. Private solo games use the existing individual market.
+For **Individual play** classrooms, an instructor can connect OpenAI, Anthropic or Google in **AI settings** and choose a text model available to their account. The instructor can enable this optional opponent for practice, the three scored seasons, or both. Private solo games use the individual market.
 
-Starting an AI classroom requests one independent strategy from the selected model per team or individual participant per enabled phase. The model chooses opening stock, replenishment caps and, in the final season, collection size to maximize expected profit using the classroom's costs and demand distribution. Only simulation parameters go to the provider. Ready strategies persist through preparation retries and the clock starts when all opponents are ready. Each AI matchup shares one demand draw. Extra styles redistribute that demand and customers can switch firms after a stockout. Reports use the saved opponent decisions, and practice stays outside the scored totals. The local demo and private rehearsal use simulated decisions without provider charges.
+Starting a provider-enabled individual classroom requests one independent strategy for each participant and enabled phase. The model chooses opening stock, replenishment caps and, in the final season, collection size using the classroom’s costs and demand distribution. Only simulation parameters go to the provider. Ready strategies persist through retries. The session starts once the opponents are ready and the instructor advances each phase. Each AI matchup shares one demand draw. Extra styles redistribute demand and customers can switch firms after a stockout. Reports use the saved opponent decisions. The local demo and private rehearsal use simulated decisions without provider charges.
 
 ### Enabling the live service
 
@@ -66,7 +70,7 @@ npm ci --prefix functions
 npx firebase deploy --only functions,firestore:rules --project stouras-ffo
 ```
 
-Publish the web files with the matching backend version, including the shared browser modules from the `functions` directory. A real instructor key is needed to run an AI classroom. Credentials stay encrypted on the server and the browser receives only connection status and the available models.
+Publish the web files with the matching backend version, including the shared browser modules from the `functions` directory. An instructor key enables provider-backed opponents in individual classrooms. Credentials stay encrypted on the server and the browser receives only connection status and the available models.
 
 Administrators have independent Firebase accounts and class ownership. The platform owner (`kstouras@gmail.com`) manages administrator access and can oversee all classes. The existing `instructors` collection holds class-administrator grants; these accounts manage only their own classes. `admin@admin.com` signs into a separate account whose recovery email is `kstouras+ffo-admin@gmail.com` (delivered to the owner’s Gmail). Its UID, password changes, profile and sessions are independent of the owner’s Google account.
 

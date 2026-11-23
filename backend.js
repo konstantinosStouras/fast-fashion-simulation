@@ -1,14 +1,15 @@
+import {hasHomeTeamPractice,nextPhaseOffset,sessionProgress} from './functions/session-progress.js?v=home-practice-1';
 import {emailActionSettings} from './auth-flow.js?v=session-codes-1';
 import {requireSessionCode,sessionCodeTaken} from './session-code.js';
-import {decisionOwner,validateTeams} from './competition.js?v=ai-opponents-1';
+import {decisionOwner,validateTeams} from './competition.js?v=home-practice-1';
 import {aiActive,makeTeamOpponents,teamMatchup} from './market.js?v=ai-opponents-1';
-import {materializeTeams} from './functions/teams.js';
+import {DEFAULT_TEAM_SIZE,materializeTeams,validTeamSize} from './functions/teams.js?v=home-practice-1';
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js';
 import {getAuth,GoogleAuthProvider,signInWithPopup,signInWithEmailAndPassword,createUserWithEmailAndPassword,sendEmailVerification,sendPasswordResetEmail,signOut,onAuthStateChanged,verifyBeforeUpdateEmail} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js';
 import {getFirestore,doc,collection,getDoc,getDocFromServer,getDocs,getDocsFromServer,setDoc,updateDoc,onSnapshot,serverTimestamp,query,where,runTransaction,increment,writeBatch,deleteDoc,deleteField} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js';
 import {getFunctions,httpsCallable} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-functions.js';
 import {firebaseConfig,DATABASE,ADMIN_EMAIL} from './firebase-config.js';
-import {platformHandoff} from './profile.js?v=ai-opponents-1';
+import {platformHandoff} from './profile.js?v=home-practice-1';
 import {loginEmailAddress,assertAccountEmail,ADMIN_ACCOUNT_EMAIL} from './auth-identity.js?v=multi-admin-1';
 import {ROUNDS,validateConfig,DEFAULT_CONFIG,validOrder} from './model.js';
 const app=initializeApp(firebaseConfig,'fashion-futures'),auth=getAuth(app),db=getFirestore(app,DATABASE);
@@ -16,6 +17,7 @@ const functions=getFunctions(app,'us-central1');
 const callable=(name,timeout)=>httpsCallable(functions,name,{timeout});
 const readSettings=callable('getAiSettings',45000),writeSettings=callable('saveAiSettings',45000);
 const prepareAiOpponent=callable('prepareAiOpponent',150000),startAiSession=callable('startAiSession',120000);
+const joinTeam=callable('joinTeamClassroom',60000);
 const teamUsers=callable('listTeamUsers',45000),writeComposition=callable('saveTeamComposition',45000);
 const userClassrooms=callable('getUserClassrooms',60000);
 export const getAiSettings=async()=>(await readSettings({})).data;
@@ -53,7 +55,7 @@ export async function playHistory(){
  return Promise.all(refs.docs.map(async ref=>{
   try{
    const data=await requireSession(ref.id),owner=decisionOwner(data,uid)||uid;
-   const completed=[1,2,3].filter(i=>data.startedAt&&((data.closedAt?.toMillis()??Date.now())-data.startedAt.toMillis())/1000>=ROUNDS[i].end);
+   const completed=[1,2,3].filter(i=>sessionProgress(data)>=ROUNDS[i].end);
    const [orders,teamOrders,aiOrders]=await Promise.all([
     readOrders(ref.id,owner),
     data.mode==='team'?readMarketOrders(ref.id,teamMatchup(data,owner),completed,owner):null,
@@ -90,12 +92,13 @@ export async function isSessionCodeAvailable(value){
  const snapshot=await getDocFromServer(ref);
  return !snapshot.exists();
 }
-export async function createSession(name,config,mode='individual',requestedCode,aiOpponent=null){
+export async function createSession(name,config,mode='individual',requestedCode,aiOpponent=null,teamSize=DEFAULT_TEAM_SIZE){
+ if(mode==='team'&&!validTeamSize(teamSize))throw Error('Choose a team size from 1 to 20.');
  const selected=requestedCode===undefined?null:requireSessionCode(requestedCode);
  for(let tries=0;tries<4;tries++){
   const code=selected??randomSessionCode();
   const ref=doc(db,'sessions',code);
-  const created=await runTransaction(db,async tx=>{if((await tx.get(ref)).exists())return false;tx.set(ref,{name,mode,assignments:{},teamNames:{},rosterVersion:0,owner:currentUser().uid,config,...(aiOpponent?.practice||aiOpponent?.main?{aiOpponent}:{}),seed:crypto.getRandomValues(new Uint32Array(1))[0]%1000001,status:'lobby',createdAt:serverTimestamp(),startedAt:null,closedAt:null});return true;});
+  const created=await runTransaction(db,async tx=>{if((await tx.get(ref)).exists())return false;tx.set(ref,{name,mode,assignments:{},teamNames:{},rosterVersion:0,owner:currentUser().uid,config,...(mode==='team'?{teamPractice:true,teamSize}:aiOpponent?.practice||aiOpponent?.main?{aiOpponent}:{}),seed:crypto.getRandomValues(new Uint32Array(1))[0]%1000001,status:'lobby',createdAt:serverTimestamp(),startedAt:null,closedAt:null});return true;});
   if(created)return code;
   if(selected)throw sessionCodeTaken(code);
  }throw new Error('Could not reserve a code. Please try again.');
@@ -107,6 +110,7 @@ export async function saveSessionAiOpponent(code,aiOpponent){
  await runTransaction(db,async tx=>{
   const s=(await tx.get(ref)).data();
   if(s?.status!=='lobby'||s.mode==='solo')throw Error('AI settings can be changed in a waiting classroom.');
+  if(s.mode==='team'&&aiOpponent)throw Error('Team classrooms use AI in home practice and human opponents in scored seasons.');
   tx.update(ref,{aiOpponent:aiOpponent?.practice||aiOpponent?.main?aiOpponent:deleteField()});
  });
 }
@@ -116,9 +120,7 @@ export async function saveSessionAiOpponent(code,aiOpponent){
 async function prepareClass(code,s,onProgress){
  const people=(await getDocsFromServer(collection(db,'sessions',code,'participants'))).docs.map(d=>({uid:d.id}));
  if(!people.length)throw Error('At least one participant must join before starting with AI opponents.');
- const teams=s.mode==='team'?materializeTeams(people,s):null;
- if(teams&&!validateTeams(people,teams.assignments,teams.teamNames))throw Error('Assign every participant to a team before starting.');
- const competitors=teams?Object.keys(teams.teamNames):people.map(person=>person.uid);
+ const competitors=people.map(person=>person.uid);
  const phases=['practice','main'].filter(phase=>s.aiOpponent[phase]);
  const jobs=competitors.flatMap(competitor=>phases.map(phase=>({code,competitor,phase})));
  let next=0,completed=0,failure=null;
@@ -138,18 +140,21 @@ export async function startSession(code,onProgress){
  const ref=doc(db,'sessions',code);
  const session=await requireSession(code);
  if(session.status!=='lobby')throw Error('Only a waiting session can start.');
- if(session.aiOpponent?.practice||session.aiOpponent?.main)return prepareClass(code,session,onProgress);
+ if(session.mode!=='team'&&(session.aiOpponent?.practice||session.aiOpponent?.main))return prepareClass(code,session,onProgress);
  await runTransaction(db,async tx=>{
   const s=(await tx.get(ref)).data();
   if(s?.status!=='lobby')throw Error('Only a waiting session can start.');
-  if(s.aiOpponent?.practice||s.aiOpponent?.main)throw Error('AI settings changed. Start again to prepare the opponents.');
-  const update={status:'running',startedAt:serverTimestamp()};
+  if(s.mode!=='team'&&(s.aiOpponent?.practice||s.aiOpponent?.main))throw Error('AI settings changed. Start again to prepare the opponents.');
+  const update={status:'running',phaseOffset:0,startedAt:serverTimestamp()};
   if(s.mode==='team'){
    const people=(await getDocsFromServer(collection(db,'sessions',code,'participants'))).docs.map(d=>({uid:d.id}));
    const teams=materializeTeams(people,s);
-   if(!validateTeams(people,teams.assignments,teams.teamNames))throw Error('Assign every participant to a team before starting.');
-   if(Object.hasOwn(s,'teamComposition'))Object.assign(update,teams);
+   if(!validateTeams(people,teams.assignments,teams.teamNames,s.teamSize??20))throw Error('Assign every participant to a team before starting.');
+   Object.assign(update,teams);
    update.teamOpponents=makeTeamOpponents(teams.teamNames);
+   update.teamPractice=true;
+   update.phaseOffset=ROUNDS[1].start;
+   if(s.aiOpponent)update.aiOpponent=deleteField();
   }
   tx.update(ref,update);
  });
@@ -160,14 +165,15 @@ export async function saveTeams(code,assignments,teamNames){
   const snapshot=await tx.get(ref);if(!snapshot.exists()||snapshot.data().status!=='lobby')throw Error('Teams can only be edited before the session starts.');
   if(Object.hasOwn(snapshot.data(),'teamComposition'))throw Error('Edit this classroom’s membership on the Users & Teams page.');
   const people=(await getDocs(collection(db,'sessions',code,'participants'))).docs.map(d=>({uid:d.id}));
-  if(!validateTeams(people,assignments,teamNames))throw Error('Each participant needs a team with a captain; maximum 20 per team and 100 teams.');
+  const size=snapshot.data().teamSize??20;
+  if(!validateTeams(people,assignments,teamNames,size))throw Error('Assign every participant to a captain and keep each team to '+size+' participants or fewer.');
   tx.update(ref,{assignments,teamNames});
  });
 }
 export async function readMarketOrders(code,captains,rounds,decisionUid){
  const session=await requireSession(code);
  const result=await Promise.all(captains.map(async uid=>{
-  const visible=rounds.filter(index=>!decisionUid||uid===decisionUid||!aiActive(session,index));
+  const visible=rounds.filter(index=>(index!==0||!hasHomeTeamPractice(session))&&(!decisionUid||uid===decisionUid||!aiActive(session,index)));
   const orders=await Promise.all(visible.map(async r=>{
    const d=await getDocFromServer(doc(db,'sessions',code,'participants',uid,'orders',String(r)));
    if(d.metadata.hasPendingWrites)throw Object.assign(new Error('Waiting for the server to confirm a decision.'),{code:'unavailable'});
@@ -195,10 +201,20 @@ export async function readAiOrders(code,competitors,aiOpponent,rounds=[0,1,2,3])
  await requireSession(code);
  return Object.fromEntries(entries);
 }
-export const closeSession=code=>updateDoc(doc(db,'sessions',code),{status:'closed',closedAt:serverTimestamp()});
+export async function closeSession(code){
+ const ref=doc(db,'sessions',code);
+ await runTransaction(db,async tx=>{
+  const s=(await tx.get(ref)).data();
+  if(!s||s.status==='closed')throw Error('The classroom has already closed.');
+  const update={status:'closed',closedAt:serverTimestamp()};
+  if(s.status==='running'&&s.phaseOffset==null)throw Error('The classroom stage is being restored. Try again shortly.');
+  tx.update(ref,update);
+ });
+}
 export async function joinSession(code,name){
  const uid=currentUser().uid,email=currentUser().email,sessionRef=doc(db,'sessions',code),participantRef=doc(db,'sessions',code,'participants',uid);
  const snapshot=await getDoc(sessionRef);if(!snapshot.exists())throw new Error('Session code not found.');const s=snapshot.data();
+ if(s.mode==='team'){await joinTeam({code,name});return;}
  if(s.mode==='solo'&&s.owner!==uid)throw Error('This is a private solo game.');
  await runTransaction(db,async tx=>{
   if(!(await tx.get(participantRef)).exists()){
@@ -206,7 +222,7 @@ export async function joinSession(code,name){
    tx.set(participantRef,{name,email,joinedAt:serverTimestamp()});
    // Makes a concurrent roster change conflict with assignment/start transactions.
    // A server-side increment avoids making simultaneous students retry one hot session read.
-   if(s.mode==='team'||s.aiOpponent?.practice||s.aiOpponent?.main)tx.update(sessionRef,{rosterVersion:increment(1)});
+   if(s.aiOpponent?.practice||s.aiOpponent?.main)tx.update(sessionRef,{rosterVersion:increment(1)});
   }
   tx.set(doc(db,'profiles',uid,'sessions',code),{joined:true});
  });
@@ -256,5 +272,14 @@ export async function saveDefaultField(key,value){
   const config={...DEFAULT_CONFIG,...snapshot.data(),[key]:value};
   if(!validateConfig(config))throw new Error('Check the default costs, selling price and salvage value.');
   tx.set(ref,config);
+ });
+}
+
+export async function advancePhase(code,next){
+ const ref=doc(db,'sessions',code);
+ await runTransaction(db,async tx=>{
+  const s=(await tx.get(ref)).data();
+  if(s?.status!=='running'||s.phaseOffset==null||next==null||next!==nextPhaseOffset(sessionProgress(s)))throw Error('The classroom has already moved to another stage.');
+  tx.update(ref,{phaseOffset:next});
  });
 }

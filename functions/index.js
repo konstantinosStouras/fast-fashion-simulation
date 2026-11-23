@@ -25,6 +25,7 @@ export const getAiSettings = callable(api.getAiSettings);
 export const saveAiSettings = callable(api.saveAiSettings, {secrets: [encryptionKey]});
 export const prepareAiOpponent = callable(api.prepareAiOpponent, {secrets: [encryptionKey], timeoutSeconds: 150});
 export const startAiSession = callable(api.startAiSession, {timeoutSeconds: 120});
+export const joinTeamClassroom = callable(api.joinTeamClassroom);
 export const listTeamUsers = callable(api.listTeamUsers);
 export const getUserClassrooms = callable(api.getUserClassrooms);
 export const saveTeamComposition = callable(api.saveTeamComposition);

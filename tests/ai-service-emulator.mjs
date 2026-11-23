@@ -78,7 +78,7 @@ test('only one in-flight request owns a competitor and all enabled phases must b
   }
   await api.startAiSession(call(admin,{code:ref.id}));
   const s = (await ref.get()).data();
-  assert.equal(s.status,'running'); assert(s.startedAt instanceof Timestamp);
+  assert.equal(s.status,'running'); assert(s.startedAt instanceof Timestamp); assert.equal(s.phaseOffset,0);
   assert.deepEqual(await api.startAiSession(call(admin,{code:ref.id})), {started:true});
 });
 
@@ -126,14 +126,34 @@ test('directory and team editing use registered accounts, joined roster and owne
   const result = await api.saveTeamComposition(call(admin,{code:ref.id,changes}));
   assert.deepEqual(result.assignments,{[students[1]]:students[1]});
   for (const uid of [students[0],students[2]]) await ref.collection('participants').doc(uid).set({joinedAt:Timestamp.now()});
-  for (const captain of [students[1],students[2]]) for (const phase of ['practice','main']) {
-    await api.prepareAiOpponent(call(admin,{code:ref.id,competitor:captain,phase}));
+  await assert.rejects(api.prepareAiOpponent(call(admin,{code:ref.id,competitor:students[1],phase:'main'})),{code:'failed-precondition'});
+  await assert.rejects(api.startAiSession(call(admin,{code:ref.id})),{code:'failed-precondition'});
+  assert.equal((await ref.get()).data().status,'lobby');
+});
+
+test('verified concurrent team joins fill the selected size once and retain named teams', async () => {
+  const ref = await classroom('team'), api = aiService(options);
+  await ref.update({teamSize:2,teamPractice:true,rosterVersion:0,teamNames:{captain:'Studio North'},assignments:{captain:'captain'}});
+  await ref.collection('participants').doc('captain').set({joinedAt:Timestamp.now()});
+  const join = (uid, verified=true) => api.joinTeamClassroom(call(
+    {uid,token:{email:uid+'@example.test',email_verified:verified}}, {code:ref.id,name:'Student '+uid}));
+  await assert.rejects(join('stranger',false),{code:'permission-denied'});
+  const ids=['one','two','three','four','five','six'].map(name=>name+run);
+  await Promise.all([...ids,ids[0]].map(uid=>join(uid)));
+  const s=(await ref.get()).data();
+  assert.equal(s.teamNames.captain,'Studio North');
+  assert.equal(s.assignments.captain,'captain');
+  const teamSizes=Object.keys(s.teamNames).map(captain=>Object.values(s.assignments).filter(uid=>uid===captain).length);
+  assert.deepEqual(teamSizes.sort(),[1,2,2,2]);
+  assert.equal(s.rosterVersion,6);
+  for(const uid of ids){
+    assert(await ref.collection('participants').doc(uid).get().then(d=>d.exists));
+    assert.deepEqual((await db.doc('profiles/'+uid+'/sessions/'+ref.id).get()).data(),{joined:true});
   }
-  await api.startAiSession(call(admin,{code:ref.id}));
-  const started = (await ref.get()).data();
-  assert.deepEqual(started.assignments,{[students[0]]:students[1],[students[1]]:students[1],[students[2]]:students[2]});
-  assert.equal(started.teamOpponents[students[1]],students[2]);
-  await assert.rejects(api.saveTeamComposition(call(admin,{code:ref.id,changes:{[students[0]]:null}})),{code:'failed-precondition'});
+  await ref.update({status:'running',phaseOffset:180,startedAt:Timestamp.now()});
+  assert.deepEqual(await join(ids[0]),{joined:true});
+  await assert.rejects(join('late'+run),{code:'failed-precondition'});
+  assert.equal((await ref.get()).data().rosterVersion,6);
 });
 
 test('user classroom lookups recover real joins, waiting assignments and scoped phase-specific opponents', async () => {
@@ -150,11 +170,11 @@ test('user classroom lookups recover real joins, waiting assignments and scoped 
     if (linked) await history.doc(ref.id).set({joined:true});
     return ref;
   };
-  const running = await room({status:'running',startedAt:Timestamp.fromMillis(Date.now()-200000),
+  const running = await room({status:'running',phaseOffset:180,startedAt:Timestamp.fromMillis(Date.now()-200000),
     assignments:{[uid]:'captain'},teamNames:{captain:'Team 4',rival:'Team 8'},teamOpponents:{captain:'rival',rival:'captain'},
     aiOpponent:{provider:'openai',model:'model-one',practice:true,main:false}},true,true);
   const planned = await room({teamComposition:{[uid]:'7'}},false);
-  const legacy = await room({mode:'individual',status:'running',startedAt:Timestamp.fromMillis(Date.now()-1200000)},true);
+  const legacy = await room({mode:'individual',status:'running',phaseOffset:960,startedAt:Timestamp.fromMillis(100000)},true);
   const otherRoom = await room({owner:other.uid, mode:'individual', status:'closed'},true,true);
   const solo = await room({owner:uid, mode:'solo',status:'closed'},true,true);
   const stale = await room({mode:'individual',status:'closed'},false,true);

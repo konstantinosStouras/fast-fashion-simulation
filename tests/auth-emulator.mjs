@@ -1,3 +1,4 @@
+import {useLocalTeamJoin} from './local-team-join.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -7,7 +8,7 @@ import {connectFirestoreEmulator,getFirestore,doc,setDoc,serverTimestamp,getDoc,
 import {initializeTestEnvironment} from '@firebase/rules-unit-testing';
 test('real backend registration stores profile and sends a working verification link',async t=>{
  assert.equal(process.env.FIREBASE_AUTH_EMULATOR_HOST,'127.0.0.1:9198','Must run inside the local emulator suite');
- let source=readFileSync(new URL('../backend.js',import.meta.url),'utf8');
+ let source=useLocalTeamJoin(readFileSync(new URL('../backend.js',import.meta.url),'utf8'));
  for(const component of ['app','auth','firestore','functions'])source=source.replaceAll(`https://www.gstatic.com/firebasejs/12.5.0/firebase-${component}.js`,import.meta.resolve('firebase/'+component));
  source=source.replace("import {firebaseConfig,DATABASE,ADMIN_EMAIL} from './firebase-config.js';","const firebaseConfig={projectId:'demo-fashion-futures',apiKey:'demo-api-key',authDomain:'demo-fashion-futures.firebaseapp.com'},DATABASE='(default)',ADMIN_EMAIL='kstouras@gmail.com';");
  source=source.replace(/from '(\.\/[^']+)'/g,(_,path)=>'from '+JSON.stringify(new URL('../'+path.slice(2),import.meta.url).href));
@@ -27,35 +28,38 @@ test('real backend registration stores profile and sends a working verification 
  const uid=api.currentUser().uid,team=await api.createSession('Atomic team backend QA',(await import('../model.js')).DEFAULT_CONFIG,'team');
  await api.joinSession(team,'Test Student');assert.equal((await getDoc(doc(getFirestore(app),'sessions',team))).data().rosterVersion,1);
  await api.joinSession(team,'Test Student');assert.equal((await getDoc(doc(getFirestore(app),'sessions',team))).data().rosterVersion,1,'Rejoining is idempotent');
- await api.saveTeams(team,{[uid]:uid},{[uid]:'Team A'});await api.startSession(team);await api.saveOrder(team,0,{variety:4,quantity:101,cap:0});
+ await api.saveTeams(team,{[uid]:uid},{[uid]:'Team A'});await api.startSession(team);await api.saveOrder(team,1,{variety:4,quantity:101,cap:0});
+ assert.equal((await getDoc(doc(getFirestore(app),'sessions',team))).data().phaseOffset,180);
  assert.deepEqual((await getDoc(doc(getFirestore(app),'sessions',team))).data().teamOpponents,{[uid]:null});
- assert.equal((await api.readOrders(team,uid))[0].quantity,101);assert.equal((await api.playHistory()).length,2);
+ assert.equal((await api.readOrders(team,uid))[1].quantity,101);assert.equal((await api.playHistory()).length,2);
  await Promise.all([
-  new Promise((resolve,reject)=>{const stop=api.watchOrders(team,uid,o=>{if(o[0]?.quantity===101){stop();resolve();}},reject);t.after(stop);}),
+  new Promise((resolve,reject)=>{const stop=api.watchOrders(team,uid,o=>{if(o[1]?.quantity===101){stop();resolve();}},reject);t.after(stop);}),
   new Promise((resolve,reject)=>{const stop=api.watchParticipants(team,p=>{if(p.some(x=>x.uid===uid)){stop();resolve();}},reject);t.after(stop);})
  ]);
  await t.test('team listeners distinguish offline and pending data, then restore server decisions',async()=>{
   const db=getFirestore(app),wait=async fn=>{for(let i=0;i<200;i++){if(fn())return;await new Promise(r=>setTimeout(r,50));}throw Error('Recovery timed out');};
   let fresh=null,sessionFresh=null,latest=null,missingCalls=0;
   const stop=api.watchOrders(team,uid,o=>latest=o,assert.fail,value=>fresh=value),stopSession=api.watchSession(team,()=>{},assert.fail,value=>sessionFresh=value);
-  await wait(()=>fresh===true&&sessionFresh===true&&latest?.[0]?.quantity===101);
+  await wait(()=>fresh===true&&sessionFresh===true&&latest?.[1]?.quantity===101);
   await disableNetwork(db);await wait(()=>fresh===false&&sessionFresh===false);
   const missing=api.watchSession('ZZZZZZZZ',()=>missingCalls++,()=>{},()=>{});
-  await assert.rejects(api.readMarketOrders(team,[uid],[0]),'shared market must not silently use cached orders');
-  let acknowledged=false;const pending=api.saveOrder(team,0,{variety:4,quantity:119,cap:0},'plan',1).then(()=>acknowledged=true);
-  await new Promise(r=>setTimeout(r,100));assert.equal(acknowledged,false);assert.equal(latest[0].quantity,101);assert.equal(missingCalls,0,'an uncached offline session is not a deleted session');missing();
-  await enableNetwork(db);await pending;await wait(()=>fresh===true&&sessionFresh===true&&latest[0].quantity===119);
+  await assert.rejects(api.readMarketOrders(team,[uid],[1]),'shared market must not silently use cached orders');
+  let acknowledged=false;const pending=api.saveOrder(team,1,{variety:4,quantity:119,cap:0},'plan',1).then(()=>acknowledged=true);
+  await new Promise(r=>setTimeout(r,100));assert.equal(acknowledged,false);assert.equal(latest[1].quantity,101);assert.equal(missingCalls,0,'an uncached offline session is not a deleted session');missing();
+  await enableNetwork(db);await pending;await wait(()=>fresh===true&&sessionFresh===true&&latest[1].quantity===119);
   await disableNetwork(db);await wait(()=>fresh===false);
-  await env.withSecurityRulesDisabled(c=>setDoc(doc(c.firestore(),'sessions',team,'participants',uid,'orders','0'),{variety:4,quantity:127,cap:0,savedAt:serverTimestamp()}));
-  await enableNetwork(db);await wait(()=>fresh===true&&latest[0].quantity===127);
-  stop();stopSession();assert.equal((await api.readOrders(team,uid))[0].quantity,127);
+  await env.withSecurityRulesDisabled(c=>setDoc(doc(c.firestore(),'sessions',team,'participants',uid,'orders','1'),{variety:4,quantity:127,cap:0,savedAt:serverTimestamp()}));
+  await enableNetwork(db);await wait(()=>fresh===true&&latest[1].quantity===127);
+  stop();stopSession();assert.equal((await api.readOrders(team,uid))[1].quantity,127);
  });
  await t.test('real save API carries its original phase and cannot reset a locked plan',async()=>{
-  await env.withSecurityRulesDisabled(async c=>{const ref=doc(c.firestore(),'sessions',team),snapshot=await getDoc(ref);await setDoc(ref,{...snapshot.data(),startedAt:Timestamp.fromMillis(Date.now()-95000)});});
-  await api.saveOrder(team,0,{variety:4,quantity:127,cap:35},'respond');
-  await assert.rejects(api.saveOrder(team,0,{variety:4,quantity:127,cap:0},'plan',1));
-  assert.equal((await api.readOrders(team,uid))[0].cap,35);
-  assert.equal((await api.readMarketOrders(team,[uid],[0]))[uid][0].cap,35);
+  await api.advancePhase(team,420);
+  await api.saveOrder(team,2,{variety:4,quantity:127,cap:0},'plan');
+  await api.advancePhase(team,540);
+  await api.saveOrder(team,2,{variety:4,quantity:127,cap:35},'respond',1);
+  await assert.rejects(api.saveOrder(team,2,{variety:4,quantity:127,cap:0},'plan',2));
+  assert.equal((await api.readOrders(team,uid))[2].cap,35);
+  assert.equal((await api.readMarketOrders(team,[uid],[2]))[uid][2].cap,35);
  });
  await t.test('start uses joined members of the numbered team roster and deletion clears previously prepared opponents',async()=>{
   const config=(await import('../model.js')).DEFAULT_CONFIG;
@@ -75,7 +79,6 @@ test('real backend registration stores profile and sends a working verification 
   });
   await api.saveSessionAiOpponent(code,null);
   await assert.rejects(api.saveTeams(code,{[uid]:uid},{[uid]:'Old team'}),/Teams page/);
-  await assert.rejects(api.startSession(code),/Assign every participant/);
   await env.withSecurityRulesDisabled(c=>setDoc(room(c.firestore()),{teamComposition:{[uid]:'7',absent:'3'}},{merge:true}));
   await api.startSession(code);
   const started=(await getDoc(room(getFirestore(app)))).data();
@@ -94,16 +97,16 @@ test('real backend registration stores profile and sends a working verification 
   const other=await import('data:text/javascript;base64,'+Buffer.from(secondSource).toString('base64')),otherApp=getApp('fashion-futures-second-device'),otherDb=getFirestore(otherApp);
   connectAuthEmulator(getAuth(otherApp),'http://127.0.0.1:9198',{disableWarnings:true});connectFirestoreEmulator(otherDb,'127.0.0.1',8180);t.after(()=>deleteApp(otherApp));await other.loginEmail(email,'emulator-only-password');
   const code=await api.createSession('Two device race QA',(await import('../model.js')).DEFAULT_CONFIG,'team');await api.joinSession(code,'Captain');await api.saveTeams(code,{[uid]:uid},{[uid]:'Team A'});await api.startSession(code);
-  await api.saveOrder(code,0,{variety:4,quantity:110,cap:0},'plan',0);assert.equal((await other.readOrders(code,uid))[0].revision,1);
-  await disableNetwork(otherDb);const stale=assert.rejects(other.saveOrder(code,0,{variety:4,quantity:90,cap:0},'plan',1),e=>e.code==='decision-conflict');
-  await api.saveOrder(code,0,{variety:4,quantity:155,cap:0},'plan',1);await enableNetwork(otherDb);await stale;
-  assert.equal((await other.readOrders(code,uid))[0].quantity,155);assert.equal((await api.readOrders(code,uid))[0].revision,2);
-  await other.saveOrder(code,0,{variety:4,quantity:160,cap:0},'plan',2);assert.equal((await api.readOrders(code,uid))[0].quantity,160);
+  await api.saveOrder(code,1,{variety:4,quantity:110,cap:0},'plan',0);assert.equal((await other.readOrders(code,uid))[1].revision,1);
+  await disableNetwork(otherDb);const stale=assert.rejects(other.saveOrder(code,1,{variety:4,quantity:90,cap:0},'plan',1),e=>e.code==='decision-conflict');
+  await api.saveOrder(code,1,{variety:4,quantity:155,cap:0},'plan',1);await enableNetwork(otherDb);await stale;
+  assert.equal((await other.readOrders(code,uid))[1].quantity,155);assert.equal((await api.readOrders(code,uid))[1].revision,2);
+  await other.saveOrder(code,1,{variety:4,quantity:160,cap:0},'plan',2);assert.equal((await api.readOrders(code,uid))[1].quantity,160);
   await other.logout();
  });
  await t.test('deletion notifies open and offline clients and server reads cannot resurrect cached results',async()=>{
   const {onSnapshot,getDocs,collection}=await import('firebase/firestore');
-  const code=await api.createSession('Delete recovery QA',(await import('../model.js')).DEFAULT_CONFIG,'team');await api.joinSession(code,'Captain');await api.saveTeams(code,{[uid]:uid},{[uid]:'Team A'});await api.startSession(code);await api.saveOrder(code,0,{variety:4,quantity:135,cap:0});await api.closeSession(code);
+  const code=await api.createSession('Delete recovery QA',(await import('../model.js')).DEFAULT_CONFIG,'team');await api.joinSession(code,'Captain');await api.saveTeams(code,{[uid]:uid},{[uid]:'Team A'});await api.startSession(code);await api.saveOrder(code,1,{variety:4,quantity:135,cap:0});await api.closeSession(code);
   const offline=env.authenticatedContext(uid,{email,email_verified:true}).firestore(),ref=doc(offline,'sessions',code),wait=async fn=>{for(let i=0;i<200;i++){if(fn())return;await new Promise(r=>setTimeout(r,25));}throw Error('Deletion notification timed out');};
   let seen=null,missing=false,marked=false;const stopOffline=onSnapshot(ref,{includeMetadataChanges:true},snap=>{if(!snap.metadata.fromCache&&!snap.metadata.hasPendingWrites)seen=snap.exists()?snap.data():null;});
   const stop=api.watchSession(code,s=>{if(s?.deletedAt)marked=true;if(s===null)missing=true;},assert.fail);
@@ -111,10 +114,10 @@ test('real backend registration stores profile and sends a working verification 
    await wait(()=>seen?.status==='closed');await disableNetwork(offline);
    await api.deleteSession(code);await wait(()=>missing);assert.equal(marked,true,'marker is confirmed before cleanup ends');
    assert.equal(seen.status,'closed','offline SDK still has old cache until reconnect');await enableNetwork(offline);await wait(()=>seen===null);
-   await assert.rejects(api.readMarketOrders(code,[uid],[0]),e=>e.code==='session-deleted');
+   await assert.rejects(api.readMarketOrders(code,[uid],[1]),e=>e.code==='session-deleted');
    assert.equal((await api.playHistory()).some(s=>s.code===code),false);
    await env.withSecurityRulesDisabled(async c=>{assert.equal((await getDocs(collection(c.firestore(),'sessions',code,'participants'))).size,0);});
-   await assert.rejects(api.saveOrder(code,0,{variety:4,quantity:199,cap:0},'plan',1));
+   await assert.rejects(api.saveOrder(code,1,{variety:4,quantity:199,cap:0},'plan',1));
   }finally{await enableNetwork(offline);stopOffline();stop();await offline.terminate();}
  });
  await confirmPasswordReset(getAuth(app),resetCode.oobCode,'emulator-reset-password');await api.logout();await assert.rejects(api.loginEmail(email,'emulator-only-password'));await api.loginEmail(email,'emulator-reset-password');assert.equal((await api.getProfile()).firstName,'Edited');await api.logout();

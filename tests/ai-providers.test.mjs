@@ -60,8 +60,8 @@ test('team plans retain existing captains and exclude preassigned users until th
   const legacy = {assignments: {a:'b', b:'b', c:'c'}, teamNames: {b:'Team 2', c:'Studio X'}};
   assert.deepEqual(getTeamComposition(legacy), {a:'2', b:'2', c:'1'});
   const session = {...legacy, teamComposition: {a:'2', b:'2', c:'1', later:'3'}};
-  assert.deepEqual(materializeTeams([{uid:'a'}, {uid:'b'}, {uid:'c'}], session), {assignments: legacy.assignments, teamNames:{b:'Team 2',c:'Team 1'}});
-  assert.deepEqual(materializeTeams([{uid:'a'}], {...session, teamComposition:{}}), {assignments:{},teamNames:{}});
+  assert.deepEqual(materializeTeams([{uid:'a'}, {uid:'b'}, {uid:'c'}], session), {assignments: legacy.assignments, teamNames:{b:'Team 2',c:'Studio X'}});
+  assert.deepEqual(materializeTeams([{uid:'a'}], {...session, teamComposition:{}}), {assignments:{a:'a'},teamNames:{a:'Team 2'}});
   const names = {a:'A',b:'B',c:'C',d:'D',e:'E'};
   const draw = makeTeamOpponents(names, () => 0);
   assert.equal(Object.values(draw).filter(r => r == null).length, 1);

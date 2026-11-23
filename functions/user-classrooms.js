@@ -1,19 +1,18 @@
 const labNames = {openai: 'OpenAI', anthropic: 'Anthropic', google: 'Google'};
 
-// Server timestamps and the local rehearsal's millisecond times describe the
-// same 18-minute session. Scoring ends before the two-minute comparison.
-export function classroomClock(session, now = Date.now()) {
+import {hasHomeTeamPractice, sessionProgress} from './session-progress.js?v=home-practice-1';
+
+export function classroomStatus(session) {
   if (session.status !== 'running') return {status: session.status, currentPhase: null};
   const start = session.startedAt?.toMillis?.() ?? session.startedAt;
   if (!Number.isFinite(start)) return {status: 'running', currentPhase: null};
-  const seconds = (now - start) / 1000;
+  const seconds = sessionProgress(session);
   if (seconds < 0) return {status: 'running', currentPhase: null};
-  if (seconds >= 1080) return {status: 'completed', currentPhase: null};
-  if (seconds >= 960) return {status: 'running', currentPhase: 'comparison'};
+  if (seconds >= 960) return {status: 'completed', currentPhase: null};
   return {status: 'running', currentPhase: seconds >= 180 ? 'main' : 'practice'};
 }
 
-export function summarizeUserClassroom(session, uid, joined, now = Date.now()) {
+export function summarizeUserClassroom(session, uid, joined) {
   const mode = session.mode || 'individual';
   const waiting = session.status === 'lobby';
   const plannedNumber = Object.hasOwn(session.teamComposition || {}, uid) ? session.teamComposition[uid] : null;
@@ -22,14 +21,15 @@ export function summarizeUserClassroom(session, uid, joined, now = Date.now()) {
   const captain = Object.hasOwn(session.assignments || {}, uid) ? session.assignments[uid] : null;
   const namedTeam = captain && Object.hasOwn(session.teamNames || {}, captain) ? session.teamNames[captain] : null;
   const team = mode !== 'team' ? null : waiting && session.teamComposition != null
-    ? (plannedNumber ? 'Team ' + plannedNumber : null)
+    ? (plannedNumber ? 'Team ' + plannedNumber : namedTeam)
     : namedTeam;
   const rival = session.teamOpponents?.[captain];
   const hasHumanRival = mode === 'team' && !!namedTeam && (session.teamOpponents == null
     ? Object.keys(session.teamNames || {}).length > 1 : rival != null && Object.hasOwn(session.teamNames || {}, rival));
   function opponent(phase) {
+    if (phase === 'practice' && hasHomeTeamPractice(session)) return 'AI practice opponent';
     if (mode === 'team' && !team) return waiting ? 'Awaiting team assignment' : 'Unassigned';
-    if (session.aiOpponent?.[phase]) {
+    if (!hasHomeTeamPractice(session) && session.aiOpponent?.[phase]) {
       const {provider, model} = session.aiOpponent;
       return ['AI opponent', labNames[provider] || provider, model].filter(Boolean).join(' · ');
     }
@@ -40,7 +40,7 @@ export function summarizeUserClassroom(session, uid, joined, now = Date.now()) {
     if (rival === undefined) return 'Opponent unavailable';
     return session.teamNames[rival] || 'Opponent unavailable';
   }
-  const {status, currentPhase} = classroomClock(session, now);
+  const {status, currentPhase} = classroomStatus(session);
   const practiceOpponent = opponent('practice'), mainOpponent = opponent('main');
   const activePhase = currentPhase === 'practice' || currentPhase === 'main';
   const matchup = currentPhase === 'practice' ? practiceOpponent : mainOpponent;

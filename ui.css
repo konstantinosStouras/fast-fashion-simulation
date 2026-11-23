@@ -139,8 +139,8 @@ body:has(dialog[open]){overflow:hidden}
 .stats strong{overflow-wrap:anywhere;font-size:clamp(26px,3.5vw,40px)}
 @media(max-width:850px){
  header{gap:16px;padding:20px 5%}nav{gap:8px}main{padding-top:26px}
- .heading{gap:15px}.timer{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;width:100%;padding:14px 16px;border:1px solid var(--line);border-radius:6px;background:#e8ebdf}
- .timer strong{font-size:36px}.timer small{font-size:11px}.timer #overall{flex-basis:100%;margin-top:0}
+ .heading{gap:15px}
+
  .inline{display:block}.inline>button{width:100%;margin:0 0 16px}
  .button-row button{flex:1 1 180px}.panel{border-radius:8px}
  .preview-bar .button-row button{flex:1 1 160px}
@@ -250,7 +250,7 @@ li,blockquote,.field-description,.manifesto>div{
  #final-feedback{padding-top:24px}#final-feedback h2{font-size:clamp(25px,7vw,29px);line-height:1.35}
  #finish{width:100%;margin:12px 0 24px}
 }
-.decision-deadline{font-size:14px;color:var(--muted);margin:18px 0 10px}.decision-deadline strong{color:var(--ink);font-variant-numeric:tabular-nums}
+
 #order-form .save-state{padding:12px 14px;background:#edf1e5;border-radius:6px;font-size:14px;line-height:1.6;overflow-wrap:anywhere}
 #order-form .save-state[data-state=dirty],#order-form .save-state[data-state=error]{background:#fff1d9;color:#684313}
 #order-form .save-state[data-state=saving]{background:#e7edf3;color:#304658}

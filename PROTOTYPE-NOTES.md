@@ -2,7 +2,7 @@
 
 ## The classroom experiment
 
-Participants run a fashion house through a three-minute practice and three scored seasons: advance commitment (four minutes), quick response (four minutes), and assortment expansion (five minutes). A two-minute comparison completes the shared 18-minute session. Preparation/login happens before the instructor starts the clock. The session cannot be paused or extended; closing early locks further decisions and counts only completed seasons.
+Participants run a fashion house through three scored seasons covering advance commitment, quick response and assortment expansion. In a waiting team classroom, each joined student can rehearse as often as they like against a built-in AI. Students advance their own practice rounds. Starting the team competition pairs teams at random and opens the first scored season. The same two teams compete through the final season. An unpaired team uses individual-play scoring. The instructor advances the classroom when ready. Closing early locks further decisions and counts only completed seasons.
 
 Initial quantities are one integer per style, from 0 to 200. The last season allows four or eight styles. Quick-response seasons provide an early-sales and remaining-demand forecast table halfway through, followed by one replenishment cap from 0 to 200. Replenishment per style = min(cap, max(0, forecast - remaining stock)). Early lost sales cannot be recovered. Missing decisions default to four styles, 80 initial units per style and cap zero.
 
@@ -24,21 +24,21 @@ All assumptions are illustrative, not calibrated estimates. This is a discussion
 1. Visit the published page; log in with Google or email/password. FFO uses its own account system, separate from UCD Blog. Email/password registration requires verification before joining or teaching.
 2. The verified administrator `kstouras@gmail.com` sees **Instructor studio** and **Admin / Access**. Grant another instructor access using their sign-in email; no invitation email is sent.
 3. Create a session, optionally adjust the described settings, then share its suggested city code or the custom code you entered. Defaults are sufficient for the first discussion.
-4. Students log in and join before the session starts. One account controls one participant record; a team can use one device/account and a team name.
-5. Start when everyone is ready. All phases advance automatically. The instructor sees enrolment, saved decisions, completed-season scores and CSV export. Closing a session stops new submissions.
+4. For a team classroom, choose **Students per team** at creation (three by default) and share the code before class. Students join teams automatically as they enroll. The last team may be smaller. Each student can immediately use the waiting room’s **Practice against AI** button without a provider key. Instructors can review or adjust the teams before the competition.
+5. Start when everyone is ready. Team captains submit their teams’ decisions. The instructor advances the classroom phases and can review enrolment, saved decisions, completed-season scores and CSV exports. Solo players advance their own phases.
 6. Admins can set defaults for future sessions or revoke instructor access. Existing session settings cannot change. Instructors see only their own rosters; the administrator sees all.
 
-Authentication, private profiles and gameplay live in the dedicated Firebase project `stouras-ffo`, default Firestore database in `eur3`. The UCD Blog project is not modified. No existing classroom sessions were present in the old prototype at cutover. Sign-in tokens are managed by Firebase; passwords are not stored by this application. Session membership and decisions resume after refresh; the shared clock does not reset. An accurate device clock is needed for the countdown display; server rules enforce actual deadlines.
+Authentication, private profiles and classroom gameplay live in the dedicated Firebase project `stouras-ffo`, default Firestore database in `eur3`. Firebase manages sign-in tokens. Session membership, decisions and the current classroom phase resume after refresh. Server rules enforce the phase in which each decision can be saved. Each at-home practice attempt stays in the student’s current tab and can resume after a reload.
 
 ## Student preview for teaching staff
 
-Choose **Preview as student** beneath the new-session form to try its current settings without creating a class. The same option inside an existing session uses that session's locked settings and market seed. The private rehearsal begins with practice and uses the real student decision screens and scoring.
+Choose **Test round** beneath the new-session form to try its settings. A test round opened inside an existing session uses its locked settings and market seed. In a team preview, rehearse with the built-in AI, then start the simulated classroom competition. Preview uses the student decision screens and scoring.
 
-The rehearsal starts immediately and follows the same 18-minute schedule, phase deadlines, and scoring as classroom play. Save each decision before its deadline. Reloading the tab restores saved decisions and the original start time. **Exit preview** returns to the originating session or the studio. Rehearsal data stays in the current tab and is cleared on exit or sign-out. Live participant records, classroom clocks, and exported results are independent of rehearsal play. Only verified teaching staff receive the controls.
+Save each preview decision and advance when ready. Reloading the tab restores the current phase and saved decisions. **Exit preview** returns to the originating session or the studio and clears the private rehearsal. Classroom scores and exports contain only completed scored seasons played by enrolled participants. Only verified teaching staff receive the preview controls.
 
 ## Deliberately outside the initial prototype
 
-Durability/replacement behaviour, alternative metric visibility treatments, competitive demand, multi-account teams, an email invitation service, and simulation-platform completion tracking. Separate model/configuration/backend modules make these future additions possible without changing the authentication or session-code system. This release does not claim to implement those additional experiments.
+Durability/replacement behaviour, alternative metric visibility treatments, an email invitation service and simulation-platform completion tracking are outside the prototype.
 
 ## Validation
 

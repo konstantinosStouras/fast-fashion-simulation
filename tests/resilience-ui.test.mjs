@@ -20,6 +20,12 @@ test('slow subscriptions, live updates, cancelled navigation and large classroom
  await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
  await wait(()=>$('#open-login'));await api.loginEmail('resilience@example.test');await wait(()=>$('#join'));
  const code=await api.createSession('Slow classroom',DEFAULT_CONFIG);await api.joinSession(code,'Tester');await api.startSession(code);await api.saveOrder(code,0,{variety:4,quantity:123,cap:0});
+ const restoreOpeningFixture=()=>{
+  const data=JSON.parse(w.localStorage.getItem('ff:demo:v1'));
+  data.sessions[code].phaseOffset=0;
+  w.localStorage.setItem('ff:demo:v1',JSON.stringify(data));
+  w.dispatchEvent(new w.StorageEvent('storage',{key:'ff:demo:v1'}));
+ };
  holdOrders=true;$('#join [name=code]').value=code;submit('#join');await wait(()=>pendingOrders.length);
  await t.test('cannot submit defaults while the saved order is still loading',()=>{assert.equal($('#order-form'),null);assert.match($('#app').textContent,/Loading.*(decision|order)/i);});
  holdOrders=false;pendingOrders.splice(0).forEach(fn=>fn());await wait(()=>$('#order-form'));
@@ -35,34 +41,34 @@ test('slow subscriptions, live updates, cancelled navigation and large classroom
  });
  await t.test('offline recovery preserves drafts and blocks saving until server confirmation',async()=>{
   $('#order-form [name=quantity]').value='151';$('#order-form [name=quantity]').dispatchEvent(new w.Event('input',{bubbles:true}));
-  w.dispatchEvent(new w.Event('offline'));assert.equal($('#save-order').disabled,true);assert.match($('#connection-status').textContent,/Offline.*clock keeps running/);
+  w.dispatchEvent(new w.Event('offline'));assert.equal($('#save-order').disabled,true);assert.match($('#connection-status').textContent,/Offline.*Reconnect/);
   orderStatus(false);w.dispatchEvent(new w.Event('online'));assert.equal($('#save-order').disabled,true);assert.match($('#connection-status').textContent,/Reconnecting/);assert.equal($('#order-form [name=quantity]').value,'151');
   orderStatus(true);assert.equal($('#save-order').disabled,false);assert.equal($('#order-form [name=quantity]').value,'151');
   submit('#order-form');await wait(()=>$('.save-state').textContent.includes('Saved:')&&$('.save-state').textContent.includes('151'));
  });
- await t.test('return after suspension immediately moves past expired deadlines',async()=>{
+ await t.test('return after suspension preserves the current phase',async()=>{
   const realNow=Date.now;Date.now=()=>realNow()+95000;
-  try{w.document.dispatchEvent(new w.Event('visibilitychange'));assert.equal($('#order-form [name=quantity]'),null);assert.ok($('#order-form [name=cap]'));assert.equal($('#order-form [name=cap]').value,'0');}finally{Date.now=realNow;w.dispatchEvent(new w.Event('pageshow'));}
+  try{w.document.dispatchEvent(new w.Event('visibilitychange'));assert.equal($('#order-form [name=quantity]').value,'151');assert.equal($('#order-form [name=cap]'),null);}finally{Date.now=realNow;w.dispatchEvent(new w.Event('pageshow'));}
   assert.equal($('#order-form [name=quantity]').value,'151');
  });
- await t.test('a rejected save crossing the deadline keeps the confirmed decision and explains the rejection',async()=>{
-  const realNow=Date.now;let release;saveGate=new Promise(resolve=>release=resolve);failSave=true;
+ await t.test('a rejected save crossing the stage change keeps the confirmed decision and explains the rejection',async()=>{
+  let release;saveGate=new Promise(resolve=>release=resolve);failSave=true;
   $('#order-form [name=quantity]').value='161';submit('#order-form');await wait(()=>$('.save-state')?.dataset.state==='saving');
   try{
-   Date.now=()=>realNow()+95000;w.document.dispatchEvent(new w.Event('visibilitychange'));
+   await api.advancePhase(code,90);
    assert.match($('#app').textContent,/Confirming your previous decision/);assert.equal($('#order-form'),null);assert.match($('#app').textContent,/151 units/);
-   release();await wait(()=>$('#order-form [name=cap]'));assert.match($('#notice').textContent,/deadline.*not accepted/);assert.doesNotMatch($('#notice').textContent,/edits are still here|may revise/);assert.match($('.save-state').textContent,/151 units/);
-  }finally{release();saveGate=null;failSave=false;Date.now=realNow;w.dispatchEvent(new w.Event('pageshow'));}
+   release();await wait(()=>$('#order-form [name=cap]'));assert.match($('#notice').textContent,/phase has changed.*not accepted/);assert.doesNotMatch($('#notice').textContent,/edits are still here|may revise/);assert.match($('.save-state').textContent,/151 units/);
+  }finally{release();saveGate=null;failSave=false;restoreOpeningFixture();}
   assert.equal($('#order-form [name=quantity]').value,'151');
  });
  await t.test('a delayed successful acknowledgement cannot overwrite a newer confirmed save',async()=>{
-  const realNow=Date.now;let release;ackGate=new Promise(resolve=>release=resolve);
+  let release;ackGate=new Promise(resolve=>release=resolve);
   $('#order-form [name=quantity]').value='155';submit('#order-form');await wait(()=>$('.save-state')?.dataset.state==='saving');
   await api.saveOrder(code,0,{variety:4,quantity:163,cap:0});
   try{
-   Date.now=()=>realNow()+95000;w.document.dispatchEvent(new w.Event('visibilitychange'));assert.match($('#app').textContent,/Confirming your previous decision/);
-   release();await wait(()=>$('#order-form [name=cap]'));assert.match($('#notice').textContent,/accepted.*before its deadline.*locked/);assert.match($('.save-state').textContent,/163 units/);
-  }finally{release();ackGate=null;Date.now=realNow;w.dispatchEvent(new w.Event('pageshow'));}
+   await api.advancePhase(code,90);assert.match($('#app').textContent,/Confirming your previous decision/);
+   release();await wait(()=>$('#order-form [name=cap]'));assert.match($('#notice').textContent,/accepted.*previous phase.*locked/);assert.match($('.save-state').textContent,/163 units/);
+  }finally{release();ackGate=null;restoreOpeningFixture();}
   assert.equal($('#order-form [name=quantity]').value,'163');
  });
  await t.test('a stale device save is rejected, reloads the winner and never retries automatically',async()=>{
@@ -107,6 +113,7 @@ test('slow subscriptions, live updates, cancelled navigation and large classroom
  await t.test('a delayed profile response cannot restore a signed-out view',()=>{assert.equal($('#profile-form'),null);assert.ok($('#enter'));});
  await api.loginGoogle();await wait(()=>$('#staff'));click('#staff');await wait(()=>$('#create'));
  $('#create [name=name]').value='Large team classroom';$('#create [name=mode]').value='team';
+ $('#create [name=mode]').dispatchEvent(new w.Event('change'));$('#create [name=teamSize]').value='5';
  const createdName=$('#create [name=name]').value;
  const createdCard=()=>Array.from(document.querySelectorAll('.studio-session-card')).find(card=>card.querySelector('h4').textContent===createdName);
  submit('#create');
@@ -118,8 +125,8 @@ test('slow subscriptions, live updates, cancelled navigation and large classroom
  holdOrders=true;w.localStorage.setItem('ff:demo:v1',JSON.stringify(data));await api.saveDefaults(DEFAULT_CONFIG);await wait(()=>$('[data-team-member]'));
  await t.test('CSV export waits for all participant order subscriptions',()=>{assert.equal($('#export').disabled,true);assert.match($('#roster').textContent,/Loading/);});
  holdOrders=false;pendingOrders.splice(0).forEach(fn=>fn());await wait(()=>!$('#export').disabled);
- $('#team-size').value='5';$('[data-team-member="p0"]').value='p0';await api.saveDefaults(DEFAULT_CONFIG);
- await t.test('roster notifications preserve team setup drafts',()=>{assert.equal($('#team-size').value,'5');assert.equal($('[data-team-member="p0"]').value,'p0');});
+ $('[data-team-member="p0"]').value='p0';await api.saveDefaults(DEFAULT_CONFIG);
+ await t.test('roster notifications preserve team setup drafts',()=>{assert.equal($('[data-team-member="p0"]').value,'p0');});
  await t.test('large rosters use a bounded membership editor',()=>assert.equal(w.document.querySelectorAll('[data-team-member]').length,25));
  click('#team-next');assert.ok($('[data-team-member="p25"]'));click('#team-prev');assert.equal($('[data-team-member="p0"]').value,'p0');
  const assignments=Object.fromEntries(Array.from({length:500},(_,i)=>['p'+i,'p'+(Math.floor(i/5)*5)])),names=Object.fromEntries(Array.from({length:100},(_,i)=>['p'+i*5,'Team '+i]));

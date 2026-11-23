@@ -18,7 +18,7 @@ test('five-team results agree across standings, individual play, history and ins
  const teams=names.map(name=>{const email=name.toLowerCase()+'@example.test';return {name,uid:'demo-'+email,email};});
  const [a,b,c,d,e]=teams.map(team=>team.uid);
  const teamOpponents={[a]:d,[d]:a,[b]:c,[c]:b,[e]:null};
- const session={code,name:'Five teams',owner:'demo-admin',mode:'team',status:'closed',closedAt:Date.now(),startedAt:Date.now()-1081000,createdAt:Date.now()-1100000,seed,config:DEFAULT_CONFIG,teamOpponents,
+ const session={code,name:'Five teams',owner:'demo-admin',mode:'team',status:'closed',phaseOffset:960,closedAt:Date.now(),startedAt:Date.now()-1081000,createdAt:Date.now()-1100000,seed,config:DEFAULT_CONFIG,teamOpponents,
   assignments:Object.fromEntries(teams.map(t=>[t.uid,t.uid])),teamNames:Object.fromEntries(teams.map(t=>[t.uid,t.name]))};
  const orders=Object.fromEntries(teams.map(({uid},n)=>[uid,Object.fromEntries([1,2,3].map(i=>[i,{variety:i===3&&n%2===0?8:4,quantity:25+25*n,cap:i===1?0:10*n}]))]));
  w.localStorage.setItem('ff:demo:v1',JSON.stringify({instructors:[],sessions:{[code]:session},people:{[code]:Object.fromEntries(teams.map(t=>[t.uid,t]))},orders:{[code]:orders}}));

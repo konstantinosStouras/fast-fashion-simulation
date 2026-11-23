@@ -1,6 +1,6 @@
 import {escapeHtml as esc} from './ui.js?v=ai-opponent-1';
-import {getTeamComposition} from './functions/teams.js';
-import {classroomClock, summarizeUserClassroom} from './functions/user-classrooms.js';
+import {getTeamComposition} from './functions/teams.js?v=home-practice-1';
+import {classroomStatus, summarizeUserClassroom} from './functions/user-classrooms.js?v=home-practice-1';
 
 const PAGE_SIZE = 25;
 const teamOptions = Array.from({length:100}, (_, index) => `<option value="${index+1}">Team ${index+1}</option>`).join('');
@@ -54,15 +54,21 @@ export async function showTeamsPanel(panel, api, allClassrooms, requestedCode, o
   <p class="hint" id="team-directory-load" role="status"></p><button type="button" class="secondary" id="team-directory-retry" hidden>Retry loading users</button>
   <div class="button-row"><button id="save-team-directory" type="button">Save team assignments</button><span class="hint" id="team-directory-pending"></span></div>
   <p class="hint" id="team-directory-status" role="status" aria-live="polite"></p>
-  <details class="assignment-notes"><summary>How teams and opponents are assigned</summary><p class="hint">Assign each student who joins before starting the classroom. Teams play in randomly drawn pairs. If one team is left over, it plays its own market. In phases with an active AI opponent, each team plays its own AI rival.</p></details></section>`;
+  <details class="assignment-notes"><summary>How teams and opponents are assigned</summary><p class="hint">Students join teams automatically using the classroom’s target team size. You can choose a different team for a student before the competition starts. Practice uses the built-in AI. The instructor’s start draws pairs for the three scored seasons. An unpaired team plays its own market.</p></details></section>`;
  const find = id => panel.querySelector('#'+id);
  const classroom = find('team-classroom'), search = find('team-user-search');
  const body = panel.querySelector('tbody'), feedback = find('team-directory-status'), loadStatus = find('team-directory-load');
  const users = new Map(), drafts = new Map(), histories = new Map(), individualRosters = new Map();
  let rooms = [], page = 0, saving = false, refreshing = false, expandedUid = null, pageToken, directoryComplete = false, roomVersion = 0;
  const currentRoom = () => rooms.find(room => room.code === classroom.value);
+ function showAssignmentHelp(){
+  const room=currentRoom();
+  find('assignment-help').textContent=room
+   ? 'Students join in groups of '+(room.teamSize??3)+'. The last group may be smaller. You can adjust individual assignments below.'
+   : 'Choose a waiting team classroom to review automatic assignments or select a team for a student.';
+ }
  async function loadIndividualRosters(version) {
-  const running=rooms.filter(room=>(room.mode || 'individual')==='individual' && classroomClock(room,Date.now()).status==='running');
+  const running=rooms.filter(room=>(room.mode || 'individual')==='individual' && classroomStatus(room).status==='running');
   // One roster per live individual classroom, with at most four concurrent reads.
   for(let offset=0;offset<running.length && panel.isConnected && version===roomVersion;offset+=4){
    await Promise.all(running.slice(offset,offset+4).map(async room=>{
@@ -88,7 +94,7 @@ export async function showTeamsPanel(panel, api, allClassrooms, requestedCode, o
    classroom.innerHTML='<option value="">Choose a waiting team classroom</option>'+editable.map(room=>`<option value="${esc(room.code)}">${esc(room.name)} · ${esc(room.code)}</option>`).join('');
    classroom.value=editable.some(room=>room.code===selected)?selected:editable.length===1?editable[0].code:'';
    classroom.disabled=!editable.length;
-   find('assignment-help').textContent=editable.length ? 'Select a waiting classroom to edit team membership.' : 'Create a waiting classroom in Team competition mode to assign members.';
+   showAssignmentHelp();
    renderRows();
    void loadIndividualRosters(roomVersion);
   } catch {
@@ -135,7 +141,7 @@ export async function showTeamsPanel(panel, api, allClassrooms, requestedCode, o
    return `<tr class="user-entry"><td data-label="Registered user"><strong>${esc(name)}</strong>
     ${person.email && person.email!==name ? `<small>${esc(person.email)}</small>` : ''}${person.studentId ? `<small>Student ID · ${esc(person.studentId)}</small>` : ''}</td>
     <td data-label="Classroom participation">${classroomHighlights(known,Boolean(full))}<button type="button" class="secondary small user-details" data-user-details="${esc(person.uid)}" aria-expanded="${expanded}" aria-label="${expanded?'Hide':'View'} classrooms for ${esc(name)}">${expanded?'Hide classrooms':'View classrooms'}</button></td>
-    <td data-label="Team assignment"><select data-team-user="${esc(person.uid)}" aria-label="Team for ${esc(name)}"${!room || saving || refreshing ? ' disabled' : ''}><option value="">Unassigned</option>${teamOptions}</select></td></tr>
+    <td data-label="Team assignment"><select data-team-user="${esc(person.uid)}" aria-label="Team for ${esc(name)}"${!room || saving || refreshing ? ' disabled' : ''}><option value="">Assign automatically</option>${teamOptions}</select></td></tr>
     ${expanded?`<tr class="user-details-row"><td colspan="3"><section aria-label="Classrooms for ${esc(name)}">${classroomDetails(person,history)}</section></td></tr>`:''}`;
   }).join('') || '<tr><td colspan="3">'+(query?'No matching registered users.':refreshing?'Loading users…':'No users to display.')+'</td></tr>';
   if(focusedUid)Array.from(body.querySelectorAll('[data-user-details]')).find(button=>button.dataset.userDetails===focusedUid)?.focus({preventScroll:true});
@@ -168,7 +174,7 @@ export async function showTeamsPanel(panel, api, allClassrooms, requestedCode, o
   else changes.set(uid, value);
   updateSave();
  };
- classroom.onchange = () => { page = 0; feedback.textContent = ''; renderRows(); };
+ classroom.onchange = () => { page = 0; feedback.textContent = ''; showAssignmentHelp(); renderRows(); };
  search.oninput = () => { page = 0; renderRows(); };
  find('team-directory-prev').onclick = () => { page--; renderRows(); };
  find('team-directory-next').onclick = () => { page++; renderRows(); };

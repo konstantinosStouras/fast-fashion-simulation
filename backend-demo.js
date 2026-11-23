@@ -1,15 +1,25 @@
 import {decisionOwner,validateTeams} from './competition.js';
+import {legacyPhaseOffset,nextPhaseOffset,sessionProgress} from './functions/session-progress.js';
 import {makeTeamOpponents,teamMatchup} from './market.js';
 // Test harness, selected only on loopback hosts with ?demo. Never real authentication.
 import {platformHandoff} from './profile.js';
 import {loginEmailAddress,assertAccountEmail,ADMIN_ACCOUNT_EMAIL} from './auth-identity.js';
-import {validateConfig,DEFAULT_CONFIG} from './model.js';
+import {validateConfig,DEFAULT_CONFIG,phaseAt} from './model.js';
 import {rehearsalAiOrders} from './ai-rehearsal.js';
-import {getTeamComposition,materializeTeams} from './functions/teams.js';
+import {assignJoiningTeam,DEFAULT_TEAM_SIZE,getTeamComposition,materializeTeams,validTeamSize} from './functions/teams.js';
 import {summarizeUserClassroom} from './functions/user-classrooms.js';
 import {requireSessionCode,sessionCodeTaken} from './session-code.js';
 const KEY='ff:demo:v1';let user=null;const authListeners=new Set(),listeners=new Set();
-const load=()=>JSON.parse(localStorage.getItem(KEY)||JSON.stringify({sessions:{},people:{},orders:{},instructors:[ADMIN_ACCOUNT_EMAIL]}));
+function load(){
+ const data=JSON.parse(localStorage.getItem(KEY)||JSON.stringify({sessions:{},people:{},orders:{},instructors:[ADMIN_ACCOUNT_EMAIL]}));
+ const pending=Object.values(data.sessions).filter(s=>s.status==='running'&&s.phaseOffset==null&&Number.isFinite(s.startedAt));
+ if(pending.length){
+  data.manualStageCutover??=Date.now();
+  for(const s of pending)s.phaseOffset=legacyPhaseOffset(s.startedAt,data.manualStageCutover);
+  localStorage.setItem(KEY,JSON.stringify(data));
+ }
+ return data;
+}
 function write(data){localStorage.setItem(KEY,JSON.stringify(data));listeners.forEach(fn=>fn());}
 const timestamp=n=>n==null?null:{toMillis:()=>n};
 function watch(fn){listeners.add(fn);queueMicrotask(fn);return ()=>listeners.delete(fn);}
@@ -88,7 +98,8 @@ const toSession=s=>s?{...s,createdAt:timestamp(s.createdAt),startedAt:timestamp(
 export async function isSessionCodeAvailable(value){
  return !Object.hasOwn(load().sessions,requireSessionCode(value));
 }
-export async function createSession(name,config,mode='individual',requestedCode,aiOpponent){
+export async function createSession(name,config,mode='individual',requestedCode,aiOpponent,teamSize=DEFAULT_TEAM_SIZE){
+ if(mode==='team'&&!validTeamSize(teamSize))throw Error('Choose a team size from 1 to 20.');
  const d=load();
  let code;
  if(requestedCode===undefined){
@@ -99,7 +110,8 @@ export async function createSession(name,config,mode='individual',requestedCode,
   if(Object.hasOwn(d.sessions,code))throw sessionCodeTaken(code);
  }
  d.sessions[code]={code,name,config,mode,assignments:{},teamNames:{},seed:Math.floor(Math.random()*1000001),owner:user.uid,status:'lobby',createdAt:Date.now(),startedAt:null,closedAt:null};
- if(aiOpponent?.practice||aiOpponent?.main)d.sessions[code].aiOpponent={...aiOpponent};
+ if(mode==='team')Object.assign(d.sessions[code],{teamPractice:true,teamSize,rosterVersion:0});
+ else if(aiOpponent?.practice||aiOpponent?.main)d.sessions[code].aiOpponent={...aiOpponent};
  write(d);
  return code;
 }
@@ -133,13 +145,13 @@ export async function saveTeamComposition(code,changes){
  await requireStudio();
  const d=load(),s=d.sessions[code];
  if(!s||s.status!=='lobby'||s.mode!=='team'||s.owner!==user.uid&&await role()!=='admin')throw Error('Choose a waiting team classroom that you manage.');
- const composition=getTeamComposition(s);
+ const composition=s.teamComposition!=null?{...s.teamComposition}:s.teamSize==null?getTeamComposition(s):{};
  for(const [uid,n] of Object.entries(changes)){
   if(n===null)delete composition[uid];else if(typeof n==='string' && /^([1-9]\d?|100)$/.test(n))composition[uid]=n;else throw Error('Choose a team from 1 to 100.');
  }
  const counts=new Map();
  for(const n of Object.values(composition))counts.set(n,(counts.get(n)||0)+1);
- if(Object.keys(composition).length>500||[...counts.values()].some(n=>n>20))throw Error('A classroom supports 500 users and 20 per team.');
+ if(Object.keys(composition).length>500||[...counts.values()].some(n=>n>(s.teamSize??20)))throw Error('Keep each team at or below its configured size.');
  s.teamComposition=composition;
  const teams=materializeTeams(Object.values(d.people[code]||{}),s);
  Object.assign(s,teams);write(d);return {teamComposition:composition,...teams};
@@ -148,6 +160,7 @@ export async function saveSessionAiOpponent(code,aiOpponent){
  await requireStudio();
  const data=load(),s=data.sessions[code];
  if(s?.owner!==user.uid||s.status!=='lobby'||s.mode==='solo')throw Error('Only the classroom owner can change opponents before the start.');
+ if(s.mode==='team'&&aiOpponent)throw Error('Team classrooms use AI in home practice and human opponents in scored seasons.');
  if(aiOpponent?.practice||aiOpponent?.main)s.aiOpponent={...aiOpponent};else delete s.aiOpponent;
  write(data);
 }
@@ -155,14 +168,16 @@ export async function startSession(code){
  const d=load(),s=d.sessions[code];
  if(s?.status!=='lobby')throw Error('Only a waiting session can start.');
  if(s.mode==='team'){
-  if(s.teamComposition)Object.assign(s,materializeTeams(Object.values(d.people[code]||{}),s));
-  if(!validateTeams(Object.values(d.people[code]||{}),s.assignments,s.teamNames))throw Error('Assign every participant to a team before starting.');
+  Object.assign(s,materializeTeams(Object.values(d.people[code]||{}),s));
+  if(!validateTeams(Object.values(d.people[code]||{}),s.assignments,s.teamNames,s.teamSize??20))throw Error('Assign every participant to a team before starting.');
   s.teamOpponents=makeTeamOpponents(s.teamNames);
+  s.teamPractice=true;
+  delete s.aiOpponent;
  }
  if(s.aiOpponent){
   await requireStudio();
   if(!d.aiSettings?.[s.owner]?.connected[s.aiOpponent.provider])throw Error('Connect the classroom owner’s demo provider before starting.');
-  const competitors=s.mode==='team'?Object.keys(s.teamNames):Object.keys(d.people[code]||{});
+  const competitors=Object.keys(d.people[code]||{});
   if(!competitors.length)throw Error('Ask participants to join before starting the AI classroom.');
   d.aiOrders??={};d.aiOrders[code]={};
   for(const uid of competitors){
@@ -175,16 +190,45 @@ export async function startSession(code){
    d.aiOrders[code][uid]=orders;
   }
  }
- Object.assign(s,{status:'running',startedAt:Date.now()});
+ Object.assign(s,{status:'running',phaseOffset:s.mode==='team'?180:0,startedAt:Date.now()});
  write(d);
 }
-export const closeSession=async code=>{const d=load();Object.assign(d.sessions[code],{status:'closed',closedAt:Date.now()});write(d);};
-export async function joinSession(code,name){const d=load();if(!d.sessions[code])throw new Error('Session code not found.');d.people[code]??={};if(!d.people[code][user.uid]){if(d.sessions[code].status!=='lobby')throw new Error('Already started.');d.people[code][user.uid]={uid:user.uid,name,email:user.email};write(d);}}
+export async function closeSession(code){
+ const d=load(),s=d.sessions[code];
+ if(!s||s.status==='closed')throw Error('The classroom has already closed.');
+ if(s.status==='running'&&s.phaseOffset==null)throw Error('The classroom stage is being restored. Try again shortly.');
+ Object.assign(s,{status:'closed',closedAt:Date.now()});write(d);
+}
+export async function joinSession(code,name){
+ const d=load(),s=d.sessions[code];
+ if(!s||s.deletedAt)throw Error('Session code not found.');
+ if(!user?.emailVerified)throw Error('Verify your email before joining a classroom.');
+ const uid=user.uid;
+ d.people[code]??={};
+ const registered=d.people[code][uid];
+ if(registered&&(s.status!=='lobby'||s.mode!=='team'||s.assignments?.[uid]))return;
+ if(s.status!=='lobby')throw Error('This session has already started or closed.');
+ if(s.mode==='team'){
+  Object.assign(s,assignJoiningTeam(s,uid));
+  if(!registered)s.rosterVersion=(s.rosterVersion??0)+1;
+ }
+ if(!registered)d.people[code][uid]={uid,name,email:user.email};
+ write(d);
+}
 export const watchParticipants=(code,fn)=>watch(()=>fn(Object.values(load().people[code]||{})));
 export const watchOrders=(code,uid,fn)=>watch(()=>fn(load().orders[code]?.[uid]||{}));
-export const saveOrder=async(code,index,order,phase='plan',expectedRevision)=>{const d=load();d.orders[code]??={};d.orders[code][user.uid]??={};const revision=d.orders[code][user.uid][index]?.revision??0;if(expectedRevision!==undefined&&expectedRevision!==revision)throw Object.assign(new Error('Another device saved a newer decision. Your save was not applied. Review the latest saved values before editing again.'),{code:'decision-conflict'});d.orders[code][user.uid][index]={...order,phase,revision:revision+1};write(d);};
+export async function saveOrder(code,index,order,phase='plan',expectedRevision){
+ const d=load(),s=d.sessions[code],current=phaseAt(sessionProgress(s));
+ if(s?.status!=='running'||current.index!==index||current.kind!==phase)throw Error('This decision stage is closed.');
+ d.orders[code]??={};
+ const saved=d.orders[code][user.uid]??={};
+ const revision=saved[index]?.revision??0;
+ if(expectedRevision!==undefined&&expectedRevision!==revision)throw Object.assign(new Error('Another device saved a newer decision. Your save was not applied. Review the latest saved values before editing again.'),{code:'decision-conflict'});
+ saved[index]={...order,phase,revision:revision+1};
+ write(d);
+}
 
-export const saveTeams=async(code,assignments,teamNames)=>{const d=load();if(d.sessions[code].status!=='lobby'||!validateTeams(Object.values(d.people[code]||{}),assignments,teamNames))throw Error('Invalid teams.');Object.assign(d.sessions[code],{assignments,teamNames});write(d);};
+export const saveTeams=async(code,assignments,teamNames)=>{const d=load();if(d.sessions[code].status!=='lobby'||!validateTeams(Object.values(d.people[code]||{}),assignments,teamNames,d.sessions[code].teamSize??20))throw Error('Invalid teams.');Object.assign(d.sessions[code],{assignments,teamNames});write(d);};
 export async function readMarketOrders(code,captains,rounds,decisionUid){
  const d=load(),config=d.sessions[code]?.aiOpponent;
  return Object.fromEntries(captains.map(uid=>[uid,Object.fromEntries(rounds.filter(i=>!decisionUid||decisionUid===uid||!config?.[i===0?'practice':'main']).map(i=>[i,d.orders[code]?.[uid]?.[i]||null]))]));
@@ -208,4 +252,11 @@ export async function saveDefaultField(key,value){
  if(!validateConfig(config))throw new Error('Check the default costs, selling price and salvage value.');
  data.defaults=config;
  write(data);
+}
+
+export async function advancePhase(code,next){
+ const data=load(),s=data.sessions[code];
+ if(s?.status!=='running'||s.phaseOffset==null||next==null||next!==nextPhaseOffset(sessionProgress(s)))throw Error('The classroom has already moved to another stage.');
+ if(s.owner!==user.uid&&await role()!=='admin')throw Error('Only the classroom owner or administrator can advance play.');
+ s.phaseOffset=next;write(data);
 }

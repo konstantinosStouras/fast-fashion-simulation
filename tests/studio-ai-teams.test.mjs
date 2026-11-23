@@ -39,6 +39,10 @@ test('admin saves a provider and model, restores the classroom draft and adjusts
  draft.elements.name.value='Head-to-head classroom';
  draft.elements.code.value='KYOTO';
  draft.elements.mode.value='team';
+ draft.elements.mode.dispatchEvent(new w.Event('change',{bubbles:true}));
+ assert.match($('#play-mode-help').textContent,/practice/i);
+ draft.elements.mode.value='individual';
+ draft.elements.mode.dispatchEvent(new w.Event('change',{bubbles:true}));
  draft.elements.aiPractice.click();
  draft.requestSubmit();
  await waitFor(()=>$('#notice').textContent.includes('Choose a model'));
@@ -174,7 +178,7 @@ test('directory searches by student ID, shows live matchups and loads scoped cla
   {uid:'one',name:'A. First',email:'a@demo.test',studentId:'S-210',registeredAt:'2026-05-10T12:00:00Z',lastSignInAt:'2026-05-11T10:00:00Z'},
   {uid:'two',name:'B. Second',email:'b@demo.test',studentId:'S-211'}
  ];
- const live={code:'LIVE',name:'Trading class',mode:'team',status:'running',startedAt:Date.now()-1000,assignments:{one:'one',two:'two'},teamNames:{one:'Amber',two:'Blue'},teamOpponents:{one:'two',two:'one'},aiOpponent:{provider:'openai',model:'example',main:true}};
+ const live={code:'LIVE',name:'Trading class',mode:'team',status:'running',phaseOffset:0,startedAt:Date.now()-1000,assignments:{one:'one',two:'two'},teamNames:{one:'Amber',two:'Blue'},teamOpponents:{one:'two',two:'one'},aiOpponent:{provider:'openai',model:'example',main:true}};
  const pending={code:'WAIT',name:'Next class',mode:'team',status:'lobby',teamComposition:{one:'4'}};
  let calls=0, opened, fail=true;
  const api={
@@ -210,7 +214,7 @@ test('directory searches by student ID, shows live matchups and loads scoped cla
 test('collapsed rows include active individual and solo sessions without reading past or solo rosters', async t => {
  const dom=new JSDOM('<main></main>'), panel=dom.window.document.querySelector('main');
  t.after(()=>dom.window.close());
- const running=(code,mode='individual',startedAt=Date.now()-200000)=>({code,name:code,mode,status:'running',startedAt});
+ const running=(code,mode='individual',startedAt=Date.now()-200000)=>({code,name:code,mode,status:'running',startedAt,phaseOffset:code==='OLD'?960:180});
  const reads=[];
  await showTeamsPanel(panel,{
   listTeamUsers:async()=>({users:[{uid:'one',name:'First'},{uid:'two',name:'Second'}]}),

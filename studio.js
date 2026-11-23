@@ -1,3 +1,4 @@
+import {sessionProgress} from './functions/session-progress.js?v=home-practice-1';
 const CITY_CODES = [
  'PARIS', 'ROME', 'TOKYO', 'LIMA', 'OSLO', 'MILAN', 'LONDON', 'DUBLIN',
  'BERLIN', 'MADRID', 'CAIRO', 'DUBAI', 'SEOUL', 'MIAMI', 'SYDNEY', 'BOSTON',
@@ -20,13 +21,13 @@ export async function suggestCityCodes(usedCodes, isAvailable) {
  return suggestions;
 }
 
-export function sessionState(session,now=Date.now()){
+export function sessionState(session){
  if(session.status==='closed')return 'Closed';
- if(session.status==='running'&&session.startedAt&&now-session.startedAt.toMillis()>=1080000)return 'Completed';
+ if(session.status==='running'&&sessionProgress(session)>=960)return 'Completed';
  return session.status==='running'?'Running':'Waiting to start';
 }
-export function partitionSessions(sessions,now=Date.now()){
- const active=[],past=[];for(const session of sessions)(['Closed','Completed'].includes(sessionState(session,now))?past:active).push(session);return {active,past};
+export function partitionSessions(sessions){
+ const active=[],past=[];for(const session of sessions)(['Closed','Completed'].includes(sessionState(session))?past:active).push(session);return {active,past};
 }
 export function decisionSummary(session,phase,orders,completedRounds){
  if(session.status==='lobby')return 'Waiting to start';
