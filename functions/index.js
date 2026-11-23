@@ -4,6 +4,7 @@ import {getFirestore} from 'firebase-admin/firestore';
 import {defineSecret} from 'firebase-functions/params';
 import {HttpsError, onCall} from 'firebase-functions/v2/https';
 import {AiError} from './providers.js';
+import {registeredUserService} from './registered-users.js';
 import {aiService} from './service.js';
 
 initializeApp();
@@ -22,9 +23,11 @@ function callable(handler, options = {}) {
 }
 
 export const getAiSettings = callable(api.getAiSettings);
+export const deleteRegisteredUsers = callable(registeredUserService({db: getFirestore(), auth: getAuth()}), {timeoutSeconds: 540});
 export const saveAiSettings = callable(api.saveAiSettings, {secrets: [encryptionKey]});
 export const prepareAiOpponent = callable(api.prepareAiOpponent, {secrets: [encryptionKey], timeoutSeconds: 150});
 export const startAiSession = callable(api.startAiSession, {timeoutSeconds: 120});
-export const listTeamUsers = callable(api.listTeamUsers);
+export const listTeamUsers = callable(api.listTeamUsers, {timeoutSeconds: 120});
 export const getUserClassrooms = callable(api.getUserClassrooms);
 export const saveTeamComposition = callable(api.saveTeamComposition);
+export const saveDefaultTeamComposition = callable(api.saveDefaultTeamComposition);

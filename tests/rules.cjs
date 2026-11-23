@@ -12,6 +12,33 @@ const order=(more={})=>({variety:4,quantity:80,cap:0,phase:'plan',revision:1,sav
 async function seed(elapsed=null,extra={}){await env.withSecurityRulesDisabled(async c=>{const d=c.firestore();await setDoc(doc(d,'instructors/teacher@example.test'),{createdAt:Timestamp.now()});await setDoc(doc(d,'sessions/ABCDEFGH'),{name:'QA',owner:'teacher',config,seed:42,status:elapsed===null?'lobby':'running',createdAt:Timestamp.now(),startedAt:elapsed===null?null:Timestamp.fromMillis(Date.now()-elapsed*1000),closedAt:null,...extra});for(const uid of ['alice','bob'])await setDoc(doc(d,`sessions/ABCDEFGH/participants/${uid}`),{name:uid,email:uid+'@example.test',joinedAt:Timestamp.now()});});}
 before(async()=>{env=await initializeTestEnvironment({projectId:'demo-fashion-futures',firestore:{host:'127.0.0.1',port:8180,rules:fs.readFileSync('firestore.rules','utf8')}});});
 beforeEach(async()=>{await env.clearFirestore();});
+test('deleted accounts cannot use an outstanding token to restore their profile or classroom access',async()=>{
+ await seed(20);
+ const d=db('alice');
+ await assertSucceeds(getDoc(doc(d,'sessions/ABCDEFGH')));
+ await env.withSecurityRulesDisabled(async context=>{
+  await setDoc(doc(context.firestore(),'deletedAccounts/alice'),{revoked:true});
+ });
+ await assertFails(setDoc(doc(d,'profiles/alice'),{firstName:'Alice'}));
+ await assertFails(setDoc(doc(d,'verifiedAccounts/alice'),{email:'alice@example.test'}));
+ await assertFails(setDoc(doc(d,path()),order()));
+ await assertFails(getDoc(doc(d,'sessions/ABCDEFGH')));
+ await assertFails(deleteDoc(doc(d,'deletedAccounts/alice')));
+});
+test('only a verified instructor can read and copy their own saved roster into a new team classroom',async()=>{
+ await seed();
+ const teams={alice:'1',bob:'1'};
+ await env.withSecurityRulesDisabled(async c=>{await setDoc(doc(c.firestore(),'studioTeamDefaults/teacher'),{teamComposition:teams});});
+ const d=db('teacher'), ownRoster=doc(d,'studioTeamDefaults/teacher');
+ await assertSucceeds(getDoc(ownRoster));
+ await assertFails(setDoc(ownRoster,{teamComposition:{alice:'2'}}));
+ await assertFails(getDoc(doc(db('alice'),'studioTeamDefaults/teacher')));
+ await assertFails(getDoc(doc(admin(),'studioTeamDefaults/teacher')));
+ const session={name:'Saved roster',owner:'teacher',config,seed:10,mode:'team',status:'lobby',createdAt:serverTimestamp(),startedAt:null,closedAt:null,teamComposition:teams};
+ await assertSucceeds(setDoc(doc(d,'sessions/ROSTER'),session));
+ await assertFails(setDoc(doc(d,'sessions/CHANGED'),{...session,teamComposition:{alice:'2'}}));
+ await assertFails(setDoc(doc(d,'sessions/SINGLE'),{...session,mode:'individual'}));
+});
 test('AI phases are configured by the classroom owner and only the trusted service can start them',async()=>{
  await seed(null,{mode:'individual'});
  const room=d=>doc(d,'sessions/ABCDEFGH');

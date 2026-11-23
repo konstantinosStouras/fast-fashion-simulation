@@ -4,6 +4,8 @@ import {AiError, discoverModels, generatePlan, phaseRounds, providers, validPlan
 import {openKey, sealKey} from './keys.js';
 import {getTeamComposition, makeTeamOpponents, materializeTeams, validateTeams} from './teams.js';
 import {summarizeUserClassroom} from './user-classrooms.js';
+import {readPlayedSessionCodes} from './directory-sessions.js';
+import {protectedRegisteredUser} from './registered-users.js';
 
 const OWNER_EMAIL = 'kstouras@gmail.com'; // Same platform-owner identity as firestore.rules.
 const timestamp = FieldValue.serverTimestamp;
@@ -196,17 +198,22 @@ export function aiService({db, auth, encryptionSecret, discover = discoverModels
   }
 
   async function listTeamUsers(request) {
-    await instructor(request);
+    const account = await instructor(request);
     const pageToken = request.data?.pageToken;
     requireValue(pageToken == null || (typeof pageToken === 'string' && pageToken.length <= 4096), 'invalid-argument', 'Invalid directory page.');
     const page = await auth.listUsers(100, pageToken || undefined);
-    const refs = page.users.map(user => db.collection('profiles').doc(user.uid));
-    const profiles = refs.length ? await db.getAll(...refs, {fieldMask: ['firstName', 'lastName', 'universityId']}) : [];
+    const uids = page.users.map(user => user.uid).filter(validUid);
+    const refs = uids.map(uid => db.collection('profiles').doc(uid));
+    const [profiles, played] = await Promise.all([
+      refs.length ? db.getAll(...refs, {fieldMask: ['firstName', 'lastName', 'universityId']}) : [],
+      readPlayedSessionCodes(db, account, uids)
+    ]);
     const byUid = new Map(profiles.map(doc => [doc.id, doc.data()]));
     const users = page.users.map(({uid, displayName, email, metadata}) => {
       const profile = byUid.get(uid);
       const name = [profile?.firstName, profile?.lastName].filter(Boolean).join(' ') || displayName || email || uid;
       return {uid, name, email: email || '', studentId: profile?.universityId || null,
+        playedSessionCodes: played.get(uid) || [], deletionProtected: protectedRegisteredUser({uid, email}, account.uid),
         registeredAt: isoDate(metadata?.creationTime), lastSignInAt: isoDate(metadata?.lastSignInTime)};
     });
     return {users, nextPageToken: page.pageToken || null};
@@ -262,13 +269,57 @@ export function aiService({db, auth, encryptionSecret, discover = discoverModels
       b.createdAt - a.createdAt || a.summary.code.localeCompare(b.summary.code));
     return {sessions: summaries.map(({summary}) => summary)};
   }
-  async function saveTeamComposition(request) {
-    const ref = sessionRef(request.data?.code);
-    const changes = request.data?.changes;
+  function teamChanges(changes) {
     requireValue(changes && typeof changes === 'object' && !Array.isArray(changes), 'invalid-argument', 'Provide team assignments to update.');
     const entries = Object.entries(changes);
     requireValue(entries.length <= 500 && entries.every(([uid, number]) => validUid(uid) && (number === null || validTeamNumber(number))),
       'invalid-argument', 'Use team numbers from 1 through 100 for up to 500 users.');
+    return entries;
+  }
+  async function checkRegisteredMembers(entries) {
+    const ids = entries.filter(([, number]) => number !== null).map(([uid]) => ({uid}));
+    for (let i = 0; i < ids.length; i += 100) {
+      const batch = await auth.getUsers(ids.slice(i, i + 100));
+      requireValue(!batch.notFound.length, 'failed-precondition', 'A selected account no longer exists. Refresh the directory.');
+    }
+  }
+  async function checkDeletionMarkers(tx, entries) {
+    const refs = entries.filter(([, number]) => number !== null)
+      .map(([uid]) => db.collection('deletedAccounts').doc(uid));
+    if (refs.length) {
+      const markers = await tx.getAll(...refs, {fieldMask: ['revoked']});
+      requireValue(markers.every(doc => !doc.exists), 'failed-precondition',
+        'A selected account was deleted. Refresh the directory.');
+    }
+  }
+  function updateMembership(composition, entries) {
+    for (const [uid, number] of entries) {
+      if (number === null) delete composition[uid];
+      else composition[uid] = number;
+    }
+    const counts = new Map();
+    for (const number of Object.values(composition)) counts.set(number, (counts.get(number) || 0) + 1);
+    requireValue(Object.keys(composition).length <= 500 && [...counts.values()].every(n => n <= 20), 'invalid-argument',
+      'A team can have up to 20 users and a classroom up to 500.');
+    return composition;
+  }
+  async function saveDefaultTeamComposition(request) {
+    const account = await instructor(request);
+    const entries = teamChanges(request.data?.changes);
+    await checkRegisteredMembers(entries);
+    const ref = db.collection('studioTeamDefaults').doc(account.uid);
+    return db.runTransaction(async tx => {
+      await instructor(request, tx);
+      const saved = (await tx.get(ref)).data()?.teamComposition || {};
+      await checkDeletionMarkers(tx, entries);
+      const result = {teamComposition: updateMembership(saved, entries)};
+      tx.set(ref, result);
+      return result;
+    });
+  }
+  async function saveTeamComposition(request) {
+    const ref = sessionRef(request.data?.code);
+    const entries = teamChanges(request.data?.changes);
     // Authenticate and authorize the classroom before looking up its requested accounts.
     const confirmLobby = async tx => {
       const s = await readOwnedSession(request, tx, ref);
@@ -276,28 +327,17 @@ export function aiService({db, auth, encryptionSecret, discover = discoverModels
       return s;
     };
     const expected = await db.runTransaction(confirmLobby);
-    const ids = entries.filter(([, number]) => number !== null).map(([uid]) => ({uid}));
-    for (let i = 0; i < ids.length; i += 100) {
-      const batch = await auth.getUsers(ids.slice(i, i + 100));
-      requireValue(!batch.notFound.length, 'failed-precondition', 'A selected account no longer exists. Refresh the directory.');
-    }
+    await checkRegisteredMembers(entries);
     return db.runTransaction(async tx => {
       const s = await confirmLobby(tx);
       requireValue(s.createdAt.isEqual(expected.createdAt), 'aborted', 'This classroom was replaced. Refresh its team assignments.');
-      const composition = getTeamComposition(s);
-      for (const [uid, number] of entries) {
-        if (number === null) delete composition[uid];
-        else composition[uid] = number;
-      }
-      const counts = new Map();
-      for (const number of Object.values(composition)) counts.set(number, (counts.get(number) || 0) + 1);
-      requireValue(Object.keys(composition).length <= 500 && [...counts.values()].every(n => n <= 20), 'invalid-argument',
-        'A team can have up to 20 users and a classroom up to 500.');
+      await checkDeletionMarkers(tx, entries);
+      const composition = updateMembership(getTeamComposition(s), entries);
       const roster = await tx.get(ref.collection('participants').select());
       const teams = materializeTeams(roster.docs.map(doc => ({uid: doc.id})), {...s, teamComposition: composition});
       tx.update(ref, {teamComposition: composition, ...teams});
       return {teamComposition: composition, ...teams};
     });
   }
-  return {getAiSettings, saveAiSettings, prepareAiOpponent, startAiSession, listTeamUsers, getUserClassrooms, saveTeamComposition};
+  return {getAiSettings, saveAiSettings, prepareAiOpponent, startAiSession, listTeamUsers, getUserClassrooms, saveTeamComposition, saveDefaultTeamComposition};
 }

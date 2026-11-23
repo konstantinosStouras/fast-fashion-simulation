@@ -36,9 +36,11 @@ Admin entrance: https://www.stouras.com/fast-fashion-simulation/admin/ — Googl
 
 Solo play starts from the signed-in welcome page; the student reads the briefing before starting the 18-minute clock. Each new game receives a random seed and appears in profile history.
 
-**Users & Teams** opens with the registered-user directory. Search by name, email or student ID. Open a person’s entry to see their classrooms, participation status, team and opponent in each phase. Instructors see participation within the classrooms they manage. The platform owner can review participation across classrooms.
+**Users & Teams** lists each registered user and the session codes of the classrooms they joined that went on to start. Search by name, email or student ID. Open a person’s entry to see waiting assignments, participation status, team and opponent in each phase. Instructors see participation within the classrooms they manage. The platform owner can review participation across classrooms.
 
-To form teams, select a waiting team classroom, choose a numbered team for each student and save the assignments. Students still join with the classroom code. Only joined students play, and each needs an assignment before the clock starts. A numbered team keeps its joined captain when possible. Otherwise the simulation assigns a captain from its joined members. Existing classrooms can also group joined participants in the room until the instructor starts using the directory.
+Choose a numbered team beside each student and select **Save team assignments**. **Default teams · new classrooms** saves the instructor’s roster even before a classroom exists. New team classrooms copy that roster at creation. Select a waiting classroom to edit its teams separately. Students join with the classroom code, and each joined participant needs an assignment before the clock starts.
+
+The platform owner can delete one registered account or all eligible accounts. Bulk deletion covers the full directory, including accounts outside the current search. A confirmation identifies the account or the total before deletion. The owner’s two administrator sign-ins are protected. Deleting an account removes its login and profile. Existing opponents and teammates keep their shared results.
 
 At the start of a team classroom, the simulation shuffles the teams uniformly and pairs them without replacement. An odd team receives a randomly drawn bye and plays its own market in human-opponent phases. The draw stays fixed throughout the classroom. Captains submit decisions for their teams.
 

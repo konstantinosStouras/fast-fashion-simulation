@@ -1,7 +1,8 @@
 rules_version = '2';
 service cloud.firestore {
  match /databases/{database}/documents {
-  function verified() { return request.auth != null && request.auth.token.email_verified == true; }
+  function activeAccount() { return request.auth != null && !exists(/databases/$(database)/documents/deletedAccounts/$(request.auth.uid)); }
+  function verified() { return activeAccount() && request.auth.token.email_verified == true; }
   function admin() { return verified() && request.auth.token.email == 'kstouras@gmail.com'; }
   function instructor() { return admin() || (verified() && exists(/databases/$(database)/documents/instructors/$(request.auth.token.email))); }
   function session(code) { return get(/databases/$(database)/documents/sessions/$(code)).data; }
@@ -35,8 +36,11 @@ service cloud.firestore {
   function bounded(c,k,lo,hi) { return c[k] is number && c[k]>=lo && c[k]<=hi; }
   function configShape(c) { return c.keys().hasOnly(['demandMean','demandSd','forecastSd','rebound','price','initialCost','refillCost','styleCost','salvage','unitCarbon','leftoverCarbon']) && bounded(c,'demandMean',80,2000) && bounded(c,'demandSd',0,1000) && bounded(c,'forecastSd',0,0.8) && bounded(c,'rebound',0,1) && bounded(c,'price',1,500) && bounded(c,'initialCost',0,500) && bounded(c,'refillCost',0,500) && bounded(c,'styleCost',0,5000) && bounded(c,'salvage',0,500) && bounded(c,'unitCarbon',0,100) && bounded(c,'leftoverCarbon',0,100) && c.salvage<=c.initialCost && c.salvage<=c.refillCost && c.salvage<=c.price; }
   // Private identity details; never permissions, passwords or client-supplied scores.
+  match /studioTeamDefaults/{uid} {
+   allow get: if own(uid) && instructor();
+  }
   match /profiles/{uid} {
-   function self() { return request.auth != null && request.auth.uid == uid; }
+   function self() { return activeAccount() && request.auth.uid == uid; }
    function textField(k,n) { return request.resource.data[k] is string && request.resource.data[k].size()>0 && request.resource.data[k].size()<=n; }
    function optionalText(k,n) { return !(k in request.resource.data) || textField(k,n); }
    function portalField(p,k) { return !(k in p) || (p[k] is string && p[k].size()<=200); }
@@ -77,6 +81,11 @@ service cloud.firestore {
           && (null in next.teamOpponents.values())==(next.teamNames.size()%2==1)
         : keys.hasOnly(['status','startedAt']));
    }
+   function validInitialRoster() {
+    let next=request.resource.data;
+    return !('teamComposition' in next) || (next.mode=='team'
+      && next.teamComposition==get(/databases/$(database)/documents/studioTeamDefaults/$(request.auth.uid)).data.teamComposition);
+   }
    function validNewCode() {
     return request.resource.data.get('mode','individual')=='solo'
       ? code.matches('^[A-Z2-9]{8}$')
@@ -85,7 +94,7 @@ service cloud.firestore {
    allow get: if verified();
    allow delete: if canDeleteSession(code);
    allow list: if admin() || (instructor() && resource.data.owner==request.auth.uid);
-   allow create: if verified() && (instructor() || request.resource.data.get('mode','individual')=='solo') && validNewCode() && validAiSettings(request.resource.data) && request.resource.data.keys().hasOnly(['name','owner','config','seed','status','createdAt','startedAt','closedAt','mode','assignments','teamNames','rosterVersion','aiOpponent']) && request.resource.data.get('mode','individual') in ['individual','team','solo'] && request.resource.data.get('rosterVersion',0)==0 && request.resource.data.get('assignments',{})=={} && request.resource.data.get('teamNames',{})=={} && request.resource.data.name is string && request.resource.data.name.size()>0 && request.resource.data.name.size()<=80 && request.resource.data.owner==request.auth.uid && configShape(request.resource.data.config) && request.resource.data.seed is int && request.resource.data.seed>=0 && request.resource.data.seed<=1000000 && request.resource.data.status=='lobby' && request.resource.data.createdAt==request.time && request.resource.data.startedAt==null && request.resource.data.closedAt==null;
+   allow create: if verified() && (instructor() || request.resource.data.get('mode','individual')=='solo') && validNewCode() && validInitialRoster() && validAiSettings(request.resource.data) && request.resource.data.keys().hasOnly(['name','owner','config','seed','status','createdAt','startedAt','closedAt','mode','assignments','teamNames','rosterVersion','aiOpponent','teamComposition']) && request.resource.data.get('mode','individual') in ['individual','team','solo'] && request.resource.data.get('rosterVersion',0)==0 && request.resource.data.get('assignments',{})=={} && request.resource.data.get('teamNames',{})=={} && request.resource.data.name is string && request.resource.data.name.size()>0 && request.resource.data.name.size()<=80 && request.resource.data.owner==request.auth.uid && configShape(request.resource.data.config) && request.resource.data.seed is int && request.resource.data.seed>=0 && request.resource.data.seed<=1000000 && request.resource.data.status=='lobby' && request.resource.data.createdAt==request.time && request.resource.data.startedAt==null && request.resource.data.closedAt==null;
    // Irreversible deletion marker is limited to the owning instructor of a closed session.
    allow update: if canDeleteSession(code) && resource.data.get('deletedAt',null)==null && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deletedAt']) && request.resource.data.deletedAt==request.time;
    // Joining increments a revision atomically; team assignment/start transactions retry on a concurrent join.

@@ -32,6 +32,16 @@ header:has(>.studio-nav) #theme-toggle{margin-left:0}
 .team-directory{max-width:1180px}
 .directory-heading,.user-classroom-heading{display:flex;align-items:center;justify-content:space-between;gap:18px}
 .directory-heading h2{margin-bottom:4px}
+.team-directory .directory-heading{flex-wrap:wrap}
+.directory-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.directory-actions button,.team-user-table .danger{margin:0}
+.directory-delete-status:empty{display:none}
+.team-directory .danger{color:var(--terracotta,#b64025);border-color:currentColor}
+:root[data-theme=dark] .team-directory .danger{color:#ff9475}
+.team-directory .danger:hover:not(:disabled){background:var(--surface-soft)}
+.played-session-codes{display:flex;flex-wrap:wrap;gap:4px 8px;list-style:none;margin:0 0 6px;padding:0}
+.played-session-codes code{display:inline-block;border:1px solid var(--line);border-radius:4px;padding:2px 6px;font-size:12px}
+.team-user-table .played-session-empty{display:block;margin:0 0 6px}
 .directory-filters{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:22px;align-items:end}
 .directory-filters label{margin-bottom:0}
 .user-details-row>td{padding:16px;background:var(--paper)}
@@ -58,7 +68,7 @@ header:has(>.studio-nav) #theme-toggle{margin-left:0}
  .team-user-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
  .team-user-table .user-entry{border-top:1px solid var(--line);padding:9px 0}
  .team-user-table td{border:0;padding:6px 4px}
- .team-user-table .user-entry td[data-label="Team assignment"]::before{content:attr(data-label);display:block;margin-bottom:3px;font-size:12px;color:var(--muted)}
+ .team-user-table .user-entry td:is([data-label="Team assignment"],[data-label="Sessions played (code)"])::before{content:attr(data-label);display:block;margin-bottom:3px;font-size:12px;color:var(--muted)}
  .team-user-table .user-details-row>td{padding:12px 6px}
  .user-classroom dl{grid-template-columns:minmax(0,.6fr) minmax(0,1fr)}
 }

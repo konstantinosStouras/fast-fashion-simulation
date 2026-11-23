@@ -1,14 +1,14 @@
 import {emailActionSettings} from './auth-flow.js?v=session-codes-1';
 import {requireSessionCode,sessionCodeTaken} from './session-code.js';
-import {decisionOwner,validateTeams} from './competition.js?v=ai-opponents-1';
-import {aiActive,makeTeamOpponents,teamMatchup} from './market.js?v=ai-opponents-1';
+import {decisionOwner,validateTeams} from './competition.js?v=directory-roster-1';
+import {aiActive,makeTeamOpponents,teamMatchup} from './market.js?v=directory-roster-1';
 import {materializeTeams} from './functions/teams.js';
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js';
 import {getAuth,GoogleAuthProvider,signInWithPopup,signInWithEmailAndPassword,createUserWithEmailAndPassword,sendEmailVerification,sendPasswordResetEmail,signOut,onAuthStateChanged,verifyBeforeUpdateEmail} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js';
 import {getFirestore,doc,collection,getDoc,getDocFromServer,getDocs,getDocsFromServer,setDoc,updateDoc,onSnapshot,serverTimestamp,query,where,runTransaction,increment,writeBatch,deleteDoc,deleteField} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js';
 import {getFunctions,httpsCallable} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-functions.js';
 import {firebaseConfig,DATABASE,ADMIN_EMAIL} from './firebase-config.js';
-import {platformHandoff} from './profile.js?v=ai-opponents-1';
+import {platformHandoff} from './profile.js?v=directory-roster-1';
 import {loginEmailAddress,assertAccountEmail,ADMIN_ACCOUNT_EMAIL} from './auth-identity.js?v=multi-admin-1';
 import {ROUNDS,validateConfig,DEFAULT_CONFIG,validOrder} from './model.js';
 const app=initializeApp(firebaseConfig,'fashion-futures'),auth=getAuth(app),db=getFirestore(app,DATABASE);
@@ -16,8 +16,17 @@ const functions=getFunctions(app,'us-central1');
 const callable=(name,timeout)=>httpsCallable(functions,name,{timeout});
 const readSettings=callable('getAiSettings',45000),writeSettings=callable('saveAiSettings',45000);
 const prepareAiOpponent=callable('prepareAiOpponent',150000),startAiSession=callable('startAiSession',120000);
-const teamUsers=callable('listTeamUsers',45000),writeComposition=callable('saveTeamComposition',45000);
+const teamUsers=callable('listTeamUsers',125000),writeComposition=callable('saveTeamComposition',45000);
 const userClassrooms=callable('getUserClassrooms',60000);
+const writeDefaultTeams=callable('saveDefaultTeamComposition',60000);
+const deleteAccounts=callable('deleteRegisteredUsers',540000);
+function defaultRosterRef(){return doc(db,'studioTeamDefaults',currentUser().uid);}
+export async function getDefaultTeamComposition(){
+ const snapshot=await getDocFromServer(defaultRosterRef());
+ return {teamComposition:snapshot.data()?.teamComposition || {}};
+}
+export const saveDefaultTeamComposition=async changes=>(await writeDefaultTeams({changes})).data;
+export const deleteRegisteredUsers=async uids=>(await deleteAccounts({uids})).data;
 export const getAiSettings=async()=>(await readSettings({})).data;
 export const saveAiSettings=async input=>(await writeSettings(input)).data;
 export const listTeamUsers=async pageToken=>(await teamUsers(pageToken?{pageToken}:{})).data;
@@ -95,7 +104,16 @@ export async function createSession(name,config,mode='individual',requestedCode,
  for(let tries=0;tries<4;tries++){
   const code=selected??randomSessionCode();
   const ref=doc(db,'sessions',code);
-  const created=await runTransaction(db,async tx=>{if((await tx.get(ref)).exists())return false;tx.set(ref,{name,mode,assignments:{},teamNames:{},rosterVersion:0,owner:currentUser().uid,config,...(aiOpponent?.practice||aiOpponent?.main?{aiOpponent}:{}),seed:crypto.getRandomValues(new Uint32Array(1))[0]%1000001,status:'lobby',createdAt:serverTimestamp(),startedAt:null,closedAt:null});return true;});
+  const created=await runTransaction(db,async tx=>{
+   if((await tx.get(ref)).exists())return false;
+   const teamComposition=mode==='team'?(await tx.get(defaultRosterRef())).data()?.teamComposition:null;
+   const room={name,mode,assignments:{},teamNames:{},rosterVersion:0,owner:currentUser().uid,config,
+    seed:crypto.getRandomValues(new Uint32Array(1))[0]%1000001,status:'lobby',createdAt:serverTimestamp(),startedAt:null,closedAt:null};
+   if(teamComposition && Object.keys(teamComposition).length)room.teamComposition=teamComposition;
+   if(aiOpponent?.practice||aiOpponent?.main)room.aiOpponent=aiOpponent;
+   tx.set(ref,room);
+   return true;
+  });
   if(created)return code;
   if(selected)throw sessionCodeTaken(code);
  }throw new Error('Could not reserve a code. Please try again.');

@@ -1,4 +1,4 @@
-import {aiActive,teamMatchup,teamMatchups,teamRound,usesPairedMarkets} from './market.js?v=ai-opponents-1';
+import {aiActive,teamMatchup,teamMatchups,teamRound,usesPairedMarkets} from './market.js?v=directory-roster-1';
 import {ROUNDS} from './model.js';
 export {validateTeams} from './functions/teams.js';
 export const decisionOwner=(s,uid)=>s.mode==='team'?(s.assignments?.[uid]||null):uid;

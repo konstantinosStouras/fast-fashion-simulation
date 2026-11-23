@@ -99,7 +99,8 @@ export function teamRound(session,index,allOrders,captain){
  const orders=Object.fromEntries(groups.flat().map(uid=>[uid,allOrders[uid]?.[index]||DEFAULT_ORDER]));
  const paired=usesPairedMarkets(session);
  const {seed,config}=session;
- const key=JSON.stringify([seed,index,config,paired,groups,orders]);
+ const identities=session.marketIdentities||{};
+ const key=JSON.stringify([seed,index,config,paired,groups,orders,identities]);
  if(cache.has(key))return cache.get(key);
 
  const round={teams:{},demand:0,sales:0,lostSales:0};
@@ -111,9 +112,9 @@ export function teamRound(session,index,allOrders,captain){
    round.demand+=result.demand;
    round.sales+=result.sales;
   }else{
-   const marketOrders=Object.fromEntries(group.map(uid=>[uid,orders[uid]]));
+   const marketOrders=Object.fromEntries(group.map(uid=>[identities[uid]||uid,orders[uid]]));
    const market=sharedMarket(seed,index,marketOrders,config);
-   Object.assign(round.teams,market.teams);
+   for(const uid of group)round.teams[uid]=market.teams[identities[uid]||uid];
    round.demand+=market.demand;
    round.sales+=market.sales;
   }
