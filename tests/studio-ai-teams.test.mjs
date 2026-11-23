@@ -151,7 +151,7 @@ test('team editor searches across server pages and saves only changed assignment
  $('#team-directory-next').click();assign('id27','2');
  const search=$('#team-user-search');
  search.value='student14@example.test';search.dispatchEvent(new w.Event('input'));
- assert.equal(panel.querySelectorAll('tbody tr').length,1);
+ assert.equal(panel.querySelectorAll('.team-directory tbody tr').length,1);
  assign('id14','4');
  const classroom=$('#team-classroom');
  classroom.value='MILAN';classroom.dispatchEvent(new w.Event('change'));
@@ -225,7 +225,7 @@ test('collapsed rows include active individual and solo sessions without reading
  const [first,second]=panel.querySelectorAll('.user-entry');
  assert.match(first.textContent,/IND.*In progress.*Main phase.*Individual play/s);
  assert.match(second.textContent,/SELF.*In progress.*Main phase.*Individual play/s);
- assert.doesNotMatch(panel.textContent,/OLD|UNAVAILABLE/);
+ assert.doesNotMatch(panel.querySelector('.team-directory').textContent,/OLD|UNAVAILABLE/);
  assert.ok(second.querySelector('[data-user-details]'));
 });
 

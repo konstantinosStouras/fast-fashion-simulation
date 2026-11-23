@@ -40,6 +40,8 @@ Solo play starts from the signed-in welcome page; the student reads the briefing
 
 Choose a numbered team beside each student and select **Save team assignments**. **Default teams · new classrooms** saves the instructor’s roster even before a classroom exists. New team classrooms copy that roster at creation. Select a waiting classroom to edit its teams separately. Students join with the classroom code, and each joined participant needs an assignment before the clock starts.
 
+Below the directory, select a session code to see each team's members and its opponents for the practice and main phases. Human opponents appear once the session starts and the draw is complete. In an AI-enabled phase, each team faces its own opponent using the classroom’s selected model.
+
 The platform owner can delete one registered account or all eligible accounts. Bulk deletion covers the full directory, including accounts outside the current search. A confirmation identifies the account or the total before deletion. The owner’s two administrator sign-ins are protected. Deleting an account removes its login and profile. Existing opponents and teammates keep their shared results.
 
 At the start of a team classroom, the simulation shuffles the teams uniformly and pairs them without replacement. An odd team receives a randomly drawn bye and plays its own market in human-opponent phases. The draw stays fixed throughout the classroom. Captains submit decisions for their teams.

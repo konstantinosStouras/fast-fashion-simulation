@@ -1,6 +1,7 @@
 import {escapeHtml as esc} from './ui.js?v=ai-opponent-1';
 import {getTeamComposition} from './functions/teams.js';
 import {classroomClock, summarizeUserClassroom} from './functions/user-classrooms.js';
+import {mountSessionTeams} from './studio-session-teams.js';
 
 const PAGE_SIZE = 25;
 const teamOptions = Array.from({length:100}, (_, index) => `<option value="${index+1}">Team ${index+1}</option>`).join('');
@@ -44,7 +45,7 @@ function classroomDetails(person, history) {
  return `<p class="user-dates">Registered ${esc(formatDate(person.registeredAt))} · Last sign-in ${esc(formatDate(person.lastSignInAt))}</p>${content}`;
 }
 
-export async function showTeamsPanel(panel, api, allClassrooms, requestedCode, openClassroom, confirmAction) {
+export async function showTeamsPanel(panel, api, allClassrooms, requestedCode, openClassroom, confirmAction, registerCleanup) {
  panel.innerHTML = `<section class="panel team-directory" aria-labelledby="directory-title">
   <div class="directory-heading"><div><h2 id="directory-title">Registered users</h2><span id="directory-count" class="hint" role="status">Loading users…</span></div><div class="directory-actions"><button type="button" class="secondary" id="directory-refresh">Refresh</button>
    ${allClassrooms ? '<button type="button" class="secondary danger" id="delete-all-users" disabled>Delete all registered users</button>' : ''}</div></div>
@@ -57,13 +58,16 @@ export async function showTeamsPanel(panel, api, allClassrooms, requestedCode, o
   <p class="hint" id="team-directory-load" role="status"></p><button type="button" class="secondary" id="team-directory-retry" hidden>Retry loading users</button>
   <div class="button-row"><button id="save-team-directory" type="button">Save team assignments</button><span class="hint" id="team-directory-pending"></span></div>
   <p class="hint" id="team-directory-status" role="status" aria-live="polite"></p>
-  <details class="assignment-notes"><summary>How teams and opponents are assigned</summary><p class="hint">Assign each student who joins before starting the classroom. Teams play in randomly drawn pairs. If one team is left over, it plays its own market. In phases with an active AI opponent, each team plays its own AI rival.</p></details></section>`;
+  <details class="assignment-notes"><summary>How teams and opponents are assigned</summary><p class="hint">Assign each student who joins before starting the classroom. Teams play in randomly drawn pairs. If one team is left over, it plays its own market. In phases with an active AI opponent, each team plays its own AI rival.</p></details></section>
+  <section id="session-teams" class="panel session-teams" aria-labelledby="session-teams-title"></section>`;
  const find = id => panel.querySelector('#'+id);
  const classroom = find('team-classroom'), search = find('team-user-search');
  const body = panel.querySelector('tbody'), feedback = find('team-directory-status'), loadStatus = find('team-directory-load');
  const users = new Map(), drafts = new Map([['',new Map()]]), histories = new Map(), individualRosters = new Map();
+ const sessionTeams=mountSessionTeams(find('session-teams'),api,users,allClassrooms,requestedCode,loadRooms);
+ registerCleanup?.(sessionTeams.dispose);
  let rooms = [], defaultRoster = null, selectedScope = requestedCode || '', roomLoadError = false;
- let page = 0, saving = false, deleting = false, refreshing = false, expandedUid = null, pageToken, directoryComplete = false, roomVersion = 0;
+ let page = 0, saving = false, deleting = false, refreshing = false, expandedUid = null, pageToken, directoryComplete = false, roomVersion = 0, listVersion = 0;
  const currentRoom = () => classroom.value ? rooms.find(room => room.code === classroom.value) : defaultRoster;
  function updateScopeHelp() {
   let message = classroom.value ? 'These assignments apply to '+classroom.value+'.'
@@ -94,13 +98,17 @@ export async function showTeamsPanel(panel, api, allClassrooms, requestedCode, o
   if(panel.isConnected && version===roomVersion)renderRows();
  }
  async function loadRooms() {
+  const request=++listVersion;
   try {
    const result = await api.listSessions(allClassrooms);
-   if (!panel.isConnected) return;
-   rooms = result.filter(room => !room.deletedAt);
+   if (!panel.isConnected || request!==listVersion) return;
+   roomLoadError=false;
+   const visible=result.filter(room=>!room.deletedAt);
+   sessionTeams.setRooms(visible);
+   rooms = visible.map(room => room.status==='lobby' && room.mode==='team'
+     ? {...room,teamComposition:getTeamComposition(room)} : room);
    const editable = rooms.filter(room => room.status==='lobby' && room.mode==='team');
    for (const room of editable) {
-    room.teamComposition=getTeamComposition(room);
     if (!drafts.has(room.code)) drafts.set(room.code,new Map());
    }
    classroom.innerHTML='<option value="">Default teams · new classrooms</option>'+editable.map(room=>`<option value="${esc(room.code)}">${esc(room.name)} · ${esc(room.code)}</option>`).join('');
@@ -109,8 +117,9 @@ export async function showTeamsPanel(panel, api, allClassrooms, requestedCode, o
    renderRows();
    void loadIndividualRosters(roomVersion);
   } catch {
-   if (!panel.isConnected) return;
+   if (!panel.isConnected || request!==listVersion) return;
    rooms=[];roomLoadError=true;classroom.innerHTML='<option value="">Default teams · new classrooms</option>';
+   sessionTeams.roomsFailed();
    renderRows();
   }
  }
@@ -273,6 +282,7 @@ export async function showTeamsPanel(panel, api, allClassrooms, requestedCode, o
     const result = await api.listTeamUsers(pageToken);
     if (!panel.isConnected) return;
     for (const user of result.users) users.set(user.uid, user);
+    sessionTeams.updateNames();
     pageToken = result.nextPageToken;
     renderRows();
    } while (pageToken);
