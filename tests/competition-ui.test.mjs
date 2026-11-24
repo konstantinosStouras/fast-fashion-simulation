@@ -10,8 +10,18 @@ test('solo start, team setup, captain saves, teammate read-only view and period 
  const $=s=>w.document.querySelector(s),click=s=>$(s).click(),submit=s=>$(s).dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
  const wait=async fn=>{for(let i=0;i<150;i++){await new Promise(r=>setTimeout(r,10));if(fn())return;}throw Error(w.document.body.textContent.slice(-1500));};
  const api=await import('../backend-demo.js');t.after(async()=>{await api.logout();await new Promise(r=>setTimeout(r,20));dom.window.close();});
- await import('../main.js?competition-ui');await wait(()=>$('#open-login'));await api.loginEmail('alice@example.test');await wait(()=>$('#solo-play'));click('#solo-play');await wait(()=>$('#start-solo'));assert.match(w.document.body.textContent,/Before|BEFORE YOU PLAY/);assert.equal($('#clock'),null);click('#start-solo');await wait(()=>$('#order-form'));submit('#order-form');await wait(()=>$('.save-state').textContent.includes('Saved'));let data=JSON.parse(w.localStorage.getItem('ff:demo:v1'));assert.equal(Object.values(data.sessions)[0].mode,'solo');
- await api.logout();await wait(()=>$('#open-login'));await api.loginGoogle();await wait(()=>$('#staff'));click('#staff');await wait(()=>$('#create'));$('#create [name=name]').value='Teams';$('#create [name=mode]').value='team';
+ await import('../main.js?competition-ui');await wait(()=>$('#open-login'));await api.loginEmail('alice@example.test');await wait(()=>$('#join'));
+ assert.equal($('#solo-play'),null);assert.equal($('#session-code').value,'');
+ // An existing private game still opens from its owner's play history.
+ const soloCode=await api.createSession('Solo · saved game',DEFAULT_CONFIG,'solo');
+ await api.joinSession(soloCode,'Alice');
+ click('#my-profile');await wait(()=>$('[data-history="'+soloCode+'"]'));click('[data-history="'+soloCode+'"]');
+ await wait(()=>$('#start-solo'));assert.match(w.document.body.textContent,/Before|BEFORE YOU PLAY/);assert.equal($('#clock'),null);
+ click('#start-solo');await wait(()=>$('#order-form'));submit('#order-form');await wait(()=>$('.save-state').textContent.includes('Saved'));
+ let data=JSON.parse(w.localStorage.getItem('ff:demo:v1'));assert.equal(data.sessions[soloCode].mode,'solo');
+ await api.logout();await wait(()=>$('#open-login'));
+ w.history.replaceState({},'','/admin/?demo');await api.loginGoogle();await wait(()=>$('#create'));
+ $('#create [name=name]').value='Teams';$('#create [name=mode]').value='team';
  const createdName=$('#create [name=name]').value;
  const createdCard=()=>Array.from(document.querySelectorAll('.studio-session-card')).find(card=>card.querySelector('h4').textContent===createdName);
  submit('#create');
@@ -42,7 +52,8 @@ test('solo start, team setup, captain saves, teammate read-only view and period 
  }
  await wait(()=>$('#leaderboard'));assert.equal($('#team-setup'),null);
  await api.logout();await wait(()=>$('#open-login'));w.localStorage.removeItem('ff:session:demo-alice@example.test');w.sessionStorage.removeItem('ff:session:demo-alice@example.test');w.history.replaceState({},'', '/?demo');await api.loginEmail('alice@example.test');await wait(()=>$('#join'));$('#join [name=code]').value=code;submit('#join');await wait(()=>$('#order-form'));assert.equal($('#save-order').disabled,false);$('#order-form [name=quantity]').value='93';submit('#order-form');await wait(()=>$('.save-state').textContent.includes('93'));
- await api.logout();await wait(()=>$('#open-login'));await api.loginEmail('bob@example.test');await wait(()=>$('#join'));$('#join [name=code]').value=code;submit('#join');await wait(()=>$('#order-form'));assert.equal($('#save-order').disabled,true);assert.equal($('#order-form [name=quantity]').value,'93');assert.match($('.team-banner').textContent,/alice enters decisions/i);
+ await api.logout();await wait(()=>$('#open-login'));assert.equal(new URL(w.location.href).searchParams.get('sessionCode'),code);
+ await api.loginEmail('bob@example.test');await wait(()=>$('#order-form'));assert.equal($('#save-order').disabled,true);assert.equal($('#order-form [name=quantity]').value,'93');assert.match($('.team-banner').textContent,/alice enters decisions/i);
  const host=await import('../backend-demo.js?competition-host');
  await host.loginGoogle();
  const advance=async offset=>{await host.advancePhase(code,offset);w.dispatchEvent(new w.StorageEvent('storage',{key:'ff:demo:v1'}));};

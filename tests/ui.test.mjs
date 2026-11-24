@@ -19,7 +19,10 @@ test('instructor setup, student code gate, all rounds, saved scoring and sign-ou
  assert.ok($('#create'),'creating a session keeps the admin dashboard open');
  createdCard().querySelector('[data-session]').click();await wait(()=>$('#start'));
  const data=JSON.parse(w.localStorage.getItem('ff:demo:v1')),code=Object.keys(data.sessions)[0];assert.equal(data.sessions[code].config.demandMean,480);
- click('#out');await wait(()=>$('#open-login'));click('#open-login');$('#email').value='student@example.test';$('#password').value='test-only-123';submit('#auth-form');await wait(()=>$('#join'));assert.equal($('#staff'),null);
+ click('#out');await wait(()=>$('#open-login'));
+ // A student entering from the public homepage supplies their own classroom code.
+ w.history.replaceState({},'','/?demo');click('#open-login');$('#email').value='student@example.test';$('#password').value='test-only-123';submit('#auth-form');await wait(()=>$('#join'));assert.equal($('#staff'),null);
+ assert.equal($('#join [name=code]').value,'');assert.equal($('#solo-play'),null);
  $('#join [name=name]').value='Student';$('#join [name=code]').value='BADCODEX';submit('#join');await wait(()=>$('#notice').textContent.includes('not found'));assert.equal($('#order-form'),null);
  $('#join [name=code]').value=code;submit('#join');await wait(()=>$('#leave'));
  const host=await import('../backend-demo.js?instructor-window');

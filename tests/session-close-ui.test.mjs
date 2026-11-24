@@ -28,7 +28,8 @@ test('closed team scores use one final server snapshot despite pending saves and
  assert.match($('#leaderboard').textContent,/after 1 scored period/);assert.match($('#connection-status').textContent,/final team scores confirmed/);
  delayed.splice(0).forEach(fn=>fn());assert.equal($('.result-stats strong').textContent,profit,'A delayed subscription must not replace final data');
  rejectSave(Object.assign(Error('Closed'),{code:'permission-denied'}));await wait(()=>$('#notice').textContent.includes('session is closed'));assert.equal($('.result-stats strong').textContent,profit);
- await api.logout();await wait(()=>$('#open-login'));await api.loginEmail('mate@example.test');await wait(()=>$('#join'));$('#join [name=code]').value=code;submit('#join');await wait(()=>$('.own-team'));
+ await api.logout();await wait(()=>$('#open-login'));assert.equal(new URL(w.location.href).searchParams.get('sessionCode'),code);
+ await api.loginEmail('mate@example.test');await wait(()=>$('.own-team'));assert.equal(api.currentUser().uid,mate);
  assert.equal($('.result-stats strong').textContent,profit);assert.equal($('#order-form'),null);
  await api.logout();await wait(()=>$('#open-login'));w.history.replaceState({},'','/?demo');await api.loginGoogle();await wait(()=>$('#staff'));$('#staff').click();await wait(()=>$('[data-session]'));$('[data-session]').click();await wait(()=>$('#roster [data-label="Profit"]'));
  for(const cell of w.document.querySelectorAll('#roster [data-label="Profit"]'))assert.equal(cell.textContent,profit);

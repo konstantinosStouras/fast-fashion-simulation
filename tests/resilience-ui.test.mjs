@@ -136,6 +136,16 @@ test('slow subscriptions, live updates, cancelled navigation and large classroom
  await t.test('saving membership includes edits from every page',()=>{const saved=JSON.parse(w.localStorage.getItem('ff:demo:v1')).sessions[teamCode].assignments;assert.equal(saved.p1,'p25');assert.equal(saved.p26,'p0');assert.equal(Object.keys(saved).length,500);});
  await api.closeSession(teamCode);await wait(()=>$('#app').textContent.includes('Session closed'));
  await t.test('closing a lobby produces no scored results and remains navigable',()=>{assert.ok($('#back-staff'));assert.doesNotMatch($('#roster').textContent,/NaN|undefined/);});
- await api.logout();await wait(()=>$('#open-login'));await api.loginEmail('longname@example.test');await wait(()=>$('#solo-play'));await api.saveProfile({firstName:'A'.repeat(60),lastName:'B'.repeat(60),universityId:'LONG'});click('#my-profile');await wait(()=>$('#profile-home'));click('#profile-home');click('#solo-play');await wait(()=>$('#start-solo'));
- await t.test('long valid profile names fit the participant name limit',()=>{const d=JSON.parse(w.localStorage.getItem('ff:demo:v1')),solo=Object.values(d.sessions).find(s=>s.mode==='solo');assert.equal(d.people[solo.code][api.currentUser().uid].name.length,80);});
+ await t.test('long valid profile names fit the participant name limit',async()=>{
+  const invite=await api.createSession('Long name classroom',DEFAULT_CONFIG);
+  await api.logout();await wait(()=>$('#open-login'));
+  w.history.replaceState({},'','/?demo');await api.loginEmail('longname@example.test');await wait(()=>$('#join'));
+  const firstName='A'.repeat(60),lastName='B'.repeat(60);
+  await api.saveProfile({firstName,lastName,universityId:'LONG'});click('#my-profile');await wait(()=>$('#profile-home'));
+  click('#profile-home');assert.equal($('#join [name=name]').value,(firstName+' '+lastName).slice(0,80));
+  await api.logout();await wait(()=>$('#open-login'));
+  w.history.replaceState({},'','/?demo&sessionCode='+invite);await api.loginEmail('longname@example.test');
+  await wait(()=>$('#leave'));const d=JSON.parse(w.localStorage.getItem('ff:demo:v1'));
+  assert.equal(d.people[invite][api.currentUser().uid].name,(firstName+' '+lastName).slice(0,80));
+ });
 });

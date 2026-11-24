@@ -8,7 +8,7 @@ Live: https://www.stouras.com/fast-fashion-simulation/
 
 Use Node 22 or newer. Run `npm ci`, then `node tools/serve.mjs` and open http://localhost:8791/.
 
-Real mode uses Firebase Google/email authentication and the default Firestore database in the dedicated `stouras-ffo` project (Fast Fashion Ops). The blog project is unchanged; FFO accounts are separate. Students verify their account and complete their profile. They can then start a private solo game without a code, or use an instructor’s code to join a classroom. Public Firebase web identifiers are not administrator credentials.
+Real mode uses Firebase Google/email authentication and the default Firestore database in the dedicated `stouras-ffo` project (Fast Fashion Ops). The blog project is unchanged; FFO accounts are separate. Students verify their account and complete their profile. An invitation link opens the assigned classroom automatically. Students who open the homepage can enter their instructor’s session code. Public Firebase web identifiers are not administrator credentials.
 
 For a synthetic local preview, open http://localhost:8791/?demo. The Google button signs in as a fake admin. Email/password can sign in as a fake student. This mode runs on localhost/127.0.0.1 and uses browser storage.
 
@@ -36,7 +36,7 @@ Admin entrance: https://www.stouras.com/fast-fashion-simulation/admin/ — Googl
 
 ## Individual play and team competition
 
-In solo play, the student starts from the signed-in welcome page and advances each phase when ready. Each new game receives a random seed and appears in profile history. In classrooms, the instructor starts and advances the scored simulation for everyone. Advancing locks the preceding phase’s decisions.
+Students can reopen an existing private solo game from My activity & statistics and advance each phase when ready. In classrooms, the instructor starts and advances the scored simulation for everyone. Advancing locks the preceding phase’s decisions.
 
 **Users & Teams** lists each registered user and the session codes of the classrooms they joined that went on to start. Search by name, email or student ID. Open a person’s entry to see waiting assignments, participation status, team and opponent in each phase. Instructors see participation within the classrooms they manage. The platform owner can review participation across classrooms.
 
