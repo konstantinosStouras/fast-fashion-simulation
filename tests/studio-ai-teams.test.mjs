@@ -91,7 +91,7 @@ test('admin saves a provider and model, restores the classroom draft and adjusts
  await waitFor(()=>$('#create'));
  assertHeaderNavigation('studio-admin');
  await backend.logout();
- await waitFor(()=>$('#open-login'));
+ await waitFor(()=>$('#admin-login'));
  assert.equal($('.studio-nav'),null);
 });
 

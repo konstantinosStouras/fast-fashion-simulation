@@ -18,7 +18,8 @@ test('registration verification gate, formatted session IDs and live team assign
  $('#first-name').value='Casey';$('#last-name').value='Student';$('#university-id').value='QA-123';$('#email').value='casey@example.test';$('#password').value='SyntheticDemoOnly';submit('#auth-form');await wait(()=>$('#verified'));
  assert.equal($('#join'),null);assert.equal((await api.getProfile()).firstName,'Casey');click('#verified');await wait(()=>$('#notice').textContent.includes('not verified'));assert.equal($('#join'),null);
  // Simulate the verification email having been completed; production verification is unchanged.
- api.currentUser().emailVerified=true;click('#verified');await wait(()=>$('#join'));assert.equal($('#session-code').value,code);
+ api.currentUser().emailVerified=true;click('#verified');await wait(()=>$('#leave'));assert.match($('.session-context').textContent,new RegExp(code));
+ click('#join-session');await wait(()=>$('#join'));
  $('#session-code').value='badc-odex';$('#session-code').dispatchEvent(new w.Event('input',{bubbles:true}));assert.equal($('#session-code').value,'BADCODEX');submit('#join');await wait(()=>$('#join-status').textContent.includes('not found'));
  assert.equal($('#join [name=name]').value,'Casey Student');assert.equal($('#session-code').value,'BADCODEX');assert.equal($('#join button').disabled,false);
  $('#session-code').value='demo - aaab';$('#session-code').dispatchEvent(new w.Event('input',{bubbles:true}));assert.equal($('#session-code').value,code);assert.equal($('#session-code').checkValidity(),true);assert.equal($('#join-status').textContent,'');submit('#join');await wait(()=>$('#leave'));

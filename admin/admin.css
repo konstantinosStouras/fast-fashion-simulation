@@ -6,4 +6,4 @@
 .admin-card #admin-message{overflow-wrap:anywhere;font-size:14px;line-height:1.6}
 .admin-card #admin-identity{overflow-wrap:anywhere}
 .admin-card [aria-busy=true]{cursor:progress}
-@media(max-width:480px){.admin-card{padding:24px 18px}header{flex-wrap:wrap}}
+@media(max-width:480px){.admin-card{padding:24px 18px}}

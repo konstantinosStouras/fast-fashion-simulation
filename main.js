@@ -1,3 +1,4 @@
+import {showAdminLogin} from './admin/sign-in.js?v=refresh-1';
 import {entryMember} from './team-roles.js';
 import {sessionProgress,hasHomeTeamPractice} from './functions/session-progress.js?v=team-handoff-1';
 import {sessionCodeFromUrl} from './auth-flow.js?v=session-codes-1';
@@ -8,13 +9,15 @@ import {mountTeamPractice,clearTeamPractice} from './team-practice-ui.js';
 import {decisionOwner,groupTeams,validateTeams,leaderboard} from './competition.js?v=team-handoff-1';
 import {ROUNDS,DEFAULT_ORDER,DEFAULT_CONFIG,SETTINGS,validateConfig,phaseAt,signalFor} from './model.js?v=team-pairs-1';
 import {studioNavigation,showAiSettingsPanel,aiPhaseFields,phaseModelHint,readAiOpponent,editSessionAi} from './studio-ai.js?v=studio-header-1';
-import {showTeamsPanel} from './studio-teams.js?v=team-handoff-1';
+import {showTeamsPanel} from './studio-teams.js?v=refresh-1';
 import {suggestCityCodes,sessionState,partitionSessions,decisionSummary} from './studio.js?v=team-handoff-1';
 import {profileComplete,profileFields,historyStats,PLATFORM_FIELDS} from './profile.js?v=team-handoff-1';
 import {escapeHtml as esc,friendlyAuthError,safeStorage,setBusy,revealInvalidField,csvCell} from './ui.js?v=ai-opponent-1';
 import {accountLabel,ADMIN_ACCOUNT_EMAIL} from './auth-identity.js?v=multi-admin-1';
 const resumeStorage=safeStorage(()=>localStorage),tabStorage=safeStorage(()=>sessionStorage);
 const pageWindow=document.defaultView;
+const atAdminAddress=()=>/\/admin\/(?:index\.html)?$/.test(location.pathname);
+const appRoot=new URL(atAdminAddress()?'../':'./',location.href);
 let connected=pageWindow.navigator.onLine!==false,sessionFresh=true,ordersFresh=true,savePending=false,pendingDecision=null;
 // The write acknowledgement and confirmed subscription can arrive in either order.
 // Retain local revisions until observed, rather than using the request's pending flag.
@@ -23,6 +26,30 @@ const connectionBanner=document.createElement('div');connectionBanner.id='connec
 document.getElementById('app').before(connectionBanner);
 const demo=/^(localhost|127\.0\.0\.1)$/.test(location.hostname)&&new URLSearchParams(location.search).has('demo');
 const $=id=>document.getElementById(id);
+$('auth').innerHTML=`<form id="auth-form">
+<button class="close" type="button" aria-label="Close sign in">×</button>
+<p class="eyebrow">YOUR NEXT DECISION STARTS HERE</p>
+<h2 id="auth-title">Welcome back.</h2>
+<p id="auth-context" class="auth-context" hidden></p>
+<button type="button" class="google" id="google">
+<img src="assets/google-g.png" class="google-mark" alt="" width="20" height="20">
+<span>Continue with Google</span></button>
+<p class="divider">or continue with email</p>
+<div id="registration-fields" hidden>
+<label>First name<input id="first-name" maxlength="60" autocomplete="given-name"></label>
+<label>Last name<input id="last-name" maxlength="60" autocomplete="family-name"></label>
+<label>University ID<input id="university-id" maxlength="80" autocomplete="off" spellcheck="false"></label></div>
+<label>Email<input id="email" type="email" required autocomplete="username" autocapitalize="none" spellcheck="false"></label>
+<label id="password-label">Password<input id="password" type="password" required minlength="8" autocomplete="current-password" aria-describedby="password-help"></label>
+<p class="hint" id="password-help" hidden>Use at least 8 characters for your password.</p>
+<button id="auth-submit">Log in →</button>
+<p id="auth-status" role="status" aria-live="polite"></p>
+<p id="auth-error" role="alert"></p>
+<div class="auth-links">
+<button type="button" data-auth="register">Create account</button>
+<button type="button" data-auth="reset">Forgot password?</button>
+<button type="button" data-auth="login">Log in</button></div>
+<p class="hint" id="auth-help">Use your Fast Fashion Ops account. Email registration requires verification. Instructor access is granted by the administrator.</p></form>`;
 const money=n=>new Intl.NumberFormat('en-IE',{style:'currency',currency:'USD',currencyDisplay:'narrowSymbol',maximumFractionDigits:0}).format(n),fmt=n=>Math.round(n).toLocaleString();
 const time=n=>{n=Math.max(0,Math.ceil(n));return `${Math.floor(n/60)}:${String(n%60).padStart(2,'0')}`;};
 let api,user=null,role='student',session=null,orders={},roster=[],classOrders={},subscriptions=[],rosterSubs=new Map(),staffView=false,authMode='login',phaseKey='',working=false;
@@ -42,8 +69,23 @@ function failure(error){
 async function action(fn){if(working)return;working=true;const restore=setBusy($('app'),true);try{await fn();}catch(e){failure(e);}finally{working=false;restore();updateConnection();}}
 let authWorking=false,registering=false;
 async function authAction(fn){if(authWorking)return;authWorking=true;const restore=setBusy($('auth-form'),true);$('auth-error').textContent='';$('auth-status').textContent='Connecting…';try{await fn();}catch(e){$('auth-status').textContent='';$('auth-error').textContent=friendlyAuthError(e);$('auth-error').scrollIntoView?.({block:'nearest'});}finally{authWorking=false;restore();}}
+let pendingSection=location.hash.slice(1);
+function restoreSection(){
+ const target=pendingSection&&location.hash==='#'+pendingSection&&$(pendingSection);
+ if(target){pendingSection='';target.scrollIntoView?.();}
+}
+// The fixed asset base must not send section links back to the application root.
+document.addEventListener('click',event=>{
+ const link=event.target.closest?.('a[href^="#"]');
+ const hash=link?.getAttribute('href'),target=hash&&$(hash.slice(1));
+ if(!target||event.defaultPrevented||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
+ event.preventDefault();
+ const url=new URL(location.href);url.hash=hash;
+ pageWindow.history.replaceState(pageWindow.history.state,'',url.href);
+ target.focus?.({preventScroll:true});target.scrollIntoView?.();
+});
 document.addEventListener('invalid',revealInvalidField,true);
-document.querySelector('.brand').addEventListener('click',e=>{e.preventDefault();action(async()=>{if(session||staffView)setViewAddress();clean();staffView=false;note('');landing();window.scrollTo?.({top:0,behavior:'auto'});});});
+document.querySelector('.brand').addEventListener('click',e=>{e.preventDefault();action(async()=>{clean();setViewAddress('','home');staffView=false;note('');landing();pageWindow.scrollTo?.({top:0,behavior:'auto'});});});
 function confirmAction(message){return new Promise(resolve=>{const d=document.createElement('dialog');d.innerHTML=`<h2>Confirm your decision.</h2><p>${esc(message)}</p><div class="button-row"><button data-yes>Confirm</button><button class="secondary" data-no>Cancel</button></div>`;document.body.append(d);const done=value=>{d.close();d.remove();resolve(value);};d.querySelector('[data-yes]').onclick=()=>done(true);d.querySelector('[data-no]').onclick=()=>done(false);d.oncancel=e=>{e.preventDefault();done(false);};d.showModal();});}
 function clearExport(){if(exportUrl){URL.revokeObjectURL(exportUrl);exportUrl=null;}}
 function clean(){document.querySelector('header > .studio-nav')?.remove();if(studentPreview)clearRehearsal();localDecisionWrites.clear();historyNeedsRefresh=false;sessionFresh=true;ordersFresh=true;savePending=false;pendingDecision=null;connectionBanner.hidden=true;historyReviewCode=null;historyReviewPending=false;sessionEntryPending=false;clearExport();viewVersion++;ordersReady=false;rosterReady=false;renderedOrderKey='';teamEditor=null;clearTimeout(rosterTimer);rosterTimer=null;orderUnsub?.();orderUnsub=null;currentOrderUid=null;marketReady='';marketLoading='';finalTeamOrders=null;subscriptions.forEach(f=>f());subscriptions=[];rosterSubs.forEach(f=>f());rosterSubs.clear();session=null;orders={};roster=[];classOrders={};phaseKey='';studentPreview=null;}
@@ -95,51 +137,71 @@ function account(){
  $('join-session')?.addEventListener('click',()=>navigate(showJoinForm));
 }
 function simulationUrl(code='',view=''){
- const url=new URL(view==='staff' && !code?'admin/':'./',document.baseURI);
+ const url=new URL(view==='staff' && !code?'admin/':'./',appRoot);
  if(demo)url.searchParams.set('demo','');
  if(code)url.searchParams.set('sessionCode',code);
+ if(['profile','join'].includes(view))url.searchParams.set('view',view);
  else if(['teams','ai','administrators'].includes(view))url.searchParams.set('studio',view);
  return url;
 }
 function setViewAddress(code='',view=''){
- const state=code?{roomCode:code,roomView:view,uid:user.uid}:null;
- pageWindow.history.replaceState(state,'',simulationUrl(code,view).href);
+ const state=code?{roomCode:code,roomView:view,uid:user.uid}:view==='home'?{home:true}:null;
+ const url=simulationUrl(code,view);
+ if(url.pathname===location.pathname&&url.search===location.search)url.hash=location.hash;
+ pageWindow.history.replaceState(state,'',url.href);
 }
 async function restoreView(u){
  const params=new URLSearchParams(location.search);
  if(demo)note('LOCAL DEMO · synthetic accounts and browser-only data. No real authentication.');
+ if(atAdminAddress()&&(!u?.emailVerified||role==='student')){
+  if(!u)$('account').replaceChildren();
+  showAdminLogin($('app'),api,u,restoreAccount);
+  return;
+ }
  if(!u){
+  landing();
   if(['login','verify'].includes(params.get('auth')))openAuth('login');
   return;
  }
- if(!u.emailVerified)return;
  const code=sessionCodeFromUrl(location.href),requested=params.has('sessionCode')||params.has('session');
  // The local history entry remembers which view opened the room. A shared URL is an invitation.
  const entry=pageWindow.history.state;
  const previousView=code&&entry?.roomCode===code&&entry.uid===u.uid?entry.roomView:null;
+ if(params.get('view')==='profile')return showProfile(null,true);
+ if(!u.emailVerified)return landing();
  if(role!=='student'){
   if(restoreRehearsal())return;
   if(previousView==='staff')return openSession(code,true);
   if(!requested&&params.get('studio')==='ai')return showStaffAi();
-  if(!requested&&params.get('studio')==='teams')return showStaffTeams();
+  if(!requested&&params.get('studio')==='teams'){
+   const choices=entry?.uid===u.uid?entry.teamSelections:null;
+   return showStaffTeams(null,choices?.classroom,choices?.roster);
+  }
   if(!requested&&params.get('studio')==='administrators')return role==='admin'?showAdministrators():showStaff();
-  if(!requested&&(params.get('studio')==='1'||location.hash==='#admin'))return showStaff();
+  if(!requested&&(atAdminAddress()||params.get('studio')==='1'||location.hash==='#admin'))return showStaff();
  }
- if(!profileComplete(profile))return;
+ if(!profileComplete(profile))return landing();
+ if(!requested&&params.get('view')==='join')return showJoinForm();
+ if(!requested&&entry?.home)return landing();
  if(previousView==='review')return openSession(code,false,true);
  const savedInTab=tabStorage.getItem('ff:session:'+u.uid);
  if(requested){
-  if(code&&(previousView==='play'||code===savedInTab))return openSession(code,false,false,true);
-  if(code){$('join').requestSubmit();return;}
+  if(code&&(previousView==='play'||code===savedInTab))return openSession(code,false);
+  if(code){
+   $('app').innerHTML='<p id="join-status" role="status"></p>';
+   return joinClass(code,(profile.firstName+' '+profile.lastName).trim().slice(0,80));
+  }
+  landing();
   $('join-status').textContent='The session code in this link is invalid. Ask your instructor for the code.';
   const input=$('session-code');input?.focus({preventScroll:true});input?.scrollIntoView?.({block:'center',behavior:'auto'});
   return;
  }
  const saved=savedInTab||resumeStorage.getItem('ff:session:'+u.uid);
  if(saved)return openSession(saved,false,false,true);
+ landing();
 }
 function showJoinForm(){
- clean();staffView=false;note('');setViewAddress();
+ clean();staffView=false;note('');setViewAddress('','join');
  landing();
  const target=$('join')?.elements.code||$('complete-profile')||$('verified');
  target?.focus();target?.scrollIntoView?.({block:'center',behavior:'auto'});
@@ -148,16 +210,34 @@ function landing(){
  $('app').innerHTML=`<section class="hero"><div class="hero-copy"><p class="eyebrow"><span class="dot"></span> A BOARDROOM DECISION. A WORLD OF CONSEQUENCES.</p><h1>Speed sells.<br><em>At what cost?</em></h1><p class="intro">Lead a fashion house through three seasons.<br>Read the market. Make your move.<br>Find the hidden cost of getting faster.</p><div class="hero-actions">${!user?'<button id="enter">Enter the simulation <span>↗</span></button>':!user.emailVerified?`<div class="panel verification-panel"><h2>Verify your email.</h2><p>Verify this email address:<strong class="verification-email">${esc(user.email)}</strong></p><p>Open the verification link, then return here to check your status.</p>${sessionCodeFromUrl(location.href)?'<p class="auth-context">Session '+esc(sessionCodeFromUrl(location.href))+' is waiting for you.</p>':''}<button id="verified">I have verified my email</button><button class="secondary" id="resend">Resend verification email</button><p id="verification-status" role="status" aria-live="polite">Check your spam folder if the email is missing.</p><button class="secondary" id="verify-switch">Use another account</button></div>`:!profileComplete(profile)?'<div class="panel"><h2>Complete your profile.</h2><p>Add your first name, last name and university ID to join your class.</p><button id="complete-profile">Complete profile →</button></div>':`<form class="join-box" id="join"><p class="eyebrow">YOUR CLASS IS WAITING</p><label>Your name<input name="name" maxlength="80" required value="${esc(profileComplete(profile)?(profile.firstName+' '+profile.lastName).slice(0,80):user.displayName||'')}" autocomplete="name"></label><label for="session-code">Session code</label><input id="session-code" name="code" maxlength="32" minlength="3" required pattern="${SESSION_CODE_PATTERN}" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" class="code-input" aria-describedby="session-code-help join-status"><p class="hint" id="session-code-help">Enter the code from your instructor. Spaces and hyphens are ignored.</p><button>Join session ↗</button><p id="join-status" role="status" aria-live="polite" aria-atomic="true"></p><p class="hint">Your instructor provides the code. Your profile and decisions are visible to you and authorised teaching staff.</p></form>`}</div><div class="hero-meta"><span><b>03</b> SEASONS</span><span><b>01</b> PRACTICE ROUND</span></div></div><div class="editorial" aria-hidden="true"><div class="art-label">SCENARIO 01 / THE QUICK-RESPONSE PARADOX</div><div class="fabric fabric-one"></div><div class="fabric fabric-two"></div><div class="fabric fabric-three"></div><div class="art-caption"><span>LESS WASTE.<br>MORE PRODUCTION?</span><b>↗</b></div><span class="art-index">FFO—01</span></div></section><section class="manifesto"><p>THE CHALLENGE</p><h2>A leaner business.<br>A larger footprint.<br><em>Both can be true.</em></h2><div><p>Better information can reduce unsold stock. But what happens when you use that advantage to grow?</p><p>One short simulation. Three decisions that challenge your intuition.</p></div></section>`;
  const codeInput=$('join')?.elements.code;if(codeInput)codeInput.addEventListener('input',()=>{codeInput.value=normalizeSessionCode(codeInput.value);$('join-status').textContent='';});
  const sharedCode=sessionCodeFromUrl(location.href);if(codeInput&&sharedCode)codeInput.value=sharedCode;
- $('complete-profile')?.addEventListener('click',()=>action(showProfile));$('enter')?.addEventListener('click',()=>openAuth('login'));$('verify-switch')?.addEventListener('click',()=>action(()=>api.logout()));$('verified')?.addEventListener('click',()=>verificationAction(async()=>{user=await api.refreshUser();role=await api.role();await api.importPlatformProfile(resumeStorage);profile=await api.getProfile();account();landing();const message=user.emailVerified?'Email verified. You can join your class.':'Your email is not verified yet. Open the link in your inbox, then try again.';note(message);if($('verification-status'))$('verification-status').textContent=message;if(user.emailVerified&&profileComplete(profile)&&sessionCodeFromUrl(location.href)){await restoreView(user);return;}if(user.emailVerified){const next=$('session-code')||$('complete-profile');next?.focus({preventScroll:true});next?.scrollIntoView?.({block:'center',behavior:'auto'});}}));$('resend')?.addEventListener('click',()=>verificationAction(async()=>{await api.verifyEmail();$('verification-status').textContent='Verification email sent. Check your inbox and spam folder, open the link, then return here.';}));$('join')?.addEventListener('submit',e=>{e.preventDefault();const d=new FormData(e.target);action(async()=>{const code=normalizeSessionCode(d.get('code'));$('join-status').textContent='Joining session '+code+'…';try{await api.joinSession(code,d.get('name').trim());await openSession(code,false,false,true);}catch(error){if($('join-status'))$('join-status').textContent=(error.code||'').includes('unavailable')?'Could not connect. Check your connection and try again.':(error.code||'').includes('permission-denied')?'Unable to join. Check your verified account and session code with your instructor.':error.message||'Could not join. Check the session code and try again.';throw error;}});});
+ $('complete-profile')?.addEventListener('click',()=>action(showProfile));$('enter')?.addEventListener('click',()=>openAuth('login'));$('verify-switch')?.addEventListener('click',()=>action(()=>api.logout()));$('verified')?.addEventListener('click',()=>verificationAction(async()=>{user=await api.refreshUser();role=await api.role();await api.importPlatformProfile(resumeStorage);profile=await api.getProfile();account();landing();const message=user.emailVerified?'Email verified. You can join your class.':'Your email is not verified yet. Open the link in your inbox, then try again.';note(message);if($('verification-status'))$('verification-status').textContent=message;if(user.emailVerified&&profileComplete(profile)&&sessionCodeFromUrl(location.href)){await restoreView(user);return;}if(user.emailVerified){const next=$('session-code')||$('complete-profile');next?.focus({preventScroll:true});next?.scrollIntoView?.({block:'center',behavior:'auto'});}}));$('resend')?.addEventListener('click',()=>verificationAction(async()=>{await api.verifyEmail();$('verification-status').textContent='Verification email sent. Check your inbox and spam folder, open the link, then return here.';}));
+ $('join')?.addEventListener('submit',e=>{
+  e.preventDefault();const fields=new FormData(e.target);
+  action(()=>joinClass(normalizeSessionCode(fields.get('code')),fields.get('name').trim()));
+ });
+}
+async function joinClass(code,name){
+ const version=viewVersion;
+ try{
+  $('join-status').textContent='Joining session '+code+'…';
+  await api.joinSession(code,name);
+  if(version===viewVersion)await openSession(code,false,false,true);
+ }catch(error){
+  if(version!==viewVersion)return;
+  if(!$('join'))landing();
+  $('join-status').textContent=(error.code||'').includes('unavailable')?'Could not connect. Check your connection and try again.':(error.code||'').includes('permission-denied')?'Unable to join. Check your verified account and session code with your instructor.':error.message||'Could not join. Check the session code and try again.';
+  failure(error);
+ }
 }
 function verificationAction(fn){return action(async()=>{const status=$('verification-status');if(status)status.textContent='Checking…';try{await fn();}catch(error){if($('verification-status'))$('verification-status').textContent=friendlyAuthError(error);else failure(error);}});}
 function openAuth(mode){authMode=mode;$('registration-fields').hidden=mode!=='register';for(const id of ['first-name','last-name','university-id'])$(id).required=mode==='register';document.querySelector('.divider').hidden=mode==='reset';$('auth-title').textContent=mode==='register'?'Your seat at the table.':mode==='reset'?'Reset your password.':'Welcome back.';$('auth-submit').textContent=mode==='register'?'Create account →':mode==='reset'?'Send reset email':'Log in →';$('password-label').hidden=mode==='reset';$('password-help').hidden=mode!=='register';if(mode==='register')$('password').setAttribute('aria-describedby','password-help');else $('password').removeAttribute('aria-describedby');$('password').required=mode!=='reset';$('password').minLength=mode==='register'?8:1;$('password').autocomplete=mode==='register'?'new-password':'current-password';$('google').hidden=mode==='reset';$('auth-error').textContent='';$('auth-status').textContent='';const code=sessionCodeFromUrl(location.href);$('auth-context').hidden=!code;$('auth-context').textContent=code?'Session '+code+' · your session code is kept while you sign in.':'';$('auth-help').textContent=mode==='reset'?'Enter the email you use for Fast Fashion Ops. Open the reset link, set your password, then return here to log in.':'Use your Fast Fashion Ops account. Email registration requires verification. Instructor access is granted by the administrator.';document.querySelectorAll('[data-auth]').forEach(b=>b.hidden=b.dataset.auth===mode||(mode==='reset'&&b.dataset.auth==='register'));if(!$('auth').open)$('auth').showModal();$('auth').scrollTop=0;$(mode==='register'?'first-name':'email').focus({preventScroll:true});}
 document.querySelector('.close').onclick=()=>$('auth').close();document.querySelectorAll('[data-auth]').forEach(b=>b.onclick=()=>openAuth(b.dataset.auth));
 $('google').onclick=()=>authAction(async()=>{await api.loginGoogle();$('password').value='';$('auth').close();});
 $('auth-form').onsubmit=e=>{e.preventDefault();authAction(async()=>{const email=$('email').value.trim(),password=$('password').value;if(authMode==='reset'){await api.resetPassword(email);$('auth-status').textContent='If this address has an account, check its inbox and spam folder for a reset link. Set your password, then choose Log in below.';$('auth-status').scrollIntoView?.({block:'nearest'});}else{if(authMode==='register'){const p=profileFields(new Map([['firstName',$('first-name').value],['lastName',$('last-name').value],['universityId',$('university-id').value]]));let outcome;registering=true;try{outcome=await api.register(email,password,p);}finally{registering=false;}user=api.currentUser();role=await api.role();profile=outcome.profileSaved?p:null;account();landing();note('Account created. '+(outcome.verificationSent?'Check your inbox for the verification link.':'Verification email could not be sent. Use Resend verification email to retry.')+(outcome.profileSaved?'':' Your details could not be saved. Please complete My profile.'));}else await api.loginEmail(email,password);$('password').value='';$('auth').close();if(authMode==='register'){const next=$('verified')||$('complete-profile')||$('session-code');next?.focus({preventScroll:true});next?.scrollIntoView?.({block:'center',behavior:'auto'});}}});};
-async function showProfile(returnCode=null){
- if(session||staffView){setViewAddress();staffView=false;}
- clean();note('');const version=viewVersion;const loadedProfile=await api.getProfile();if(version!==viewVersion)return;profile=loadedProfile;
+async function showProfile(returnCode=null,profileLoaded=false){
+ const inviteCode=!session&&!staffView?sessionCodeFromUrl(location.href):'';
+ clean();staffView=false;setViewAddress(inviteCode,'profile');note('');const version=viewVersion;
+ if(!profileLoaded){const loaded=await api.getProfile();if(version!==viewVersion)return;profile=loaded;}
  const p=profile||{},extra=p.platformRegistration||{},name=(extra.name||user.displayName||'').trim().split(/\s+/);
  $('app').innerHTML=`<p class="eyebrow">YOUR ACCOUNT</p><h1 class="page-title">Your details.<br><em>Your decisions.</em></h1><nav class="results-nav" aria-label="Profile sections"><a href="#play-history">Play history</a><a href="#profile-details">My details</a><a href="#profile-security">Sign-in & security</a></nav><div class="layout profile-layout"><section class="panel" id="profile-details"><h2>My profile.</h2><form id="profile-form"><label>First name<input name="firstName" required maxlength="60" autocomplete="given-name" value="${esc(p.firstName||name[0]||'')}"></label><label>Last name<input name="lastName" required maxlength="60" autocomplete="family-name" value="${esc(p.lastName||name.slice(1).join(' '))}"></label><label>University ID<input name="universityId" required maxlength="80" autocomplete="off" value="${esc(p.universityId||extra.studentId||'')}"></label><button>Save profile</button><p class="hint">Your details are private to your account. Updating them preserves your play history and any additional portal registration data.</p></form>${Object.keys(extra).length?`<details><summary>Registration from the simulation portal</summary><dl>${PLATFORM_FIELDS.filter(k=>extra[k]!=null).map(k=>`<dt>${esc(k.replace(/([A-Z])/g,' $1'))}</dt><dd>${esc(extra[k])}</dd>`).join('')}</dl><p class="hint">These imported details are retained as provided by the portal. Change the original details in the portal and launch Fast Fashion Ops again to refresh them.</p></details>`:''}</section><section class="panel" id="profile-security"><h2>Sign-in & security.</h2><p class="profile-email">${esc(accountLabel(user.email))} <span class="pill">${user.emailVerified?'Verified':'Verification needed'}</span></p><form id="change-email"><label>New email<input name="email" type="email" required autocomplete="email"></label><button class="secondary">Send email change link</button></form><p class="hint">The new address takes effect only after you open its verification link. You may need to log out and sign in again first.</p><button id="profile-reset" class="secondary">Send password reset email</button><button id="profile-refresh" class="secondary">Refresh verification status</button>${!user.emailVerified?'<button id="profile-verify" class="secondary">Resend verification email</button>':''}</section></div><section class="panel" id="play-history" aria-labelledby="history-title"><p class="eyebrow">YOUR PLAY HISTORY</p><h2 id="history-title">Performance, in perspective.</h2><div id="profile-history" aria-live="polite">${user.emailVerified?'Loading your results…':'Verify your email to access your play history.'}</div><p class="hint">Only completed scored seasons count. Practice and instructor previews are excluded. Missing decisions use the standard defaults. Team sessions show your team’s shared score, not an individual contribution. Profit, leftovers and footprint are shown separately; sessions with different assumptions are not directly comparable.</p></section><button class="secondary" id="profile-home">← Return to simulation</button>`;
  $('profile-form').onsubmit=e=>{e.preventDefault();action(async()=>{const p=profileFields(new FormData(e.target));await api.saveProfile(p);profile=await api.getProfile();account();note('Profile saved.');});};
@@ -166,7 +246,8 @@ async function showProfile(returnCode=null){
  $('profile-reset').onclick=()=>action(async()=>{await api.resetPassword(user.email,resumeStorage.getItem('ff:session:'+user.uid)||'');note('Password reset email sent. Check your inbox.');});
  $('profile-verify')?.addEventListener('click',()=>action(async()=>{await api.verifyEmail();note('Verification email sent. Check your inbox.');}));
  $('profile-refresh').onclick=()=>action(async()=>{user=await api.refreshUser();role=await api.role();account();await showProfile();note(user.emailVerified?'Email verified.':'Your email is not verified yet. Open the link in your inbox.');});
- $('profile-home').onclick=()=>{clean();note('');landing();};
+ $('profile-home').onclick=()=>{clean();setViewAddress(inviteCode,'home');note('');landing();};
+ restoreSection();
  if(!user.emailVerified)return;
  try{
   const stats=historyStats(await api.playHistory());if(version!==viewVersion||!$('profile-history'))return;
@@ -197,12 +278,21 @@ async function showStaffAi(draft=null){
  const panel=$('studio-ai-settings');
  void showAiSettingsPanel(panel,api,{demo,confirmRemoval:confirmAction}).catch(error=>{if(panel.isConnected)failure(error);});
 }
-async function showStaffTeams(draft=null,code=null){
+async function showStaffTeams(draft=null,code=null,rosterCode=code){
  clean();staffView=true;setViewAddress('','teams');note('');
  $('app').innerHTML='<h1 class="sr-only">Users &amp; Teams</h1><div id="studio-team-directory"></div>';
  showStudioNavigation('teams',draft);
  const panel=$('studio-team-directory');
- void showTeamsPanel(panel,api,role==='admin',code,roomCode=>action(()=>openSession(roomCode,true)),confirmAction,dispose=>subscriptions.push(dispose)).catch(error=>{if(panel.isConnected)failure(error);});
+ const choices={classroom:code,roster:rosterCode};
+ const remember=()=>pageWindow.history.replaceState({uid:user.uid,teamSelections:choices},'');
+ remember();
+ panel.addEventListener('change',event=>{
+  if(event.target.id==='team-classroom')choices.classroom=event.target.value;
+  else if(event.target.id==='session-team-code')choices.roster=event.target.value;
+  else return;
+  remember();
+ });
+ void showTeamsPanel(panel,api,role==='admin',code,roomCode=>action(()=>openSession(roomCode,true)),confirmAction,dispose=>subscriptions.push(dispose),rosterCode).catch(error=>{if(panel.isConnected)failure(error);});
 }
 async function showStaff(draft=null){clean();staffView=true;setViewAddress('','staff');const version=viewVersion;const [sessions,defaults]=await Promise.all([api.listSessions(role==='admin'),api.getDefaults()]);if(version!==viewVersion)return;
  $('app').innerHTML=`<h1 class="sr-only">Admin</h1><div class="studio-layout"><aside class="studio-options" aria-label="Session setup and admin options"><section class="panel"><p class="eyebrow">01 / DESIGN YOUR SESSION</p><h2>Create a classroom.</h2><form id="create"><label>Session name<input name="name" maxlength="80" required placeholder="Executive MBA · November"></label><label for="classroom-code">Session code</label><input id="classroom-code" name="code" type="text" class="code-input" required minlength="3" maxlength="12" pattern="${SESSION_CODE_PATTERN}" aria-describedby="classroom-code-help classroom-code-status" autocomplete="off" autocapitalize="characters" spellcheck="false"><p id="classroom-code-help" class="hint">Choose a city below or type your own code using 3–12 letters or numbers.</p><div id="city-suggestions" role="group" aria-label="Suggested city codes"></div><p id="classroom-code-status" class="hint" role="status">Checking available cities…</p><label>Play mode<select name="mode" aria-describedby="play-mode-help"><option value="individual">Individual play</option><option value="team" selected>Team competition</option></select><span class="field-description" id="play-mode-help"></span></label><label id="classroom-team-size-field" hidden>Students per team<input name="teamSize" type="number" inputmode="numeric" min="1" max="20" step="1" value="3" required disabled><span class="field-description">Students join teams automatically with the classroom code. If the class does not divide evenly, the last team can be smaller.</span></label>${aiPhaseFields()}<p id="create-ai-model" class="hint" aria-live="polite">Loading the selected AI model…</p><details class="settings"><summary>Market & business assumptions</summary>${settingsFields(defaults,true)}</details><p class="hint">Market assumptions lock when you create the classroom.</p><button>Create session ↗</button><button type="button" id="preview-settings" class="secondary">Test round</button><p class="hint">Rehearse practice and all three seasons at your own pace. Your decisions stay in this tab.<span id="ai-rehearsal-help" hidden> Test round uses a simulated rival. Start a classroom for the selected AI model.</span></p></form></section></aside><div class="studio-sessions" aria-label="Classroom sessions"><section class="panel" aria-labelledby="active-heading"><div class="heading"><h2 id="active-heading">Active sessions</h2><span class="pill" id="active-count"></span></div><p class="hint">Open a waiting or running class to manage participants, follow decisions and export results.</p><div id="card-export-status" role="status" aria-live="polite"></div><button type="button" class="small secondary danger" id="active-delete-all" aria-label="Delete all active sessions" hidden>Delete all</button><div id="active-sessions"></div></section><section class="panel" aria-labelledby="past-heading"><div class="heading"><h2 id="past-heading">Past sessions</h2><span class="pill" id="past-count"></span></div><p class="hint">Review completed or closed classes, export their results, or rehearse with the same assumptions.</p><button type="button" class="small secondary danger" id="past-delete-all" aria-label="Delete all past sessions" hidden>Delete all</button><div id="past-sessions"></div></section></div></div>`;
@@ -605,6 +695,7 @@ function renderSession(){
  renderCompetition();
  for(const [name,value] of draft){const el=$('order-form')?.elements.namedItem(name);if(el&&!el.disabled)el.value=value;}renderedOrderKey=orderKey;updateDecisionDraftState();updateConnection();
  document.querySelectorAll('.table-wrap').forEach((el,i)=>{el.tabIndex=0;el.setAttribute('role','region');if(!el.hasAttribute('aria-label'))el.setAttribute('aria-label',i?'Season results table':'Simulation data table');});
+ restoreSection();
  if(sessionEntryPending&&$('app').querySelector('h1')){sessionEntryPending=false;const title=$('app').querySelector('.team-banner h2')||$('app').querySelector('h1');title.tabIndex=-1;title.focus({preventScroll:true});(title.closest('.team-banner')||title).scrollIntoView?.({block:'start',behavior:'auto'});}
  else if(historyReviewPending&&$('back-history')){historyReviewPending=false;$('back-history').focus({preventScroll:true});$('back-history').scrollIntoView?.({block:'start',behavior:'auto'});}
  else if(previous&&previous!==phaseKey){const title=$('app').querySelector('h1');if(title){title.tabIndex=-1;title.focus({preventScroll:true});title.scrollIntoView?.({block:'start',behavior:'auto'});}}
@@ -748,7 +839,41 @@ function exportResults(source=session,people=roster,savedOrders=teamResultOrders
   status.replaceChildren(document.createTextNode('CSV ready: '+(rows.length-1)+' scored-season rows. Save '+a.download+' when your browser asks. '),a);a.click();
  }catch(e){failure(e);}
 }
-try{api=await import(demo?'./backend-demo.js':'./backend.js?v=team-handoff-1');api.observeAuth(async function restoreAccount(u){retryAccount=null;const version=++authVersion;if(registering){user=u;return;}clean();staffView=false;user=u;if(!u){for(const id of ['first-name','last-name','university-id','email','password'])$(id).value='';}try{if(u&&new URLSearchParams(location.search).get('auth')==='verify'){u=await api.refreshUser();if(version!==authVersion)return;user=u;}const nextRole=u?await api.role():'student';if(version!==authVersion)return;role=nextRole;profile=null;if(u){try{await api.importPlatformProfile(resumeStorage);}catch{note('Portal details could not be imported. Please retry by signing in again.');}if(version!==authVersion)return;const nextProfile=await api.getProfile();if(version!==authVersion)return;profile=nextProfile;}account();landing();await restoreView(u);}catch(e){if(version!==authVersion)return;failure(e);account();landing();if(u){retryAccount=()=>restoreAccount(api.currentUser());$('app').innerHTML='<section class="panel"><h1>Reconnect to your account.</h1><p>Your session code is kept. Reconnect to load your profile and saved game.</p><button id="retry-account">Retry connection</button></section>';$('retry-account').onclick=()=>retryAccount?.();}}});}catch(e){$('app').innerHTML='<section class="waiting"><h1 class="page-title">Fast Fashion Ops</h1><p>Run a fashion retailer. Discover how speed changes profit, waste and environmental impact.</p><p>Sign-in could not load. Check your connection and reload this page.</p><button onclick="location.reload()">Try again</button></section>';failure(e);}
+async function restoreAccount(u){
+ retryAccount=null;
+ const version=++authVersion;
+ if(registering){user=u;return;}
+ clean();staffView=false;user=u;profile=null;role='student';
+ $('account').replaceChildren();
+ if(version>1)$('app').innerHTML='<p role="status">Loading…</p>';
+ if(!u){for(const id of ['first-name','last-name','university-id','email','password'])$(id).value='';}
+ try{
+  if(u&&new URLSearchParams(location.search).get('auth')==='verify'){
+   u=await api.refreshUser();if(version!==authVersion)return;user=u;
+  }
+  if(u){
+   const loadProfile=async()=>{
+    try{await api.importPlatformProfile(resumeStorage);}catch{if(version===authVersion)note('Portal details could not be imported. Please retry by signing in again.');}
+    return version===authVersion?api.getProfile():null;
+   };
+   const [nextRole,nextProfile]=await Promise.all([api.role(),loadProfile()]);
+   if(version!==authVersion)return;
+   role=nextRole;profile=nextProfile;
+  }
+  account();await restoreView(u);
+ }catch(e){
+  if(version!==authVersion)return;
+  failure(e);retryAccount=()=>restoreAccount(api.currentUser());
+  $('app').innerHTML='<section class="panel"><h1>Reconnect to your account.</h1><p>Reconnect to load this page.</p><button id="retry-account">Retry connection</button></section>';
+  $('retry-account').onclick=()=>retryAccount?.();
+ }
+}
+try{
+ api=await import(demo?'./backend-demo.js':'./backend.js?v=team-handoff-1');
+ api.observeAuth(restoreAccount);
+}catch(e){
+ $('app').innerHTML='<section class="waiting"><h1 class="page-title">Fast Fashion Ops</h1><p>Sign-in could not load. Check your connection and reload this page.</p><button onclick="location.reload()">Try again</button></section>';failure(e);
+}
 
 
 function captureTeamDraft(){

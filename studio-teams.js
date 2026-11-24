@@ -45,7 +45,7 @@ function classroomDetails(person, history) {
  return `<p class="user-dates">Registered ${esc(formatDate(person.registeredAt))} · Last sign-in ${esc(formatDate(person.lastSignInAt))}</p>${content}`;
 }
 
-export async function showTeamsPanel(panel, api, allClassrooms, requestedCode, openClassroom, confirmAction, registerCleanup) {
+export async function showTeamsPanel(panel, api, allClassrooms, requestedCode, openClassroom, confirmAction, registerCleanup, rosterCode=requestedCode) {
  panel.innerHTML = `<section class="panel team-directory" aria-labelledby="directory-title">
   <div class="directory-heading"><div><h2 id="directory-title">Registered users</h2><span id="directory-count" class="hint" role="status">Loading users…</span></div><div class="directory-actions"><button type="button" class="secondary" id="directory-refresh">Refresh</button>
    ${allClassrooms ? '<button type="button" class="secondary danger" id="delete-all-users" disabled>Delete all registered users</button>' : ''}</div></div>
@@ -64,7 +64,7 @@ export async function showTeamsPanel(panel, api, allClassrooms, requestedCode, o
  const classroom = find('team-classroom'), search = find('team-user-search');
  const body = panel.querySelector('tbody'), feedback = find('team-directory-status'), loadStatus = find('team-directory-load');
  const users = new Map(), drafts = new Map([['',new Map()]]), histories = new Map(), individualRosters = new Map();
- const sessionTeams=mountSessionTeams(find('session-teams'),api,users,allClassrooms,requestedCode,loadRooms);
+ const sessionTeams=mountSessionTeams(find('session-teams'),api,users,allClassrooms,rosterCode,loadRooms);
  registerCleanup?.(sessionTeams.dispose);
  let rooms = [], defaultRoster = null, selectedScope = requestedCode || '', roomLoadError = false;
  let page = 0, saving = false, deleting = false, refreshing = false, expandedUid = null, pageToken, directoryComplete = false, roomVersion = 0, listVersion = 0;

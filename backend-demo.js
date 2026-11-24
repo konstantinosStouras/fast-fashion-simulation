@@ -11,7 +11,7 @@ import {assignJoiningTeam,defaultTeamComposition,DEFAULT_TEAM_SIZE,getTeamCompos
 import {summarizeUserClassroom} from './functions/user-classrooms.js';
 import {planRegisteredUserRemoval,protectedRegisteredUser,validDeletionBatch} from './functions/registered-user-classroom.js';
 import {requireSessionCode,sessionCodeTaken} from './session-code.js';
-const KEY='ff:demo:v1';let user=null;const authListeners=new Set(),listeners=new Set();
+const KEY='ff:demo:v1';let user=restoreDemoUser();const authListeners=new Set(),listeners=new Set();
 function load(){
  const data=JSON.parse(localStorage.getItem(KEY)||JSON.stringify({sessions:{},people:{},orders:{},instructors:[ADMIN_ACCOUNT_EMAIL]}));
  const pending=Object.values(data.sessions).filter(s=>s.status==='running'&&s.phaseOffset==null&&Number.isFinite(s.startedAt));
@@ -22,6 +22,16 @@ function load(){
   localStorage.setItem(KEY,JSON.stringify(data));
  }
  return data;
+}
+function restoreDemoUser(){
+ try{
+  const saved=JSON.parse(sessionStorage.getItem('ff:demo:account'));
+  const data=load();
+  return saved&&data.registered?.[saved.uid]===saved.email&&!data.deletedAccounts?.[saved.uid]?saved:null;
+ }catch{return null;}
+}
+function rememberDemoUser(){
+ try{if(user)sessionStorage.setItem('ff:demo:account',JSON.stringify(user));else sessionStorage.removeItem('ff:demo:account');}catch{}
 }
 function write(data){localStorage.setItem(KEY,JSON.stringify(data));listeners.forEach(fn=>fn());}
 const timestamp=n=>n==null?null:{toMillis:()=>n};
@@ -43,7 +53,7 @@ async function login(email,emailVerified=true){
  activity.lastSignInAt=now;
  d.registered??={};d.registered[user.uid]=email;
  if(emailVerified){d.verifiedAccounts??={};d.verifiedAccounts[user.uid]=email;}
- write(d);authListeners.forEach(fn=>fn(user));
+ write(d);rememberDemoUser();authListeners.forEach(fn=>fn(user));
 }
 export const watchVerifiedAccounts=onChange=>watch(()=>onChange(Object.values(load().verifiedAccounts||{})));
 export const loginGoogle=()=>login('kstouras@gmail.com');
@@ -61,7 +71,7 @@ export async function playHistory(){
   return {...toSession(s),aiOrders:captain?{[captain]:data.aiOrders?.[s.code]?.[captain]||{}}:{},decisionUid:captain,teamOrders,orders:saved[captain]||{}};
  });
 }
-export const logout=async()=>{user=null;authListeners.forEach(fn=>fn(null));};
+export const logout=async()=>{user=null;rememberDemoUser();authListeners.forEach(fn=>fn(null));};
 export const verifyEmail=async()=>{};
 export const refreshUser=async()=>user;
 export const resetPassword=async()=>{};

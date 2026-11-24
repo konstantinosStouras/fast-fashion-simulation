@@ -1,7 +1,36 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Admin login — Fast Fashion Ops</title><script src="../theme.js?v=sessions-theme-1"></script><link rel="icon" href="../favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="../design.css?v=home-practice-1"><link rel="stylesheet" href="../ui.css?v=home-practice-1"><link rel="stylesheet" href="admin.css?v=studio-header-1"><link rel="stylesheet" href="../theme.css?v=home-practice-1"></head>
-<body><a href="#admin-main" class="skip-link">Skip to admin login</a><header><a class="brand" href="../"><span class="brand-mark">FFO<span class="brand-dot">.</span></span><span class="brand-title">FAST FASHION OPS<small>SPEED. PROFIT. CONSEQUENCES.</small></span></a><button id="theme-toggle" class="small secondary" type="button" aria-label="Switch theme">Theme</button></header>
-<main id="admin-main" tabindex="-1">
-<section class="panel admin-card"><h1>Admin sign-in</h1><p>Sign in with your authorized account.</p><form id="admin-login"><button id="admin-google" class="google" type="button"><img src="../assets/google-g.png" class="google-mark" alt="" width="20" height="20"><span>Continue with Google</span></button><p class="divider">or use your email and password</p><label>Email<input id="admin-email" type="email" autocomplete="username" value="admin@admin.com" required></label><label>Password<input id="admin-password" type="password" autocomplete="current-password" required></label><button id="admin-submit">Sign in to admin →</button><button id="admin-reset" class="secondary" type="button">Set or reset password</button><p class="hint">Every administrator has a separate account and their own classes. Use admin@admin.com with its password, or sign in with your own authorized email or Google account. Recovery for admin@admin.com goes to the platform owner’s Gmail inbox.</p></form>
-<div id="admin-signed-in" hidden><p id="admin-identity"></p><div class="button-row"><button id="admin-enter">Open admin studio →</button><button id="admin-refresh" class="secondary">I have verified my email</button><button id="admin-verify" class="secondary">Resend verification email</button><button id="admin-switch" class="secondary">Use another account</button></div></div><p id="admin-message" role="status" aria-live="polite">Preparing secure sign-in…</p></section></main>
-<footer><span>FAST FASHION OPS / FFO</span><span>Speed. Profit. Consequences.</span></footer><script type="module" src="login.js?v=admin-address-1"></script></body></html>
+<html lang="en">
+<head>
+<base href="../">
+<script>const appBase=document.querySelector("base");appBase.href=appBase.href;</script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="description" content="A classroom simulation of fashion retail. Practice against AI and compete on profit across three seasons.">
+<title>Admin studio — Fast Fashion Ops</title>
+<script src="theme.js?v=account-menu-1"></script>
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="modulepreload" href="backend.js?v=team-handoff-1">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="design.css?v=team-handoff-1">
+<link rel="stylesheet" href="preview.css">
+<link rel="stylesheet" href="ui.css?v=team-handoff-1">
+<link rel="stylesheet" href="theme.css?v=team-handoff-1">
+<link rel="stylesheet" href="admin/admin.css?v=refresh-1"></head>
+<body>
+<a href="#app" class="skip-link">Skip to main content</a>
+<header>
+<a class="brand" href="#">
+<span class="brand-mark">FFO<span class="brand-dot">.</span></span>
+<span class="brand-title">FAST FASHION OPS<small>SPEED. PROFIT. CONSEQUENCES.</small></span></a>
+<button id="theme-toggle" class="small secondary" type="button" aria-label="Switch theme">Theme</button>
+<nav id="account"></nav></header>
+<div id="notice" role="status" aria-live="polite"></div>
+<main id="app" tabindex="-1">
+<p role="status">Loading admin studio…</p></main>
+<footer>
+<span>FAST FASHION OPS / FFO</span>
+<span>Built to challenge intuition. Designed for discussion.</span>
+<span>Teaching prototype · Illustrative model · <a href="admin/">Admin login</a></span></footer>
+<dialog id="auth"></dialog>
+<script type="module" src="main.js?v=refresh-1"></script></body></html>

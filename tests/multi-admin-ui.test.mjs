@@ -27,7 +27,7 @@ test('independent admin studios, owner access management and student join links'
  $('[data-grant-account="javad@example.test"]').click();await wait(()=>$('#instructors').textContent.includes('javad@example.test'));
  await api.logout();await api.loginEmail('admin@admin.com','test-only');await wait(()=>$('#create'));
  assert.notEqual(api.currentUser().uid,ownerUid);assert.match($('#account').textContent,/admin@admin.com/);assert.equal($('#grant'),null);assert.equal($('#defaults'),null);assert.ok(!$('#active-sessions').textContent.includes('Owner class'));
- assert.equal($('#studio-administrators'),null);assert.equal(new URL(w.location).searchParams.get('studio'),'1');
+ assert.equal($('#studio-administrators'),null);assert.equal(w.location.pathname,roomPath+'admin/');
  const code=await api.createSession('Dedicated class',DEFAULT_CONFIG,'individual','ROME');$('#staff').click();await wait(()=>$('[data-card-link]'));
  assert.match($('#app').textContent,/SESSION CODE/);assert.equal($('[data-card-link]').dataset.cardLink,code);
  $('[data-card-link]').click();
@@ -40,7 +40,7 @@ test('independent admin studios, owner access management and student join links'
  await api.logout();await wait(()=>$('#open-login'));
  await api.loginEmail('admin@admin.com','test-only');await wait(()=>$('#back-staff'));
  $('#back-staff').click();await wait(()=>$('#create'));
- assert.equal(new URL(w.location.href).searchParams.get('studio'),'1');
+ assert.equal(w.location.pathname,roomPath+'admin/');
  assert.equal(new URL(w.location.href).searchParams.has('sessionCode'),false);
  await api.logout();await api.loginEmail('javad@example.test','test-only');await wait(()=>$('#create'));assert.ok(!$('#active-sessions').textContent.includes('Dedicated class'));assert.equal($('#grant'),null);
  const javadCode=await api.createSession('Javad class',DEFAULT_CONFIG);assert.notEqual(javadCode,original);assert.notEqual(javadCode,code);
@@ -78,6 +78,5 @@ test('independent admin studios, owner access management and student join links'
  await wait(()=>$('#order-form')?.elements.quantity.value==='110');
  assert.equal($('#create'),null);
  await api.logout();dom.reconfigure({url:'http://localhost:8791/?demo&sessionCode='+code});globalThis.location=w.location;
- await api.loginEmail('student@example.test','test-only');await wait(()=>$('#join'));assert.equal($('#join').elements.code.value,code);assert.equal($('#staff'),null);
- $('#join').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));await wait(()=>$('#app').textContent.includes('Dedicated class'));
+ await api.loginEmail('student@example.test','test-only');await wait(()=>$('#leave')&&$('#app').textContent.includes('Dedicated class'));assert.equal($('#staff'),null);
 });
