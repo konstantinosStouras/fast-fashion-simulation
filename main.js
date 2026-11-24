@@ -1,4 +1,5 @@
 import {showAdminLogin} from './admin/sign-in.js?v=refresh-1';
+import {markStudioReady,studioStartupApi} from './studio-startup.js';
 import {entryMember} from './team-roles.js';
 import {sessionProgress,hasHomeTeamPractice} from './functions/session-progress.js?v=team-handoff-1';
 import {sessionCodeFromUrl} from './auth-flow.js?v=session-codes-1';
@@ -8,8 +9,8 @@ import {rehearsalAiOrders} from './ai-rehearsal.js';
 import {mountTeamPractice,clearTeamPractice} from './team-practice-ui.js';
 import {decisionOwner,groupTeams,validateTeams,leaderboard} from './competition.js?v=team-handoff-1';
 import {ROUNDS,DEFAULT_ORDER,DEFAULT_CONFIG,SETTINGS,validateConfig,phaseAt,signalFor} from './model.js?v=team-pairs-1';
-import {studioNavigation,showAiSettingsPanel,aiPhaseFields,phaseModelHint,readAiOpponent,editSessionAi} from './studio-ai.js?v=studio-header-1';
-import {showTeamsPanel} from './studio-teams.js?v=refresh-1';
+import {studioNavigation,showAiSettingsPanel,aiPhaseFields,phaseModelHint,readAiOpponent,editSessionAi} from './studio-ai.js?v=studio-speed-1';
+import {showTeamsPanel} from './studio-teams.js?v=studio-speed-1';
 import {suggestCityCodes,sessionState,partitionSessions,decisionSummary} from './studio.js?v=team-handoff-1';
 import {profileComplete,profileFields,historyStats,PLATFORM_FIELDS} from './profile.js?v=team-handoff-1';
 import {escapeHtml as esc,friendlyAuthError,safeStorage,setBusy,revealInvalidField,csvCell} from './ui.js?v=ai-opponent-1';
@@ -150,7 +151,13 @@ function setViewAddress(code='',view=''){
  if(url.pathname===location.pathname&&url.search===location.search)url.hash=location.hash;
  pageWindow.history.replaceState(state,'',url.href);
 }
-async function restoreView(u){
+function studioScreen(params){
+ if(params.has('sessionCode')||params.has('session')||params.get('view')==='profile')return '';
+ const tab=params.get('studio');
+ if(['ai','teams','administrators'].includes(tab))return tab;
+ return atAdminAddress()||tab==='1'||location.hash==='#admin'?'staff':'';
+}
+async function restoreView(u,initialApi=api){
  const params=new URLSearchParams(location.search);
  if(demo)note('LOCAL DEMO · synthetic accounts and browser-only data. No real authentication.');
  if(atAdminAddress()&&(!u?.emailVerified||role==='student')){
@@ -172,13 +179,14 @@ async function restoreView(u){
  if(role!=='student'){
   if(restoreRehearsal())return;
   if(previousView==='staff')return openSession(code,true);
-  if(!requested&&params.get('studio')==='ai')return showStaffAi();
-  if(!requested&&params.get('studio')==='teams'){
+  const screen=studioScreen(params);
+  if(screen==='ai')return showStaffAi(null,initialApi);
+  if(screen==='teams'){
    const choices=entry?.uid===u.uid?entry.teamSelections:null;
-   return showStaffTeams(null,choices?.classroom,choices?.roster);
+   return showStaffTeams(null,choices?.classroom,choices?.roster,initialApi);
   }
-  if(!requested&&params.get('studio')==='administrators')return role==='admin'?showAdministrators():showStaff();
-  if(!requested&&(atAdminAddress()||params.get('studio')==='1'||location.hash==='#admin'))return showStaff();
+  if(screen==='administrators')return role==='admin'?showAdministrators():showStaff();
+  if(screen==='staff')return showStaff(null,initialApi);
  }
  if(!profileComplete(profile))return landing();
  if(!requested&&params.get('view')==='join')return showJoinForm();
@@ -271,14 +279,14 @@ function showStudioNavigation(active, draft=null){
  $('studio-teams').onclick=()=>{if(active!=='teams')action(()=>showStaffTeams(draftForNextTab()));};
  $('studio-administrators')?.addEventListener('click',()=>{if(active!=='administrators')action(()=>showAdministrators(draftForNextTab()));});
 }
-async function showStaffAi(draft=null){
+async function showStaffAi(draft=null,initialApi=api){
  clean();staffView=true;setViewAddress('','ai');note('');
  $('app').innerHTML='<h1 class="sr-only">AI settings</h1><div id="studio-ai-settings"></div>';
  showStudioNavigation('ai',draft);
  const panel=$('studio-ai-settings');
- void showAiSettingsPanel(panel,api,{demo,confirmRemoval:confirmAction}).catch(error=>{if(panel.isConnected)failure(error);});
+ void showAiSettingsPanel(panel,initialApi,{demo,confirmRemoval:confirmAction}).catch(error=>{if(panel.isConnected)failure(error);});
 }
-async function showStaffTeams(draft=null,code=null,rosterCode=code){
+async function showStaffTeams(draft=null,code=null,rosterCode=code,initialApi=api){
  clean();staffView=true;setViewAddress('','teams');note('');
  $('app').innerHTML='<h1 class="sr-only">Users &amp; Teams</h1><div id="studio-team-directory"></div>';
  showStudioNavigation('teams',draft);
@@ -292,9 +300,9 @@ async function showStaffTeams(draft=null,code=null,rosterCode=code){
   else return;
   remember();
  });
- void showTeamsPanel(panel,api,role==='admin',code,roomCode=>action(()=>openSession(roomCode,true)),confirmAction,dispose=>subscriptions.push(dispose),rosterCode).catch(error=>{if(panel.isConnected)failure(error);});
+ void showTeamsPanel(panel,initialApi,role==='admin',code,roomCode=>action(()=>openSession(roomCode,true)),confirmAction,dispose=>subscriptions.push(dispose),rosterCode).catch(error=>{if(panel.isConnected)failure(error);});
 }
-async function showStaff(draft=null){clean();staffView=true;setViewAddress('','staff');const version=viewVersion;const [sessions,defaults]=await Promise.all([api.listSessions(role==='admin'),api.getDefaults()]);if(version!==viewVersion)return;
+async function showStaff(draft=null,initialApi=api){clean();staffView=true;setViewAddress('','staff');const version=viewVersion;const [sessions,defaults]=await Promise.all([initialApi.listSessions(role==='admin'),initialApi.getDefaults()]);if(version!==viewVersion)return;
  $('app').innerHTML=`<h1 class="sr-only">Admin</h1><div class="studio-layout"><aside class="studio-options" aria-label="Session setup and admin options"><section class="panel"><p class="eyebrow">01 / DESIGN YOUR SESSION</p><h2>Create a classroom.</h2><form id="create"><label>Session name<input name="name" maxlength="80" required placeholder="Executive MBA · November"></label><label for="classroom-code">Session code</label><input id="classroom-code" name="code" type="text" class="code-input" required minlength="3" maxlength="12" pattern="${SESSION_CODE_PATTERN}" aria-describedby="classroom-code-help classroom-code-status" autocomplete="off" autocapitalize="characters" spellcheck="false"><p id="classroom-code-help" class="hint">Choose a city below or type your own code using 3–12 letters or numbers.</p><div id="city-suggestions" role="group" aria-label="Suggested city codes"></div><p id="classroom-code-status" class="hint" role="status">Checking available cities…</p><label>Play mode<select name="mode" aria-describedby="play-mode-help"><option value="individual">Individual play</option><option value="team" selected>Team competition</option></select><span class="field-description" id="play-mode-help"></span></label><label id="classroom-team-size-field" hidden>Students per team<input name="teamSize" type="number" inputmode="numeric" min="1" max="20" step="1" value="3" required disabled><span class="field-description">Students join teams automatically with the classroom code. If the class does not divide evenly, the last team can be smaller.</span></label>${aiPhaseFields()}<p id="create-ai-model" class="hint" aria-live="polite">Loading the selected AI model…</p><details class="settings"><summary>Market & business assumptions</summary>${settingsFields(defaults,true)}</details><p class="hint">Market assumptions lock when you create the classroom.</p><button>Create session ↗</button><button type="button" id="preview-settings" class="secondary">Test round</button><p class="hint">Rehearse practice and all three seasons at your own pace. Your decisions stay in this tab.<span id="ai-rehearsal-help" hidden> Test round uses a simulated rival. Start a classroom for the selected AI model.</span></p></form></section></aside><div class="studio-sessions" aria-label="Classroom sessions"><section class="panel" aria-labelledby="active-heading"><div class="heading"><h2 id="active-heading">Active sessions</h2><span class="pill" id="active-count"></span></div><p class="hint">Open a waiting or running class to manage participants, follow decisions and export results.</p><div id="card-export-status" role="status" aria-live="polite"></div><button type="button" class="small secondary danger" id="active-delete-all" aria-label="Delete all active sessions" hidden>Delete all</button><div id="active-sessions"></div></section><section class="panel" aria-labelledby="past-heading"><div class="heading"><h2 id="past-heading">Past sessions</h2><span class="pill" id="past-count"></span></div><p class="hint">Review completed or closed classes, export their results, or rehearse with the same assumptions.</p><button type="button" class="small secondary danger" id="past-delete-all" aria-label="Delete all past sessions" hidden>Delete all</button><div id="past-sessions"></div></section></div></div>`;
  showStudioNavigation('admin');
  const createForm=$('create'), mode=createForm.elements.mode;
@@ -448,6 +456,7 @@ async function showStaff(draft=null){clean();staffView=true;setViewAddress('','s
   if(await confirmAction('Permanently delete session '+b.dataset.cardDelete+' and all its participant decisions and results? This cannot be undone. Export data first if you need a copy.')){await api.deleteSession(b.dataset.cardDelete);await showStaff();note('Session and its results deleted.');}
  }));
  };drawSessions();
+ markStudioReady($('past-sessions'));
  for(const source of sessions){
   subscriptions.push(api.watchParticipants(source.code,people=>{
    if(version!==viewVersion)return;source.participantCount=people.length;
@@ -851,16 +860,24 @@ async function restoreAccount(u){
   if(u&&new URLSearchParams(location.search).get('auth')==='verify'){
    u=await api.refreshUser();if(version!==authVersion)return;user=u;
   }
+  let initialApi=api;
   if(u){
    const loadProfile=async()=>{
     try{await api.importPlatformProfile(resumeStorage);}catch{if(version===authVersion)note('Portal details could not be imported. Please retry by signing in again.');}
     return version===authVersion?api.getProfile():null;
    };
-   const [nextRole,nextProfile]=await Promise.all([api.role(),loadProfile()]);
+   const access=api.role().then(nextRole=>{
+    const params=new URLSearchParams(location.search);
+    if(version===authVersion&&u.emailVerified&&['admin','instructor'].includes(nextRole)&&!params.has('testRound')){
+     initialApi=studioStartupApi(api,studioScreen(params),nextRole==='admin');
+    }
+    return nextRole;
+   });
+   const [nextRole,nextProfile]=await Promise.all([access,loadProfile()]);
    if(version!==authVersion)return;
    role=nextRole;profile=nextProfile;
   }
-  account();await restoreView(u);
+  account();await restoreView(u,initialApi);
  }catch(e){
   if(version!==authVersion)return;
   failure(e);retryAccount=()=>restoreAccount(api.currentUser());

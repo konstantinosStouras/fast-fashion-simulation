@@ -2,6 +2,7 @@ import {escapeHtml as esc} from './ui.js?v=ai-opponent-1';
 import {getTeamComposition} from './functions/teams.js?v=team-handoff-1';
 import {classroomStatus, summarizeUserClassroom} from './functions/user-classrooms.js?v=team-handoff-1';
 import {mountSessionTeams} from './studio-session-teams.js';
+import {markStudioReady} from './studio-startup.js';
 
 const PAGE_SIZE = 25;
 const teamOptions = Array.from({length:100}, (_, index) => `<option value="${index+1}">Team ${index+1}</option>`).join('');
@@ -302,6 +303,7 @@ export async function showTeamsPanel(panel, api, allClassrooms, requestedCode, o
   refreshing=false;
   if(!panel.isConnected)return;
   renderRows();
+  if(directoryComplete&&!roomLoadError&&defaultRoster)markStudioReady(find('directory-count'));
   if(expandedUid && users.has(expandedUid))void loadHistory(expandedUid);
  }
  find('directory-refresh').onclick = refresh;

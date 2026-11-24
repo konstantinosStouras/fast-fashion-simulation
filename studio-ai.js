@@ -1,4 +1,5 @@
 import {escapeHtml as esc, setBusy} from './ui.js?v=ai-opponent-1';
+import {markStudioReady} from './studio-startup.js';
 
 export function studioNavigation(current, platformOwner) {
  const tab = (id, label) => `<button type="button" id="studio-${id}" class="secondary"${current === id ? ' aria-current="page"' : ''}>${label}</button>`;
@@ -124,6 +125,7 @@ export async function showAiSettingsPanel(panel, api, {demo, confirmRemoval}) {
   };
  };
  render();
+ markStudioReady(panel.querySelector('#ai-model-form'));
 }
 
 export async function editSessionAi(form, session, api) {
