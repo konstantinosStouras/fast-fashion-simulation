@@ -16,6 +16,14 @@
  // Restore Firebase while the browser downloads the interface and styles.
  if(!(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)&&new URLSearchParams(location.search).has('demo'))){
   if(/\/admin\/(?:index\.html)?$/.test(location.pathname)||new URLSearchParams(location.search).has('studio')||location.hash==='#admin'){
+   // Fetch the dependencies for the first authenticated reads in parallel.
+   for(const file of ['firebase-app.js','firebase-auth.js','firebase-firestore-lite.js','firebase-functions.js']){
+    const link=document.createElement('link');
+    link.rel='modulepreload';
+    link.crossOrigin='anonymous';
+    link.href='https://www.gstatic.com/firebasejs/12.5.0/'+file;
+    document.head.append(link);
+   }
    import('./studio-network.js?v=studio-speed-2').then(module=>module.preloadStudio()).catch(()=>{});
   }
   import('./backend.js?v=studio-speed-2').catch(()=>{});
