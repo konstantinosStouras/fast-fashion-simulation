@@ -233,7 +233,7 @@ export async function closeSession(code){
   const s=(await tx.get(ref)).data();
   if(!s||s.status==='closed')throw Error('The classroom has already closed.');
   const update={status:'closed',closedAt:serverTimestamp()};
-  if(s.status==='running'&&s.phaseOffset==null)throw Error('The classroom stage is being restored. Try again shortly.');
+  // Closing must also work for older timed rooms that have no manual stage.
   tx.update(ref,update);
  });
 }

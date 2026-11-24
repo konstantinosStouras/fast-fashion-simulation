@@ -288,7 +288,6 @@ export async function startSession(code){
 export async function closeSession(code){
  const d=load(),s=d.sessions[code];
  if(!s||s.status==='closed')throw Error('The classroom has already closed.');
- if(s.status==='running'&&s.phaseOffset==null)throw Error('The classroom stage is being restored. Try again shortly.');
  Object.assign(s,{status:'closed',closedAt:Date.now()});write(d);
 }
 export async function joinSession(code,name){

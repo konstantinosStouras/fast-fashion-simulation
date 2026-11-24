@@ -100,6 +100,26 @@ test('real backend registration stores profile and sends a working verification 
    assert.equal((await getDoc(released(db))).exists(),false);
   });
  });
+ await t.test('legacy running rooms without a manual stage can close and delete all owned records',async()=>{
+  const {deleteField}=await import('firebase/firestore');
+  for(const action of ['close','delete']){
+   const code=await api.createSession('Legacy '+action+' QA',(await import('../model.js')).DEFAULT_CONFIG,'individual');
+   await api.joinSession(code,'Legacy participant');await api.startSession(code);
+   await api.saveOrder(code,0,{variety:4,quantity:100,cap:0});
+   await env.withSecurityRulesDisabled(c=>setDoc(doc(c.firestore(),'sessions',code),{phaseOffset:deleteField()},{merge:true}));
+   if(action==='close'){
+    await api.closeSession(code);
+    const closed=(await getDoc(doc(getFirestore(app),'sessions',code))).data();
+    assert.equal(closed.status,'closed');assert.ok(closed.closedAt);assert.equal(closed.phaseOffset,undefined);
+    assert.equal((await api.readOrders(code,uid))[0].quantity,100);
+   }
+   await api.deleteSession(code);
+   await env.withSecurityRulesDisabled(async c=>{
+    for(const path of [`sessions/${code}`,`sessions/${code}/participants/${uid}`,`sessions/${code}/participants/${uid}/orders/0`,`profiles/${uid}/sessions/${code}`])
+     assert.equal((await getDoc(doc(c.firestore(),path))).exists(),false,path);
+   });
+  }
+ });
  await t.test('two real backend instances reject offline saves and stale revisions after reconnect',async()=>{
   const secondSource=source.replace("initializeApp(firebaseConfig,'fashion-futures')","initializeApp(firebaseConfig,'fashion-futures-second-device')");
   const other=await import('data:text/javascript;base64,'+Buffer.from(secondSource).toString('base64')),otherApp=getApp('fashion-futures-second-device'),otherDb=getFirestore(otherApp);

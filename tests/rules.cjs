@@ -249,6 +249,20 @@ test('a student joining during start invalidates the instructor transaction',asy
 });
 
 
+test('legacy running rooms can close without a stage, with ownership and immutable results enforced',async()=>{
+ await seed(null,{status:'running',startedAt:Timestamp.fromMillis(Date.now()-600000)});
+ const close={status:'closed',closedAt:serverTimestamp()};
+ for(const client of [db('alice'),db('outsider'),db('other','other@example.test'),db('teacher','teacher@example.test',false)])
+  await assertFails(updateDoc(doc(client,'sessions/ABCDEFGH'),close));
+ const room=doc(db('teacher'),'sessions/ABCDEFGH');
+ await assertFails(updateDoc(room,{...close,phaseOffset:960}));
+ await assertSucceeds(updateDoc(room,close));
+ await assertFails(updateDoc(room,{status:'running'}));
+ await assertFails(setDoc(doc(db('alice'),path()),order()));
+ await assertSucceeds(deleteDoc(room));
+ await seed(null,{status:'running',startedAt:Timestamp.now()});
+ await assertSucceeds(updateDoc(doc(admin(),'sessions/ABCDEFGH'),close));
+});
 test('deletion is limited to closed sessions and their owning instructor or platform owner',async()=>{
  await seed();await assertFails(deleteDoc(doc(db('teacher'),'sessions/ABCDEFGH')));
  await seed(50,{status:'closed',closedAt:Timestamp.now()});
