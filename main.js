@@ -1,5 +1,5 @@
 import {showAdminLogin} from './admin/sign-in.js?v=refresh-1';
-import {markStudioReady,studioStartupApi} from './studio-startup.js';
+import {markStudioReady,studioScreen,studioStartupApi} from './studio-startup.js?v=studio-speed-2';
 import {entryMember} from './team-roles.js';
 import {sessionProgress,hasHomeTeamPractice} from './functions/session-progress.js?v=team-handoff-1';
 import {sessionCodeFromUrl} from './auth-flow.js?v=session-codes-1';
@@ -151,12 +151,6 @@ function setViewAddress(code='',view=''){
  if(url.pathname===location.pathname&&url.search===location.search)url.hash=location.hash;
  pageWindow.history.replaceState(state,'',url.href);
 }
-function studioScreen(params){
- if(params.has('sessionCode')||params.has('session')||params.get('view')==='profile')return '';
- const tab=params.get('studio');
- if(['ai','teams','administrators'].includes(tab))return tab;
- return atAdminAddress()||tab==='1'||location.hash==='#admin'?'staff':'';
-}
 async function restoreView(u,initialApi=api){
  const params=new URLSearchParams(location.search);
  if(demo)note('LOCAL DEMO · synthetic accounts and browser-only data. No real authentication.');
@@ -179,7 +173,7 @@ async function restoreView(u,initialApi=api){
  if(role!=='student'){
   if(restoreRehearsal())return;
   if(previousView==='staff')return openSession(code,true);
-  const screen=studioScreen(params);
+  const screen=studioScreen(params,location);
   if(screen==='ai')return showStaffAi(null,initialApi);
   if(screen==='teams'){
    const choices=entry?.uid===u.uid?entry.teamSelections:null;
@@ -862,17 +856,32 @@ async function restoreAccount(u){
   }
   let initialApi=api;
   if(u){
+   const params=new URLSearchParams(location.search);
+   const screen=params.has('testRound')?'':studioScreen(params,location);
+   const prepared=['staff','ai','teams'].includes(screen)&&api.takeStudioStartup
+    ?await api.takeStudioStartup(u,screen).catch(()=>null):null;
+   if(version!==authVersion)return;
    const loadProfile=async()=>{
-    try{await api.importPlatformProfile(resumeStorage);}catch{if(version===authVersion)note('Portal details could not be imported. Please retry by signing in again.');}
-    return version===authVersion?api.getProfile():null;
+    let imported=false;
+    try{imported=await api.importPlatformProfile(resumeStorage);}catch{if(version===authVersion)note('Portal details could not be imported. Please retry by signing in again.');}
+    if(version!==authVersion)return null;
+    return prepared&&!imported?prepared.profile:api.getProfile();
    };
-   const access=api.role().then(nextRole=>{
-    const params=new URLSearchParams(location.search);
-    if(version===authVersion&&u.emailVerified&&['admin','instructor'].includes(nextRole)&&!params.has('testRound')){
-     initialApi=studioStartupApi(api,studioScreen(params),nextRole==='admin');
+   const access=prepared?Promise.resolve(prepared.role):api.role().then(nextRole=>{
+    if(version===authVersion&&u.emailVerified&&['admin','instructor'].includes(nextRole)){
+     initialApi=studioStartupApi(api,screen,nextRole==='admin');
     }
     return nextRole;
    });
+   if(prepared){
+    initialApi={...api};
+    for(const [method,request] of Object.entries(prepared.reads)){
+     initialApi[method]=()=>{
+      initialApi[method]=api[method];
+      return request;
+     };
+    }
+   }
    const [nextRole,nextProfile]=await Promise.all([access,loadProfile()]);
    if(version!==authVersion)return;
    role=nextRole;profile=nextProfile;
@@ -886,7 +895,7 @@ async function restoreAccount(u){
  }
 }
 try{
- api=await import(demo?'./backend-demo.js':'./backend.js?v=team-handoff-1');
+ api=await import(demo?'./backend-demo.js':'./backend.js?v=studio-speed-2');
  api.observeAuth(restoreAccount);
 }catch(e){
  $('app').innerHTML='<section class="waiting"><h1 class="page-title">Fast Fashion Ops</h1><p>Sign-in could not load. Check your connection and reload this page.</p><button onclick="location.reload()">Try again</button></section>';failure(e);

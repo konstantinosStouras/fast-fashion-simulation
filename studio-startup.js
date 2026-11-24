@@ -1,3 +1,10 @@
+export function studioScreen(params,location){
+ if(params.has('sessionCode')||params.has('session')||params.get('view')==='profile')return '';
+ const tab=params.get('studio');
+ if(['ai','teams','administrators'].includes(tab))return tab;
+ return /\/admin\/(?:index\.html)?$/.test(location.pathname)||tab==='1'||location.hash==='#admin'?'staff':'';
+}
+
 // Start the initial screen's reads as soon as the role is confirmed. A panel
 // consumes each request once. Its retries, edits and pagination use fresh reads.
 function firstRead(read,...args){

@@ -36,6 +36,7 @@ export const listTeamUsers=async pageToken=>(await teamUsers(pageToken?{pageToke
 export const getUserClassrooms=async uid=>(await userClassrooms({uid})).data;
 export const saveTeamComposition=async(code,changes)=>(await writeComposition({code,changes})).data;
 export const currentUser=()=>auth.currentUser;
+export const takeStudioStartup=async(user,screen)=>(await import('./studio-network.js?v=studio-speed-2')).takeStudioStartup(user,screen);
 function recordVerifiedAccount(user) {
  if (!user?.emailVerified || !user.email) return;
  setDoc(doc(db,'verifiedAccounts',user.uid),{email:user.email})
@@ -59,7 +60,7 @@ export async function register(email,password,profile){
 export const changeEmail=email=>{if(currentUser()?.email===ADMIN_ACCOUNT_EMAIL)throw Error("This administrator account uses owner-managed recovery.");assertAccountEmail(email);return verifyBeforeUpdateEmail(auth.currentUser,email,emailSettings());};
 export async function getProfile(){const d=await getDoc(doc(db,'profiles',currentUser().uid));return d.exists()?d.data():null;}
 export const saveProfile=profile=>setDoc(doc(db,'profiles',currentUser().uid),{firstName:profile.firstName.trim(),lastName:profile.lastName.trim(),universityId:profile.universityId.trim()},{merge:true});
-export async function importPlatformProfile(storage){const p=platformHandoff(storage,currentUser());if(p)await setDoc(doc(db,'profiles',currentUser().uid),{platformRegistration:p},{merge:true});}
+export async function importPlatformProfile(storage){const p=platformHandoff(storage,currentUser());if(p)await setDoc(doc(db,'profiles',currentUser().uid),{platformRegistration:p},{merge:true});return Boolean(p);}
 export async function playHistory(){
  const uid=currentUser().uid,refs=await getDocsFromServer(collection(db,'profiles',uid,'sessions'));
  return Promise.all(refs.docs.map(async ref=>{
