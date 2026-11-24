@@ -95,10 +95,10 @@ function account(){
  $('join-session')?.addEventListener('click',()=>navigate(showJoinForm));
 }
 function simulationUrl(code='',view=''){
- const url=new URL('./',location.href);
+ const url=new URL(view==='staff' && !code?'admin/':'./',document.baseURI);
  if(demo)url.searchParams.set('demo','');
  if(code)url.searchParams.set('sessionCode',code);
- else if(['staff','teams','ai','administrators'].includes(view))url.searchParams.set('studio',view==='staff'?'1':view);
+ else if(['teams','ai','administrators'].includes(view))url.searchParams.set('studio',view);
  return url;
 }
 function setViewAddress(code='',view=''){
@@ -123,7 +123,7 @@ async function restoreView(u){
   if(!requested&&params.get('studio')==='ai')return showStaffAi();
   if(!requested&&params.get('studio')==='teams')return showStaffTeams();
   if(!requested&&params.get('studio')==='administrators')return role==='admin'?showAdministrators():showStaff();
-  if(!requested&&params.get('studio')==='1')return showStaff();
+  if(!requested&&(params.get('studio')==='1'||location.hash==='#admin'))return showStaff();
  }
  if(!profileComplete(profile))return;
  if(previousView==='review')return openSession(code,false,true);

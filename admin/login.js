@@ -4,7 +4,7 @@ const $=id=>document.getElementById(id);
 const demo=/^(localhost|127\.0\.0\.1)$/.test(location.hostname)&&new URLSearchParams(location.search).has('demo');
 let api,working=false,authVersion=0;
 const message=text=>{$('admin-message').textContent=text;};
-const studio=()=>{location.href='../?studio=1'+(demo?'&demo':'');};
+const studio=()=>{location.replace('../'+(demo?'?demo':'')+'#admin');};
 async function run(fn){
  if(working||!api)return;working=true;
  const restore=setBusy($('admin-main'),true);
