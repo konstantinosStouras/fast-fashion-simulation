@@ -47,3 +47,39 @@ for(const [file,path,ready] of [
   }finally{w.close();}
  });
 }
+
+for(const [screen,path,ready,methods] of [
+ ['staff','admin/','#past-sessions',['listSessions','getDefaults']],
+ ['ai','?studio=ai','#ai-model-form',['getAiSettings']],
+ ['teams','?studio=teams','#directory-count',['listSessions','getDefaultTeamComposition','listTeamUsers']]
+]){
+ test('warm refresh renders '+screen+' with its server requests still pending',async()=>{
+  const w=new JSDOM(readFileSync(screen==='staff'?'admin/index.html':'index.html','utf8'),
+   {url:'https://example.test/fast-fashion-simulation/'+path}).window;
+  try{
+   for(const key of ['document','location','localStorage','sessionStorage','FormData'])globalThis[key]=w[key];
+   globalThis.addEventListener=w.addEventListener.bind(w);
+   const api=await import('../backend-demo.js');
+   await api.loginGoogle();
+   const user=api.currentUser(),profile=await api.getProfile(),data={};
+   for(const method of methods)data[method]=await api[method](...method==='listSessions'?[true]:[]);
+   let deliver,release;
+   const gate=new Promise(resolve=>{release=resolve;});
+   const reads=Object.fromEntries(methods.map(key=>[key,gate.then(()=>data[key])]));
+   globalThis.refreshApi={...api,observeAuth:fn=>{deliver=fn;},
+    takeStudioStartup:async()=>({role:'admin',profile:gate.then(()=>profile),reads})};
+   globalThis.refreshMemory={read:async()=>({profile,data}),save:()=>{}};
+   const code=main.replace('prepared?studioMemory(u,prepared.role,screen):null','prepared?globalThis.refreshMemory:null');
+   await import('data:text/javascript;base64,'+Buffer.from(code+'\n// warm '+screen).toString('base64'));
+   const address=w.location.href;
+   const restoring=deliver(user);
+   await new Promise(resolve=>setImmediate(resolve));
+   assert.ok(w.document.querySelector(ready)?.dataset.readyMs);
+   assert.equal(w.document.querySelector('#admin-login'),null);
+   assert.equal(w.location.href,address);assert.ok(w.document.querySelector('#studio-sync'));
+   release();await restoring;
+   assert.ok(w.document.querySelector('#app').dataset.serverMs);
+   assert.equal(w.document.querySelector('#studio-sync'),null);assert.equal(w.location.href,address);
+  }finally{w.close();}
+ });
+}

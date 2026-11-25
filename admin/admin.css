@@ -1,5 +1,6 @@
 #admin-main{display:grid;grid-template-columns:minmax(0,460px);justify-content:center;align-content:center;min-height:70vh}
 .admin-card{margin:0}
+#studio-sync{position:fixed;right:1rem;bottom:1rem;z-index:5;max-width:calc(100% - 2rem);margin:0;padding:.5rem .85rem;border:1px solid var(--line);border-radius:.5rem;background:var(--white);color:var(--ink)}
 .admin-card h1{font-size:32px;margin:0 0 12px}
 .admin-card form>button{width:100%;margin:0 0 12px}
 .admin-card .hint{margin-top:12px}

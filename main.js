@@ -1,3 +1,4 @@
+import {studioMemory,clearStudioMemory,serialize,recordStudioReads,replayStudioReads,finishStudioReads} from './studio-memory.js?v=studio-memory-1';
 import {showAdminLogin} from './admin/sign-in.js?v=refresh-1';
 import {markStudioReady,studioScreen,studioStartupApi} from './studio-startup.js?v=studio-speed-2';
 import {entryMember} from './team-roles.js';
@@ -89,7 +90,7 @@ document.addEventListener('invalid',revealInvalidField,true);
 document.querySelector('.brand').addEventListener('click',e=>{e.preventDefault();action(async()=>{clean();setViewAddress('','home');staffView=false;note('');landing();pageWindow.scrollTo?.({top:0,behavior:'auto'});});});
 function confirmAction(message){return new Promise(resolve=>{const d=document.createElement('dialog');d.innerHTML=`<h2>Confirm your decision.</h2><p>${esc(message)}</p><div class="button-row"><button data-yes>Confirm</button><button class="secondary" data-no>Cancel</button></div>`;document.body.append(d);const done=value=>{d.close();d.remove();resolve(value);};d.querySelector('[data-yes]').onclick=()=>done(true);d.querySelector('[data-no]').onclick=()=>done(false);d.oncancel=e=>{e.preventDefault();done(false);};d.showModal();});}
 function clearExport(){if(exportUrl){URL.revokeObjectURL(exportUrl);exportUrl=null;}}
-function clean(){document.querySelector('header > .studio-nav')?.remove();if(studentPreview)clearRehearsal();localDecisionWrites.clear();historyNeedsRefresh=false;sessionFresh=true;ordersFresh=true;savePending=false;pendingDecision=null;connectionBanner.hidden=true;historyReviewCode=null;historyReviewPending=false;sessionEntryPending=false;clearExport();viewVersion++;ordersReady=false;rosterReady=false;renderedOrderKey='';teamEditor=null;clearTimeout(rosterTimer);rosterTimer=null;orderUnsub?.();orderUnsub=null;currentOrderUid=null;marketReady='';marketLoading='';finalTeamOrders=null;subscriptions.forEach(f=>f());subscriptions=[];rosterSubs.forEach(f=>f());rosterSubs.clear();session=null;orders={};roster=[];classOrders={};phaseKey='';studentPreview=null;}
+function clean(){$('studio-sync')?.remove();delete $('app').dataset.serverMs;document.querySelector('header > .studio-nav')?.remove();if(studentPreview)clearRehearsal();localDecisionWrites.clear();historyNeedsRefresh=false;sessionFresh=true;ordersFresh=true;savePending=false;pendingDecision=null;connectionBanner.hidden=true;historyReviewCode=null;historyReviewPending=false;sessionEntryPending=false;clearExport();viewVersion++;ordersReady=false;rosterReady=false;renderedOrderKey='';teamEditor=null;clearTimeout(rosterTimer);rosterTimer=null;orderUnsub?.();orderUnsub=null;currentOrderUid=null;marketReady='';marketLoading='';finalTeamOrders=null;subscriptions.forEach(f=>f());subscriptions=[];rosterSubs.forEach(f=>f());rosterSubs.clear();session=null;orders={};roster=[];classOrders={};phaseKey='';studentPreview=null;}
 function updateConnection(){
  const active=session&&!staffView&&!studentPreview;
  connectionBanner.hidden=!active;
@@ -273,12 +274,20 @@ function showStudioNavigation(active, draft=null){
  $('studio-teams').onclick=()=>{if(active!=='teams')action(()=>showStaffTeams(draftForNextTab()));};
  $('studio-administrators')?.addEventListener('click',()=>{if(active!=='administrators')action(()=>showAdministrators(draftForNextTab()));});
 }
+const replayApis=new WeakSet();
+function screenReads(source,screen){
+ if(demo||replayApis.has(source))return source;
+ const memory=studioMemory(user,role,screen),owner=user;
+ return memory?recordStudioReads(source,screen,data=>{
+  if(user===owner)memory.save(data,profile);
+ }):source;
+}
 async function showStaffAi(draft=null,initialApi=api){
  clean();staffView=true;setViewAddress('','ai');note('');
  $('app').innerHTML='<h1 class="sr-only">AI settings</h1><div id="studio-ai-settings"></div>';
  showStudioNavigation('ai',draft);
  const panel=$('studio-ai-settings');
- void showAiSettingsPanel(panel,initialApi,{demo,confirmRemoval:confirmAction}).catch(error=>{if(panel.isConnected)failure(error);});
+ void showAiSettingsPanel(panel,screenReads(initialApi,'ai'),{demo,confirmRemoval:confirmAction}).catch(error=>{if(panel.isConnected)failure(error);});
 }
 async function showStaffTeams(draft=null,code=null,rosterCode=code,initialApi=api){
  clean();staffView=true;setViewAddress('','teams');note('');
@@ -294,9 +303,9 @@ async function showStaffTeams(draft=null,code=null,rosterCode=code,initialApi=ap
   else return;
   remember();
  });
- void showTeamsPanel(panel,initialApi,role==='admin',code,roomCode=>action(()=>openSession(roomCode,true)),confirmAction,dispose=>subscriptions.push(dispose),rosterCode).catch(error=>{if(panel.isConnected)failure(error);});
+ void showTeamsPanel(panel,screenReads(initialApi,'teams'),role==='admin',code,roomCode=>action(()=>openSession(roomCode,true)),confirmAction,dispose=>subscriptions.push(dispose),rosterCode).catch(error=>{if(panel.isConnected)failure(error);});
 }
-async function showStaff(draft=null,initialApi=api){clean();staffView=true;setViewAddress('','staff');const version=viewVersion;const [sessions,defaults]=await Promise.all([initialApi.listSessions(role==='admin'),initialApi.getDefaults()]);if(version!==viewVersion)return;
+async function showStaff(draft=null,initialApi=api){clean();initialApi=screenReads(initialApi,'staff');staffView=true;setViewAddress('','staff');const version=viewVersion;const [sessions,defaults]=await Promise.all([initialApi.listSessions(role==='admin'),initialApi.getDefaults()]);if(version!==viewVersion)return;
  $('app').innerHTML=`<h1 class="sr-only">Admin</h1><div class="studio-layout"><aside class="studio-options" aria-label="Session setup and admin options"><section class="panel"><p class="eyebrow">01 / DESIGN YOUR SESSION</p><h2>Create a classroom.</h2><form id="create"><label>Session name<input name="name" maxlength="80" required placeholder="Executive MBA · November"></label><label for="classroom-code">Session code</label><input id="classroom-code" name="code" type="text" class="code-input" required minlength="3" maxlength="12" pattern="${SESSION_CODE_PATTERN}" aria-describedby="classroom-code-help classroom-code-status" autocomplete="off" autocapitalize="characters" spellcheck="false"><p id="classroom-code-help" class="hint">Choose a city below or type your own code using 3–12 letters or numbers.</p><div id="city-suggestions" role="group" aria-label="Suggested city codes"></div><p id="classroom-code-status" class="hint" role="status">Checking available cities…</p><label>Play mode<select name="mode" aria-describedby="play-mode-help"><option value="individual">Individual play</option><option value="team" selected>Team competition</option></select><span class="field-description" id="play-mode-help"></span></label><label id="classroom-team-size-field" hidden>Students per team<input name="teamSize" type="number" inputmode="numeric" min="1" max="20" step="1" value="3" required disabled><span class="field-description">Students join teams automatically with the classroom code. If the class does not divide evenly, the last team can be smaller.</span></label>${aiPhaseFields()}<p id="create-ai-model" class="hint" aria-live="polite">Loading the selected AI model…</p><details class="settings"><summary>Market & business assumptions</summary>${settingsFields(defaults,true)}</details><p class="hint">Market assumptions lock when you create the classroom.</p><button>Create session ↗</button><button type="button" id="preview-settings" class="secondary">Test round</button><p class="hint">Rehearse practice and all three seasons at your own pace. Your decisions stay in this tab.<span id="ai-rehearsal-help" hidden> Test round uses a simulated rival. Start a classroom for the selected AI model.</span></p></form></section></aside><div class="studio-sessions" aria-label="Classroom sessions"><section class="panel" aria-labelledby="active-heading"><div class="heading"><h2 id="active-heading">Active sessions</h2><span class="pill" id="active-count"></span></div><p class="hint">Open a waiting or running class to manage participants, follow decisions and export results.</p><div id="card-export-status" role="status" aria-live="polite"></div><button type="button" class="small secondary danger" id="active-delete-all" aria-label="Delete all active sessions" hidden>Delete all</button><div id="active-sessions"></div></section><section class="panel" aria-labelledby="past-heading"><div class="heading"><h2 id="past-heading">Past sessions</h2><span class="pill" id="past-count"></span></div><p class="hint">Review completed or closed classes, export their results, or rehearse with the same assumptions.</p><button type="button" class="small secondary danger" id="past-delete-all" aria-label="Delete all past sessions" hidden>Delete all</button><div id="past-sessions"></div></section></div></div>`;
  showStudioNavigation('admin');
  const createForm=$('create'), mode=createForm.elements.mode;
@@ -842,9 +851,16 @@ function exportResults(source=session,people=roster,savedOrders=teamResultOrders
   status.replaceChildren(document.createTextNode('CSV ready: '+(rows.length-1)+' scored-season rows. Save '+a.download+' when your browser asks. '),a);a.click();
  }catch(e){failure(e);}
 }
+// Discard snapshots before any potential studio mutation, including sign-out.
+document.addEventListener('submit',()=>{if(staffView)clearStudioMemory();},true);
+document.addEventListener('click',event=>{
+ const button=event.target.closest?.('button');
+ if(staffView&&button&&(button.matches('.danger,#out,[data-setting],#save-team-directory,#remove-ai-key')||button.id==='directory-refresh'))clearStudioMemory();
+},true);
 async function restoreAccount(u){
  retryAccount=null;
  const version=++authVersion;
+ if(!u||(user&&u!==user))clearStudioMemory();
  if(registering){user=u;return;}
  clean();staffView=false;user=u;profile=null;role='student';
  $('account').replaceChildren();
@@ -860,6 +876,9 @@ async function restoreAccount(u){
    const screen=params.has('testRound')?'':studioScreen(params,location);
    const prepared=['staff','ai','teams'].includes(screen)&&api.takeStudioStartup
     ?await api.takeStudioStartup(u,screen).catch(()=>null):null;
+   if(version!==authVersion)return;
+   const memory=prepared?studioMemory(u,prepared.role,screen):null;
+   const cached=memory?await memory.read():null;
    if(version!==authVersion)return;
    const loadProfile=async()=>{
     let imported=false;
@@ -882,6 +901,49 @@ async function restoreAccount(u){
      };
     }
    }
+   if(cached){
+    const fresh=Promise.all([finishStudioReads(api,prepared.reads),loadProfile()]);
+    fresh.catch(()=>{});
+    role=prepared.role;profile=cached.profile;account();
+    const replay=replayStudioReads(api,cached.data);
+    replayApis.add(replay);
+    const opening=restoreView(u,replay),view=viewVersion;
+    let touched=false;
+    const touch=()=>{touched=true;};
+    const app=$('app');
+    for(const event of ['input','change','click'])app.addEventListener(event,touch,true);
+    try{
+     await opening;
+     if(view!==viewVersion||version!==authVersion)return;
+     const status=document.createElement('p');
+     status.id='studio-sync';status.className='hint';status.setAttribute('role','status');
+     status.textContent='Checking for updates…';app.before(status);
+     const [data,currentProfile]=await fresh;
+     if(version!==authVersion)return;
+     memory.save(data,currentProfile);
+     profile=currentProfile;
+     if(view!==viewVersion)return;
+     const changed=Object.keys(data).some(key=>serialize(data[key])!==serialize(cached.data[key]));
+     if(changed&&touched){
+      status.textContent='Updated data is available. ';
+      const apply=document.createElement('button');apply.type='button';apply.textContent='Load updates';
+      apply.onclick=()=>restoreAccount(api.currentUser());status.append(apply);
+     }else if(changed){
+      const latest=replayStudioReads(api,data);replayApis.add(latest);
+      await restoreView(u,latest);
+     }else status.remove();
+     if(version===authVersion&&studioScreen(new URLSearchParams(location.search),location)===screen)
+      app.dataset.serverMs=String(Math.round(pageWindow.performance.now()));
+    }catch(error){
+     if(version!==authVersion||view!==viewVersion)return;
+     clearStudioMemory();
+     if(/permission-denied|unauthenticated/i.test(error.code||''))throw error;
+     const status=$('studio-sync');if(status)status.textContent='Showing the last loaded data. Refresh to reconnect.';
+    }finally{
+     for(const event of ['input','change','click'])app.removeEventListener(event,touch,true);
+    }
+    return;
+   }
    const [nextRole,nextProfile]=await Promise.all([access,loadProfile()]);
    if(version!==authVersion)return;
    role=nextRole;profile=nextProfile;
@@ -889,7 +951,7 @@ async function restoreAccount(u){
   account();await restoreView(u,initialApi);
  }catch(e){
   if(version!==authVersion)return;
-  failure(e);retryAccount=()=>restoreAccount(api.currentUser());
+  $('studio-sync')?.remove();failure(e);retryAccount=()=>restoreAccount(api.currentUser());
   $('app').innerHTML='<section class="panel"><h1>Reconnect to your account.</h1><p>Reconnect to load this page.</p><button id="retry-account">Retry connection</button></section>';
   $('retry-account').onclick=()=>retryAccount?.();
  }
