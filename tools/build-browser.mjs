@@ -54,7 +54,7 @@ await publish('api-bundle.js',`export * from './${backend}';\n`);
 const main=await bundle('main.js','app-bundle.js',backend);
 for(const page of ['index.html','admin/index.html']){
  const source=await readFile(path.join(root,page),'utf8');
- const preload=`/* studio-preloads */\n   for(const href of ${JSON.stringify(outputs.filter(([,o])=>!o.entryPoint).map(([name])=>name))}){const link=document.createElement('link');link.rel='modulepreload';link.href=href;document.head.append(link);}\n   /* end-studio-preloads */`;
+ const preload=`/* studio-preloads */\n   for(const href of ${JSON.stringify(outputs.filter(([,o])=>!o.entryPoint).map(([name])=>name))}){const link=document.createElement('link');link.rel='modulepreload';link.fetchPriority='high';link.href=href;document.head.append(link);}\n   /* end-studio-preloads */`;
  await publish(page,source.replace(/(?:main|app-bundle)\.js\?v=[\w-]+/g,main)
   .replace(/(?:backend|api-bundle)\.js\?v=[\w-]+|assets\/studio\/backend-[\w-]+\.js/g,backend)
   .replace(/studio-auth\.js|assets\/studio\/studio-auth-[\w-]+\.js/g,auth)

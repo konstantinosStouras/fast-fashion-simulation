@@ -19,7 +19,7 @@
    import('./assets/studio/studio-auth-JOAR2JFY.js').catch(()=>{});
    import('./studio-memory.js?v=studio-first-2').then(m=>m.startStudioMemory()).catch(()=>{});
    /* studio-preloads */
-   for(const href of ["assets/studio/shared-L2TK2CJG.js","assets/studio/shared-W2YBBZWE.js","assets/studio/shared-Z6YTO4IC.js"]){const link=document.createElement('link');link.rel='modulepreload';link.href=href;document.head.append(link);}
+   for(const href of ["assets/studio/shared-L2TK2CJG.js","assets/studio/shared-W2YBBZWE.js","assets/studio/shared-Z6YTO4IC.js"]){const link=document.createElement('link');link.rel='modulepreload';link.fetchPriority='high';link.href=href;document.head.append(link);}
    /* end-studio-preloads */
    import('./assets/studio/studio-network-TPRU5TX3.js').then(module=>module.preloadStudio()).catch(()=>{});
   }

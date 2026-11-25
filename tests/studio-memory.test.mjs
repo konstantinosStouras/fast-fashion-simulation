@@ -88,3 +88,16 @@ test('admin static assets reuse fresh responses and leave service requests and h
  assert.equal(load('https://thirdparty.test/content.js'),undefined);
  now=120001;await load('main.js');assert.equal(calls,3);
 });
+
+test('a restarted worker can serve still-fresh public HTML while its network update is pending',async()=>{
+ const url='https://example.test/sim/?studio=teams',now=Date.now(),events={},writes=[];
+ const html=text=>new Response(text,{headers:{'content-type':'text/html','cache-control':'max-age=600',date:new Date(now-310000).toUTCString()}});
+ let network,served,background;
+ const self={registration:{scope:'https://example.test/sim/'},addEventListener:(key,fn)=>{events[key]=fn;}};
+ const caches={open:async()=>({match:async key=>key===url?html('public shell'):null,put:async key=>writes.push(key)})};
+ vm.runInNewContext(readFileSync(new URL('../studio-worker.js',import.meta.url),'utf8'),{self,URL,caches,Date,
+  fetch:()=>new Promise(resolve=>{network=resolve;})});
+ events.fetch({request:{method:'GET',mode:'navigate',url},resultingClientId:'new',respondWith:v=>{served=v;},waitUntil:v=>{background=v;}});
+ assert.equal(await (await served).text(),'public shell');
+ network(html('updated'));await background;assert.deepEqual(writes,[url]);
+});

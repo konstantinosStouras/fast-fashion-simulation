@@ -5,6 +5,20 @@ self.addEventListener('activate',event=>event.waitUntil(self.clients.claim()));
 // Both entry documents are public static HTML. Keep a recent successful copy
 // in memory and allow a slow CDN response to update it for the next reload.
 const documents=new Map(),assets=new Map(),studioClients=new Set(),base=new URL(self.registration.scope);
+const shellCache='ffo-public-studio-html-v1';
+function cacheableShell(response){
+ return response.ok&&!response.redirected&&response.headers.get('content-type')?.includes('text/html')&&
+  !/private|no-store|no-cache/i.test(response.headers.get('cache-control')||'');
+}
+async function recentShell(url){
+ try{
+  const cache=await caches.open(shellCache),response=await cache.match(url);
+  const date=Date.parse(response?.headers.get('date'));
+  const age=(Date.now()-date)/1000;
+  const maxAge=Number(response?.headers.get('cache-control')?.match(/max-age=(\d+)/i)?.[1]||0);
+  return age>=0&&age<maxAge?response:null;
+ }catch{return null;}
+}
 self.addEventListener('fetch',event=>{
  const {request}=event,url=new URL(request.url);
  if(request.method!=='GET')return;
@@ -17,13 +31,20 @@ self.addEventListener('fetch',event=>{
   studioClients.add(event.resultingClientId);
   const previous=documents.get(url.href);
   const latest=fetch(request).then(response=>{
-   if(response.ok&&!response.redirected&&response.headers.get('content-type')?.includes('text/html'))
+   if(cacheableShell(response))
     documents.set(url.href,{time:Date.now(),response:response.clone()});
    return response;
   });
-  if(!previous||Date.now()-previous.time>120000||request.cache==='reload'){event.respondWith(latest);return;}
-  event.waitUntil(latest.then(()=>{},()=>{}));
-  event.respondWith(previous.response.clone());
+  // The public HTML can outlive the worker. Protected data still goes to the
+  // server when the five-minute account snapshot has expired.
+  event.waitUntil(latest.then(async response=>{
+   if(cacheableShell(response)&&typeof caches!=='undefined'){
+    const copy=response.clone(),cache=await caches.open(shellCache);await cache.put(url.href,copy);
+   }
+  }).catch(()=>{}));
+  if(request.cache==='reload'||request.cache==='no-store')event.respondWith(latest);
+  else if(previous&&Date.now()-previous.time<120000)event.respondWith(previous.response.clone());
+  else event.respondWith(recentShell(url.href).then(saved=>saved||latest));
   return;
  }
  if(!studioClients.has(event.clientId)||!['script','style','font'].includes(request.destination))return;
