@@ -22,6 +22,7 @@ function callable(handler, options = {}) {
   });
 }
 
+export const readStudioPanel = callable(api.readStudioPanel, {region: 'europe-west1', timeoutSeconds: 120});
 export const getAiSettings = callable(api.getAiSettings);
 export const deleteRegisteredUsers = callable(registeredUserService({db: getFirestore(), auth: getAuth()}), {timeoutSeconds: 540});
 export const saveAiSettings = callable(api.saveAiSettings, {secrets: [encryptionKey]});

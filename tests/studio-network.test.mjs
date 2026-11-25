@@ -10,7 +10,7 @@ async function bootstrap(label,user,screen){
  const reads=[],auth={currentUser:user,authStateReady:async()=>{}};
  globalThis.location=new URL('https://example.test/admin/?studio='+screen);
  globalThis.studioNetworkTest={initializeApp:()=>({}),getAuth:()=>auth,getFirestore:()=>({}),getFunctions:()=>({}),
-  httpsCallable:(_,name)=>async()=>{reads.push(name);return {data:{}};},studioScreen,
+  httpsCallable:(_,name)=>async input=>{reads.push(name+'/'+input.screen);return {data:{}};},studioScreen,
   collection:(_,path)=>path,doc:(_,path)=>path,where:()=>null,query:path=>path,
   getDoc:async path=>{reads.push(path);return {exists:()=>false,data:()=>null};},
   getDocs:async path=>{reads.push(path);return {docs:[]};},
@@ -22,8 +22,8 @@ async function bootstrap(label,user,screen){
 
 test('early studio reads match each screen and are consumed once per navigation',async()=>{
  const user={uid:'owner',email:'owner@example.test',emailVerified:true};
- for(const [screen,expected] of [['',['profiles','settings','sessions']],['ai',['profiles','getAiSettings']],
-  ['teams',['profiles','sessions','studioTeamDefaults','listTeamUsers']]]){
+ for(const [screen,expected] of [['',['profiles','settings','sessions']],['ai',['profiles','readStudioPanel/ai']],
+  ['teams',['profiles','sessions','studioTeamDefaults','readStudioPanel/teams']]]){
   const run=await bootstrap('reads '+screen,user,screen);
   const result=await run.take();
   assert.equal(result.role,'admin');

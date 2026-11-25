@@ -9,10 +9,13 @@
     "test:backend:stress": "firebase emulators:exec --config firebase.test.json --only firestore,auth --project demo-fashion-futures \"node --test --test-force-exit --test-concurrency=1 tests/rules.cjs tests/auth-emulator.mjs tests/admin-alias-emulator.mjs tests/stress-backend.cjs\"",
     "test:rules": "firebase emulators:exec --config firebase.test.json --only firestore --project demo-fashion-futures \"node --test --test-force-exit tests/rules.cjs\"",
     "test:backend": "firebase emulators:exec --config firebase.test.json --only firestore,auth --project demo-fashion-futures \"node --test --test-force-exit --test-concurrency=1 tests/rules.cjs tests/auth-emulator.mjs\"",
-    "test:admins": "firebase emulators:exec --config firebase.test.json --only firestore,auth --project demo-fashion-futures \"node --test --test-force-exit --test-concurrency=1 tests/rules.cjs tests/admin-alias-emulator.mjs tests/auth-emulator.mjs\""
+    "test:admins": "firebase emulators:exec --config firebase.test.json --only firestore,auth --project demo-fashion-futures \"node --test --test-force-exit --test-concurrency=1 tests/rules.cjs tests/admin-alias-emulator.mjs tests/auth-emulator.mjs\"",
+    "build": "node tools/build-browser.mjs",
+    "pretest": "node tools/build-browser.mjs --check"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.0",
+    "esbuild": "0.25.12",
     "firebase": "^12.5.0",
     "firebase-tools": "15.32.1",
     "jsdom": "^26.1.0"

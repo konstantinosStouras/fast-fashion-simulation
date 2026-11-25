@@ -358,5 +358,12 @@ export function aiService({db, auth, encryptionSecret, discover = discoverModels
       return {teamComposition: composition, ...teams};
     });
   }
-  return {getAiSettings, saveAiSettings, prepareAiOpponent, startAiSession, joinTeamClassroom, listTeamUsers, getUserClassrooms, saveTeamComposition, saveDefaultTeamComposition};
+  // Both reads use the same regional instance pool and the same authorization
+  // and pagination implementations as the original callable endpoints.
+  function readStudioPanel(request) {
+    if (request.data?.screen === 'ai') return getAiSettings(request);
+    if (request.data?.screen === 'teams') return listTeamUsers(request);
+    throw new AiError('invalid-argument', 'Choose an admin screen.');
+  }
+  return {readStudioPanel, getAiSettings, saveAiSettings, prepareAiOpponent, startAiSession, joinTeamClassroom, listTeamUsers, getUserClassrooms, saveTeamComposition, saveDefaultTeamComposition};
 }

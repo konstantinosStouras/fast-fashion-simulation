@@ -880,6 +880,7 @@ async function restoreAccount(u){
    const memory=prepared?studioMemory(u,prepared.role,screen):null;
    const cached=memory?await memory.read():null;
    if(version!==authVersion)return;
+   if(prepared)$('app').dataset.studioSource=cached?'snapshot':'server';
    const loadProfile=async()=>{
     let imported=false;
     try{imported=await api.importPlatformProfile(resumeStorage);}catch{if(version===authVersion)note('Portal details could not be imported. Please retry by signing in again.');}
@@ -957,7 +958,7 @@ async function restoreAccount(u){
  }
 }
 try{
- api=await import(demo?'./backend-demo.js':'./backend.js?v=studio-speed-2');
+ api=await import(demo?'./backend-demo.js':'./backend.js?v=studio-eu-1');
  api.observeAuth(restoreAccount);
 }catch(e){
  $('app').innerHTML='<section class="waiting"><h1 class="page-title">Fast Fashion Ops</h1><p>Sign-in could not load. Check your connection and reload this page.</p><button onclick="location.reload()">Try again</button></section>';failure(e);

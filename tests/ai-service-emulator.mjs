@@ -38,6 +38,16 @@ before(async () => {
 });
 after(async () => { await deleteApp(app); });
 
+test('regional studio reads use the existing instructor permissions and public response shapes',async()=>{
+ const api=aiService(options);
+ for(const [screen,read] of [['ai',api.getAiSettings],['teams',api.listTeamUsers]]){
+  const request=call(admin,{screen});
+  assert.deepEqual(await api.readStudioPanel(request),await read(request));
+  await assert.rejects(api.readStudioPanel(call({uid:'student',token:{email:'student@example.test',email_verified:true}},{screen})),{code:'permission-denied'});
+ }
+ assert.throws(()=>api.readStudioPanel(call(admin,{screen:'other'})),{code:'invalid-argument'});
+});
+
 test('keys and models remain private to each verified instructor', async () => {
   const api = aiService(options);
   const result = await api.getAiSettings(call(admin,{}));

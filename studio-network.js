@@ -9,9 +9,9 @@ import {studioScreen} from './studio-startup.js?v=studio-speed-2';
 // Start server reads independently of the gameplay modules and realtime SDK.
 // The full application reuses the same named Firebase app and Auth instance.
 const app=initializeApp(firebaseConfig,'fashion-futures'),auth=getAuth(app);
-const db=getFirestore(app,DATABASE),functions=getFunctions(app,'us-central1');
-const settings=httpsCallable(functions,'getAiSettings',{timeout:45000});
-const directory=httpsCallable(functions,'listTeamUsers',{timeout:125000});
+const db=getFirestore(app,DATABASE),functions=getFunctions(app,'europe-west1');
+const panel=httpsCallable(functions,'readStudioPanel',{timeout:125000});
+
 const documentData=async(path,id)=>(await getDoc(doc(db,path,id))).data();
 let pending,started=false;
 
@@ -28,8 +28,8 @@ export function preloadStudio(){
   if(!isOwner&&!(await getDoc(doc(db,'instructors',user.email))).exists())return null;
   if(auth.currentUser!==user)return null;
   const api={
-   getAiSettings:async()=>(await settings({})).data,
-   listTeamUsers:async token=>(await directory(token?{pageToken:token}:{})).data,
+   getAiSettings:async()=>(await panel({screen:'ai'})).data,
+   listTeamUsers:async token=>(await panel({screen:'teams',...(token?{pageToken:token}:{})})).data,
    getDefaults:async()=>(await documentData('settings','defaults'))??{...DEFAULT_CONFIG},
    getDefaultTeamComposition:async()=>({teamComposition:(await documentData('studioTeamDefaults',user.uid))?.teamComposition??{}}),
    listSessions:async all=>{

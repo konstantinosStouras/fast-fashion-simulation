@@ -16,10 +16,11 @@ import {ROUNDS,validateConfig,DEFAULT_CONFIG,validOrder} from './model.js';
 const app=initializeApp(firebaseConfig,'fashion-futures'),auth=getAuth(app),db=getFirestore(app,DATABASE);
 const functions=getFunctions(app,'us-central1');
 const callable=(name,timeout)=>httpsCallable(functions,name,{timeout});
-const readSettings=callable('getAiSettings',45000),writeSettings=callable('saveAiSettings',45000);
+const readPanel=httpsCallable(getFunctions(app,'europe-west1'),'readStudioPanel',{timeout:125000});
+const writeSettings=callable('saveAiSettings',45000);
 const prepareAiOpponent=callable('prepareAiOpponent',150000),startAiSession=callable('startAiSession',120000);
 const joinTeam=callable('joinTeamClassroom',60000);
-const teamUsers=callable('listTeamUsers',125000),writeComposition=callable('saveTeamComposition',45000);
+const writeComposition=callable('saveTeamComposition',45000);
 const userClassrooms=callable('getUserClassrooms',60000);
 const writeDefaultTeams=callable('saveDefaultTeamComposition',60000);
 const deleteAccounts=callable('deleteRegisteredUsers',540000);
@@ -30,13 +31,13 @@ export async function getDefaultTeamComposition(){
 }
 export const saveDefaultTeamComposition=async changes=>(await writeDefaultTeams({changes})).data;
 export const deleteRegisteredUsers=async uids=>(await deleteAccounts({uids})).data;
-export const getAiSettings=async()=>(await readSettings({})).data;
+export const getAiSettings=async()=>(await readPanel({screen:'ai'})).data;
 export const saveAiSettings=async input=>(await writeSettings(input)).data;
-export const listTeamUsers=async pageToken=>(await teamUsers(pageToken?{pageToken}:{})).data;
+export const listTeamUsers=async pageToken=>(await readPanel({screen:'teams',...(pageToken?{pageToken}:{})})).data;
 export const getUserClassrooms=async uid=>(await userClassrooms({uid})).data;
 export const saveTeamComposition=async(code,changes)=>(await writeComposition({code,changes})).data;
 export const currentUser=()=>auth.currentUser;
-export const takeStudioStartup=async(user,screen)=>(await import('./studio-network.js?v=studio-speed-2')).takeStudioStartup(user,screen);
+export const takeStudioStartup=async(user,screen)=>(await import('./studio-network.js?v=studio-eu-1')).takeStudioStartup(user,screen);
 function recordVerifiedAccount(user) {
  if (!user?.emailVerified || !user.email) return;
  setDoc(doc(db,'verifiedAccounts',user.uid),{email:user.email})
