@@ -91,7 +91,7 @@ export async function refreshUser(){await auth.currentUser.reload();await auth.c
 export async function role(){const u=currentUser();if(!u?.emailVerified)return 'student';if(u.email===ADMIN_EMAIL)return 'admin';return (await getDoc(doc(db,'instructors',u.email))).exists()?'instructor':'student';}
 export async function grant(email){await setDoc(doc(db,'instructors',loginEmailAddress(email)),{createdAt:serverTimestamp()});}
 export async function listInstructors(){return (await getDocs(collection(db,'instructors'))).docs.map(d=>d.id);}
-export async function revoke(email){const {deleteDoc}=await import('https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js');await deleteDoc(doc(db,'instructors',loginEmailAddress(email)));}
+export async function revoke(email){await deleteDoc(doc(db,'instructors',loginEmailAddress(email)));}
 export async function getDefaults(){const d=await getDoc(doc(db,'settings','defaults'));return d.exists()?d.data():{...DEFAULT_CONFIG};}
 export const saveDefaults=config=>setDoc(doc(db,'settings','defaults'),config);
 function randomSessionCode(){

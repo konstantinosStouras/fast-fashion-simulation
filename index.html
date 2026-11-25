@@ -7,30 +7,23 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="description" content="A classroom simulation of fashion retail. Practice against AI and compete on profit across three seasons.">
 <title>Fast Fashion Ops — Speed. Profit. Consequences.</title>
-<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://securetoken.googleapis.com" crossorigin>
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
 <link rel="preconnect" href="https://europe-west1-stouras-ffo.cloudfunctions.net" crossorigin>
-<link rel="modulepreload" href="app-bundle.js?v=fa74c29d7057b716">
+<link rel="modulepreload" href="app-bundle.js?v=169e27f97710d5c8">
 <script>
  // Restore Firebase while the browser downloads the interface and styles.
  if(!(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)&&new URLSearchParams(location.search).has('demo'))){
   if(/\/admin\/(?:index\.html)?$/.test(location.pathname)||new URLSearchParams(location.search).has('studio')||location.hash==='#admin'){
-   import('./studio-auth.js').catch(()=>{});
+   import('./assets/studio/studio-auth-JOAR2JFY.js').catch(()=>{});
    import('./studio-memory.js?v=studio-first-2').then(m=>m.startStudioMemory()).catch(()=>{});
-   // Fetch the dependencies for the first authenticated reads in parallel.
-   for(const file of ['firebase-app.js','firebase-auth.js','firebase-firestore-lite.js','firebase-functions.js','firebase-firestore.js']){
-    const link=document.createElement('link');
-    link.rel='modulepreload';
-    link.crossOrigin='anonymous';
-    link.href='https://www.gstatic.com/firebasejs/12.5.0/'+file;
-    document.head.append(link);
-   }
-   for(const path of ['firebase-config.js','model.js','studio-startup.js?v=studio-speed-2']){
-    const link=document.createElement('link');link.rel='modulepreload';link.href=path;document.head.append(link);
-   }
-   import('./studio-network.js?v=studio-eu-2').then(module=>module.preloadStudio()).catch(()=>{});
+   /* studio-preloads */
+   for(const href of ["assets/studio/shared-L2TK2CJG.js","assets/studio/shared-W2YBBZWE.js","assets/studio/shared-Z6YTO4IC.js"]){const link=document.createElement('link');link.rel='modulepreload';link.href=href;document.head.append(link);}
+   /* end-studio-preloads */
+   import('./assets/studio/studio-network-TPRU5TX3.js').then(module=>module.preloadStudio()).catch(()=>{});
   }
-  import('./api-bundle.js?v=44cabb475b57b135').catch(()=>{});
+  import('./assets/studio/backend-6RLJMWOF.js').catch(()=>{});
  }
 </script>
 <script src="theme.js?v=account-menu-1"></script>
@@ -57,4 +50,4 @@
 <span>Built to challenge intuition. Designed for discussion.</span>
 <span>Teaching prototype · Illustrative model · <a href="admin/">Admin login</a></span></footer>
 <dialog id="auth"></dialog>
-<script type="module" src="app-bundle.js?v=fa74c29d7057b716"></script></body></html>
+<script type="module" src="app-bundle.js?v=169e27f97710d5c8"></script></body></html>
