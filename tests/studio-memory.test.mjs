@@ -43,3 +43,26 @@ test('worker isolates tab, login and screen, clears on sign-out and expires old 
  send('save');now=300001;assert.equal(send('read'),null);
  send('save',{time:0});assert.equal(send('read'),null);
 });
+
+test('admin static assets reuse fresh responses and leave service requests and hard reloads alone',async()=>{
+ const events={},scope='https://example.test/sim/';
+ let calls=0,now=0;
+ const self={registration:{scope},addEventListener:(name,fn)=>{events[name]=fn;}};
+ const fetch=async req=>{
+  calls++;
+  return new Response('static',{headers:{'content-type':req.mode==='navigate'?'text/html':'text/javascript','cache-control':'public,max-age=600'}});
+ };
+ vm.runInNewContext(readFileSync(new URL('../studio-worker.js',import.meta.url),'utf8'),{self,URL,fetch,Date:{now:()=>now}});
+ function load(path,options={}){
+  let handled;
+  events.fetch({request:{url:new URL(path,scope).href,method:'GET',destination:'script',...options},
+   clientId:'page',resultingClientId:'page',respondWith:promise=>{handled=promise;},waitUntil:()=>{}});
+  return handled;
+ }
+ assert.equal(load('main.js'),undefined);
+ await load('admin/',{mode:'navigate'});await load('main.js');await load('main.js');assert.equal(calls,2);
+ assert.equal(load('main.js',{cache:'reload'}),undefined);
+ assert.equal(load('https://firestore.googleapis.com/query',{destination:''}),undefined);
+ assert.equal(load('https://thirdparty.test/content.js'),undefined);
+ now=120001;await load('main.js');assert.equal(calls,3);
+});

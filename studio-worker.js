@@ -4,7 +4,7 @@ self.addEventListener('install',()=>self.skipWaiting());
 self.addEventListener('activate',event=>event.waitUntil(self.clients.claim()));
 // Both entry documents are public static HTML. Keep a recent successful copy
 // in memory and allow a slow CDN response to update it for the next reload.
-const documents=new Map(),base=new URL(self.registration.scope);
+const documents=new Map(),assets=new Map(),studioClients=new Set(),base=new URL(self.registration.scope);
 self.addEventListener('fetch',event=>{
  const {request}=event,url=new URL(request.url);
  if(request.method!=='GET')return;
@@ -13,22 +13,38 @@ self.addEventListener('fetch',event=>{
   const admin=url.pathname===base.pathname+'admin/'&&!url.search;
   const tab=url.pathname===base.pathname&&['ai','teams','1'].includes(studio)&&[...url.searchParams].length===1;
   if(url.origin!==base.origin||(!admin&&!tab))return;
+  if(studioClients.size>=32)studioClients.delete(studioClients.values().next().value);
+  studioClients.add(event.resultingClientId);
   const previous=documents.get(url.href);
   const latest=fetch(request).then(response=>{
    if(response.ok&&!response.redirected&&response.headers.get('content-type')?.includes('text/html'))
     documents.set(url.href,{time:Date.now(),response:response.clone()});
    return response;
   });
-  if(!previous||Date.now()-previous.time>120000){event.respondWith(latest);return;}
+  if(!previous||Date.now()-previous.time>120000||request.cache==='reload'){event.respondWith(latest);return;}
   event.waitUntil(latest.then(()=>{},()=>{}));
-  const fallback=()=>previous.response.clone();
-  event.respondWith(Promise.race([latest.catch(fallback),new Promise(resolve=>setTimeout(()=>resolve(fallback()),120))]));
- }else if((url.href.startsWith(base.href)&&url.searchParams.has('v')&&/\.(js|css)$/.test(url.pathname))||
-          (url.origin==='https://www.gstatic.com'&&/^\/firebasejs\/\d+\.\d+\.\d+\/[\w-]+\.js$/.test(url.pathname))){
-  // Normal refresh can use the browser's fresh HTTP cache for versioned
-  // assets. A hard reload still explicitly goes to the network.
-  if(request.cache!=='reload'&&request.cache!=='no-store')event.respondWith(fetch(request,{cache:'default'}));
+  event.respondWith(previous.response.clone());
+  return;
  }
+ if(!studioClients.has(event.clientId)||!['script','style','font'].includes(request.destination))return;
+ const vendor=url.origin==='https://www.gstatic.com'&&/^\/firebasejs\/\d+\.\d+\.\d+\/[\w-]+\.js$/.test(url.pathname);
+ const local=url.href.startsWith(base.href)&&/\.(js|css|woff2)$/.test(url.pathname);
+ if((!local&&!vendor)||request.cache==='no-store'||request.cache==='reload')return;
+ // Only public scripts, styles and fonts from this application's admin
+ // documents enter this map. Authenticated APIs have other destinations.
+ const hit=assets.get(url.href);
+ if(hit&&Date.now()<hit.expires){event.respondWith(hit.response.clone());return;}
+ event.respondWith(fetch(request,{cache:'default'}).then(response=>{
+  const policy=response.headers.get('cache-control')||'';
+  const maxAge=Number(policy.match(/(?:^|,)\s*max-age=(\d+)/i)?.[1]||0);
+  const age=Number(response.headers.get('age'))||0;
+  const seconds=Math.min(Math.max(0,maxAge-age),vendor?600:120);
+  if(response.ok&&seconds&&!/no-store|no-cache|private/i.test(policy)&&!response.redirected){
+   if(assets.size>=96)assets.delete(assets.keys().next().value);
+   assets.set(url.href,{response:response.clone(),expires:Date.now()+seconds*1000});
+  }
+  return response;
+ }));
 });
 self.addEventListener('message',event=>{
  const m=event.data;
