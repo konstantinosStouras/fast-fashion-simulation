@@ -4,6 +4,28 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import {finishStudioReads,recordStudioReads,replayStudioReads,serialize} from '../studio-memory.js';
 
+test('first and expired visits skip worker lookup while a recent snapshot still uses it',async t=>{
+ const values=new Map(),messages=[];
+ const worker={scriptURL:new URL('../studio-worker.js',import.meta.url).href,
+  postMessage(message,ports){messages.push(message.op);ports?.[0].postMessage(null);}};
+ for(const [key,value] of Object.entries({
+  navigator:{serviceWorker:{controller:worker,register:async()=>({active:worker}),ready:Promise.resolve({active:worker})}},
+  document:{addEventListener(){}},addEventListener:()=>{},
+  sessionStorage:{getItem:k=>values.get(k)??null,setItem:(k,v)=>values.set(k,v)}
+ })){
+  const previous=Object.getOwnPropertyDescriptor(globalThis,key);
+  Object.defineProperty(globalThis,key,{configurable:true,value});
+  t.after(()=>{if(previous)Object.defineProperty(globalThis,key,previous);else delete globalThis[key];});
+ }
+ const {studioMemory}=await import('../studio-memory.js?expiry-test');
+ const memory=studioMemory({uid:'owner',emailVerified:true,metadata:{lastSignInTime:'login'}},'admin','teams');
+ assert.equal(await memory.read(),null);
+ values.set('studio-memory-1:until:teams',String(Date.now()-1));
+ assert.equal(await memory.read(),null);assert.deepEqual(messages,[]);
+ values.set('studio-memory-1:until:teams',String(Date.now()+300000));
+ assert.equal(await memory.read(),null);assert.deepEqual(messages,['read']);
+});
+
 test('repeats can use complete data while new reads run, then use fresh reads for later actions',async()=>{
  let finish,writes=0;
  const api={listTeamUsers:async()=>({users:['b'],nextPageToken:null})};

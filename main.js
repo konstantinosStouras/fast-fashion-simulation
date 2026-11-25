@@ -1,4 +1,4 @@
-import {studioMemory,clearStudioMemory,serialize,recordStudioReads,replayStudioReads,finishStudioReads} from './studio-memory.js?v=studio-memory-1';
+import {studioMemory,clearStudioMemory,serialize,recordStudioReads,replayStudioReads,finishStudioReads} from './studio-memory.js?v=studio-first-2';
 import {showAdminLogin} from './admin/sign-in.js?v=refresh-1';
 import {markStudioReady,studioScreen,studioStartupApi} from './studio-startup.js?v=studio-speed-2';
 import {entryMember} from './team-roles.js';
@@ -880,7 +880,13 @@ async function restoreAccount(u){
    const memory=prepared?studioMemory(u,prepared.role,screen):null;
    const cached=memory?await memory.read():null;
    if(version!==authVersion)return;
-   if(prepared)$('app').dataset.studioSource=cached?'snapshot':'server';
+   if(prepared){
+    const timing=$('app').dataset;
+    timing.studioSource=cached?'snapshot':'server';
+    timing.readStartMs=prepared.readStart;
+    timing.startupMs=Math.round(pageWindow.performance.now());
+    timing.htmlMs=Math.round(pageWindow.performance.getEntriesByType?.('navigation')[0]?.responseEnd||0);
+   }
    const loadProfile=async()=>{
     let imported=false;
     try{imported=await api.importPlatformProfile(resumeStorage);}catch{if(version===authVersion)note('Portal details could not be imported. Please retry by signing in again.');}

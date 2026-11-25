@@ -37,15 +37,15 @@ export const listTeamUsers=async pageToken=>(await readPanel({screen:'teams',...
 export const getUserClassrooms=async uid=>(await userClassrooms({uid})).data;
 export const saveTeamComposition=async(code,changes)=>(await writeComposition({code,changes})).data;
 export const currentUser=()=>auth.currentUser;
-export const takeStudioStartup=async(user,screen)=>(await import('./studio-network.js?v=studio-eu-1')).takeStudioStartup(user,screen);
+export const takeStudioStartup=async(user,screen)=>(await import('./studio-network.js?v=studio-eu-2')).takeStudioStartup(user,screen);
 function recordVerifiedAccount(user) {
  if (!user?.emailVerified || !user.email) return;
  setDoc(doc(db,'verifiedAccounts',user.uid),{email:user.email})
   .catch(error=>console.warn('Verified account directory update failed.',error.code));
 }
-export const observeAuth=fn=>onAuthStateChanged(auth,user=>{
- recordVerifiedAccount(user);
- return fn(user);
+export const observeAuth=fn=>onAuthStateChanged(auth,async user=>{
+ try{return await fn(user);}
+ finally{if(auth.currentUser===user)recordVerifiedAccount(user);}
 });
 export const watchVerifiedAccounts=(onChange,onError)=>onSnapshot(collection(db,'verifiedAccounts'),
  snapshot=>onChange(snapshot.docs.map(entry=>entry.data().email)),onError);

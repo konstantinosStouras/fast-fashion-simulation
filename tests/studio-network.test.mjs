@@ -9,7 +9,7 @@ const source=readFileSync(new URL('../studio-network.js',import.meta.url),'utf8'
 async function bootstrap(label,user,screen){
  const reads=[],auth={currentUser:user,authStateReady:async()=>{}};
  globalThis.location=new URL('https://example.test/admin/?studio='+screen);
- globalThis.studioNetworkTest={initializeApp:()=>({}),getAuth:()=>auth,getFirestore:()=>({}),getFunctions:()=>({}),
+ globalThis.studioNetworkTest={app:{},auth,getFirestore:()=>({}),getFunctions:()=>({}),
   httpsCallable:(_,name)=>async input=>{reads.push(name+'/'+input.screen);return {data:{}};},studioScreen,
   collection:(_,path)=>path,doc:(_,path)=>path,where:()=>null,query:path=>path,
   getDoc:async path=>{reads.push(path);return {exists:()=>false,data:()=>null};},

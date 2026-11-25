@@ -1,4 +1,4 @@
-// Only the opaque tab identifier goes into sessionStorage. The worker holds
+// Only an opaque tab identifier and expiry times go into sessionStorage. The worker holds
 // the last complete server response in memory, scoped to the verified login.
 const schema='studio-memory-1';
 let registration,activeWorker,tabKey,generation=0,lastConfirmed;
@@ -44,6 +44,7 @@ export function studioMemory(user,role,screen){
  const entry={login:[user.uid,login,role].join('/'),screen},epoch=generation;
  return {
   read:async()=>{
+   try{if(Number(sessionStorage.getItem(schema+':until:'+screen))<=Date.now())return null;}catch{}
    const text=await send({...entry,op:'read'},true);
    if(!text||epoch!==generation)return null;
    try{return JSON.parse(text,(_,v)=>v?.__studioTimestamp!==undefined
@@ -54,6 +55,7 @@ export function studioMemory(user,role,screen){
    const text=serialize({data,profile});
    if(text.length>1000000)return;
    const message={...entry,op:'save',text,time:Date.now()};
+   try{sessionStorage.setItem(schema+':until:'+screen,String(message.time+300000));}catch{}
    lastConfirmed=message;
    const save=()=>{if(epoch===generation)send(message);};
    if(registration)registration.then(worker=>{if(worker)save();});

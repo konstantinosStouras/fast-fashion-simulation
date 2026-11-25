@@ -1,14 +1,14 @@
-import {initializeApp} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js';
-import {getAuth} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js';
+import {app,auth} from './studio-auth.js';
+
 import {collection,doc,getDoc,getDocs,getFirestore,query,where} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore-lite.js';
 import {getFunctions,httpsCallable} from 'https://www.gstatic.com/firebasejs/12.5.0/firebase-functions.js';
-import {ADMIN_EMAIL,DATABASE,firebaseConfig} from './firebase-config.js';
+import {ADMIN_EMAIL,DATABASE} from './firebase-config.js';
 import {DEFAULT_CONFIG} from './model.js';
 import {studioScreen} from './studio-startup.js?v=studio-speed-2';
 
 // Start server reads independently of the gameplay modules and realtime SDK.
 // The full application reuses the same named Firebase app and Auth instance.
-const app=initializeApp(firebaseConfig,'fashion-futures'),auth=getAuth(app);
+
 const db=getFirestore(app,DATABASE),functions=getFunctions(app,'europe-west1');
 const panel=httpsCallable(functions,'readStudioPanel',{timeout:125000});
 
@@ -38,13 +38,14 @@ export function preloadStudio(){
     return result.docs.map(d=>({code:d.id,...d.data()})).sort((a,b)=>(b.createdAt?.toMillis()||0)-(a.createdAt?.toMillis()||0));
    }
   };
+  const readStart=Math.round(performance.now());
   const reads=screen==='staff'?{listSessions:api.listSessions(isOwner),getDefaults:api.getDefaults()}:
    screen==='teams'?{listSessions:api.listSessions(isOwner),getDefaultTeamComposition:api.getDefaultTeamComposition(),listTeamUsers:api.listTeamUsers()}:
    {getAiSettings:api.getAiSettings()};
   for(const request of Object.values(reads))request.catch(()=>{});
   const profile=documentData('profiles',user.uid);
   profile.catch(()=>{});
-  return {user,screen,role:isOwner?'admin':'instructor',reads,profile};
+  return {user,screen,role:isOwner?'admin':'instructor',reads,profile,readStart};
  })();
  pending.catch(()=>{});
 }
