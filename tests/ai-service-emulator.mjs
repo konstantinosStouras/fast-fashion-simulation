@@ -48,6 +48,20 @@ test('regional studio reads use the existing instructor permissions and public r
  assert.throws(()=>api.readStudioPanel(call(admin,{screen:'other'})),{code:'invalid-argument'});
 });
 
+test('a full range of orphan profiles cannot hide or add registered accounts',async t=>{
+ const uid='zy-directory-'+run, orphan='00-orphan-'+run, profiles=db.collection('profiles');
+ const refs=Array.from({length:100},(_,i)=>profiles.doc(orphan+'-'+i));
+ const batch=db.batch();
+ for(const ref of refs)batch.set(ref,{firstName:'Orphan'});
+ batch.set(profiles.doc(uid),{firstName:'Registered',lastName:'User',universityId:'TEST-1'});
+ await batch.commit();await auth.createUser({uid});
+ t.after(async()=>{const cleanup=db.batch();for(const ref of [...refs,profiles.doc(uid)])cleanup.delete(ref);await cleanup.commit();await auth.deleteUser(uid);});
+ const page=await aiService(options).readStudioPanel(call(admin,{screen:'teams'}));
+ assert.ok(!page.users.some(user=>user.uid.startsWith(orphan)));
+ const found=page.users.find(user=>user.uid===uid);
+ assert.equal(found?.name,'Registered User');assert.equal(found.studentId,'TEST-1');
+});
+
 test('keys and models remain private to each verified instructor', async () => {
   const api = aiService(options);
   const result = await api.getAiSettings(call(admin,{}));

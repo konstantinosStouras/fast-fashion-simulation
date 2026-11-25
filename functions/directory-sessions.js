@@ -3,10 +3,8 @@ import {FieldPath} from 'firebase-admin/firestore';
 // Auth lists accounts by UID. Reading each room's participant-ID interval
 // covers the whole Auth page, including older joins with no profile link.
 // The set check also handles sparse intervals and accounts since removed.
-export async function readPlayedSessionCodes(db, account, uids) {
-  const matches = new Map(uids.map(uid => [uid, []]));
-  if (!uids.length) return matches;
-  const orderedIds = [...uids].sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));
+export async function readPlayedSessionCodes(db, account, pageUids) {
+  let matches, orderedIds;
   const rooms = db.collection('sessions');
   const managed = account.isOwner ? rooms : rooms.where('owner', '==', account.uid);
   const pageSize = 30;
@@ -16,6 +14,12 @@ export async function readPlayedSessionCodes(db, account, uids) {
   do {
     const page = await db.runTransaction(async tx => {
       const snapshot = await tx.get(cursor ? query.startAfter(cursor) : query);
+      if (!matches) {
+        const uids = await pageUids;
+        matches = new Map(uids.map(uid => [uid, []]));
+        orderedIds = [...uids].sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));
+      }
+      if (!matches.size) return {rows: [], cursor: null};
       const played = snapshot.docs.filter(doc => !doc.get('deletedAt') &&
         (doc.get('status') === 'running' || doc.get('status') === 'completed' ||
           (doc.get('status') === 'closed' && doc.get('startedAt') != null)) &&

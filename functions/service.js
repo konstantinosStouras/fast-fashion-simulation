@@ -218,14 +218,12 @@ export function aiService({db, auth, encryptionSecret, discover = discoverModels
     const account = await instructor(request);
     const pageToken = request.data?.pageToken;
     requireValue(pageToken == null || (typeof pageToken === 'string' && pageToken.length <= 4096), 'invalid-argument', 'Invalid directory page.');
-    const page = await auth.listUsers(100, pageToken || undefined);
-    const uids = page.users.map(user => user.uid).filter(validUid);
-    const refs = uids.map(uid => db.collection('profiles').doc(uid));
-    const [profiles, played] = await Promise.all([
-      refs.length ? db.getAll(...refs, {fieldMask: ['firstName', 'lastName', 'universityId']}) : [],
-      readPlayedSessionCodes(db, account, uids)
+    const pageRequest = auth.listUsers(100, pageToken || undefined);
+    const pageUids = pageRequest.then(page => page.users.map(user => user.uid).filter(validUid));
+    const [page, byUid, played] = await Promise.all([
+      pageRequest, directoryProfiles(pageUids, !pageToken),
+      readPlayedSessionCodes(db, account, pageUids)
     ]);
-    const byUid = new Map(profiles.map(doc => [doc.id, doc.data()]));
     const users = page.users.map(({uid, displayName, email, metadata}) => {
       const profile = byUid.get(uid);
       const name = [profile?.firstName, profile?.lastName].filter(Boolean).join(' ') || displayName || email || uid;
@@ -234,6 +232,22 @@ export function aiService({db, auth, encryptionSecret, discover = discoverModels
         registeredAt: isoDate(metadata?.creationTime), lastSignInAt: isoDate(metadata?.lastSignInTime)};
     });
     return {users, nextPageToken: page.pageToken || null};
+  }
+  async function directoryProfiles(pageUids, firstPage) {
+    const collection = db.collection('profiles'), fields = ['firstName', 'lastName', 'universityId'];
+    // Auth lists by UID. Start the matching profile range while Auth is in
+    // flight. Only Auth-listed accounts are returned by listTeamUsers.
+    const [uids, first] = await Promise.all([pageUids, firstPage
+      ? collection.orderBy(FieldPath.documentId()).limit(100).select(...fields).get() : null]);
+    const rows = new Map(first?.docs.map(doc => [doc.id, doc.data()]));
+    if (first && first.size < 100) return rows;
+    // Orphan profiles can push valid UIDs beyond the initial range. Later
+    // pages and any missing rows use their exact document references.
+    const missing = uids.filter(uid => !rows.has(uid)).map(uid => collection.doc(uid));
+    if (missing.length) {
+      for (const doc of await db.getAll(...missing, {fieldMask: fields})) rows.set(doc.id, doc.data());
+    }
+    return rows;
   }
   async function getUserClassrooms(request) {
     const account = await instructor(request);
